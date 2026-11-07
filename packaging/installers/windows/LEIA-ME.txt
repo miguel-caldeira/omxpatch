@@ -1,0 +1,10 @@
+OMXPatch — instalação em Windows Server / Windows 10-11
+=======================================================
+1. Extraia o ZIP e faça duplo clique em Instalar.cmd (ou, em PowerShell como administrador:
+   .\Install-OMXPatch.ps1 -Hostname omxpatch.empresa.pt -AgentHostname omxpatchcli.empresa.pt -ServerIp 10.0.0.5).
+2. Aceda a https://<nome>:4434/ com o utilizador e a password mostrados no fim (altere-a no primeiro login).
+3. Em «Organizações» crie a organização; em «Agentes» gere os scripts de auto-instalação (Windows/Linux/macOS).
+
+Portas: 4434 = consola de gestão · 4444 = agentes → consola (certificados autoassinados de 2 anos, um para cada nome).
+Os nomes têm de resolver (DNS ou ficheiro hosts). Atualizar: execute o instalador da nova versão. Remover: Uninstall-OMXPatch.ps1 [-Purge].
+O modo sem agente (Ansible) exige um controlador Linux/WSL.

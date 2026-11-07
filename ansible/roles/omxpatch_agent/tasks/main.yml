@@ -1,0 +1,20 @@
+---
+- name: Validar as variáveis obrigatórias
+  ansible.builtin.assert:
+    that:
+      - omxpatch_server_url is match('^https://')
+      - omxpatch_enrollment_token | length > 0
+    fail_msg: "Defina omxpatch_server_url (https://…) e omxpatch_enrollment_token (-e ou Ansible Vault)."
+  run_once: true
+
+- name: Instalar no Linux
+  ansible.builtin.include_tasks: linux.yml
+  when: ansible_system == 'Linux'
+
+- name: Instalar no macOS
+  ansible.builtin.include_tasks: macos.yml
+  when: ansible_system == 'Darwin'
+
+- name: Instalar no Windows
+  ansible.builtin.include_tasks: windows.yml
+  when: ansible_os_family == 'Windows'

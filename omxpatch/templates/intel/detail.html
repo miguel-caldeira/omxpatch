@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, risk, kev, st with context %}{% block title %}{{ cve.cve_id }}{% endblock %}
+{% block content %}
+<div class="actions"><h1>{{ cve.cve_id }} {% if cve.kev %}{{ kev() }}{% endif %}</h1><span class="spacer"></span>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('main.intel_enrich', cve_id=cve.cve_id) }}" class="inline">{{ csrf() }}<button class="btn sec">Atualizar (NVD/MITRE/EPSS)</button></form>{% endif %}</div>
+<div class="panel"><p>{{ cve.title }}</p><p>{{ cve.description }}</p>
+<dl class="kv"><dt>CVSS</dt><dd>{{ cve.cvss if cve.cvss is not none else 'n/d' }} {{ cve.cvss_vector }}</dd><dt>EPSS</dt><dd>{{ ('%.2f %% (percentil %.0f %%)' % (cve.epss * 100, (cve.epss_percentile or 0) * 100)) if cve.epss is not none else 'n/d' }}</dd>
+<dt>CISA KEV</dt><dd>{{ 'Sim — adicionado em ' ~ (cve.kev_added|dt('%Y-%m-%d')) ~ ', prazo ' ~ (cve.kev_due|dt('%Y-%m-%d')) if cve.kev else 'Não' }}</dd>
+<dt>Ransomware</dt><dd>{{ 'Associado' if cve.ransomware else 'Sem associação conhecida' }}</dd><dt>Malware</dt><dd>{{ cve.malware_list|join(', ') or '—' }}</dd>
+<dt>Maturidade do exploit</dt><dd>{{ EXPLOIT_MATURITY[cve.exploit_maturity] }}</dd><dt>CWE</dt><dd>{{ cve.cwe or '—' }}</dd><dt>Fontes</dt><dd>{{ cve.sources }}</dd></dl></div>
+<div class="grid2"><div class="panel"><h2>Software afetado</h2><table><tr><th>Fabricante</th><th>Produto</th><th>Intervalo</th><th>Corrigido em</th></tr>
+{% for a in cve.affected_list[:60] %}<tr><td>{{ a.vendor }}</td><td>{{ a.product }}</td><td class="small">{{ a.version_start or a.start_excl }}{{ ' … ' if a.version_start or a.start_excl or a.version_end or a.end_excl }}{{ a.version_end or a.end_excl }}</td><td>{{ a.fixed or '' }}</td></tr>{% else %}<tr><td colspan="4" class="muted">Sem dados.</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Avisos de fabricantes / patches</h2><ul>{% for a in cve.advisory_list %}<li>{{ a.vendor }} {{ a.product }} {{ a.kb or '' }} {{ a.fixed_version or '' }} {% if a.url %}<a href="{{ a.url }}" rel="noopener noreferrer">aviso</a>{% endif %}</li>{% else %}<li class="muted">Sem avisos.</li>{% endfor %}</ul>
+{% if cve.exploit_refs %}<h3>Referências de exploit</h3><pre>{{ cve.exploit_refs }}</pre>{% endif %}</div></div>
+<div class="panel"><h2>Ativos afetados nesta organização</h2><table>{% for e in exps %}<tr><td>{{ risk(e.risk_score, e.risk_category) }}</td><td><a href="{{ url_for('main.exposure_detail', exposure_id=e.id) }}">{{ e.asset.name }}</a></td><td>{{ e.software_name }} {{ e.installed_version }}</td><td>{{ st(e.status, EXPOSURE_STATUSES[e.status]) }}</td></tr>{% else %}<tr><td class="muted">Nenhum ativo afetado.</td></tr>{% endfor %}</table></div>
+{% endblock %}

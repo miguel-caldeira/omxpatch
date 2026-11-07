@@ -1,0 +1,27 @@
+---
+- name: Remover o agente OMXPatch (Linux/macOS)
+  hosts: linux:macos
+  become: true
+  tasks:
+    - name: Parar e remover o serviço systemd
+      when: ansible_system == 'Linux'
+      block:
+        - ansible.builtin.systemd: {name: omxpatch-agent, state: stopped, enabled: false}
+          failed_when: false
+        - ansible.builtin.file: {path: /etc/systemd/system/omxpatch-agent.service, state: absent}
+    - name: Remover o LaunchDaemon
+      when: ansible_system == 'Darwin'
+      block:
+        - ansible.builtin.command: launchctl unload -w /Library/LaunchDaemons/pt.oramix.omxpatch.agent.plist
+          failed_when: false
+          changed_when: true
+        - ansible.builtin.file: {path: /Library/LaunchDaemons/pt.oramix.omxpatch.agent.plist, state: absent}
+    - ansible.builtin.file: {path: "{{ item }}", state: absent}
+      loop: [/opt/omxpatch-agent, /etc/omxpatch-agent, "/Library/Application Support/OMXPatchAgent"]
+
+- name: Remover o agente OMXPatch (Windows)
+  hosts: windows
+  tasks:
+    - community.windows.win_scheduled_task: {name: OMXPatchAgent, state: absent}
+    - ansible.windows.win_file: {path: 'C:\ProgramData\OMXPatchAgent', state: absent}
+    - ansible.windows.win_file: {path: 'C:\OMXPatchAgent', state: absent}

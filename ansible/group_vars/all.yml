@@ -1,0 +1,11 @@
+---
+# Endereço público do centro de comando (HTTPS). Os agentes ligam-se a este URL.
+omxpatch_server_url: "https://omxpatchcli.oramix.local:4444"   # servidor de AGENTES (não a consola)
+# Token de registo criado em «Agentes» (ou: omxpatch ansible-vars --tenant <slug>). Passe com -e ou Ansible Vault.
+omxpatch_enrollment_token: ""
+# Impressão digital SHA-256 do certificado do servidor (omxpatch tls info) OU caminho do CA da organização.
+omxpatch_pin_sha256: ""
+omxpatch_ca_file: ""
+# Origem do pacote Python (inclui o servidor e o agente): nome num índice interno, ficheiro .whl ou caminho.
+omxpatch_pip_spec: "omxpatch"
+omxpatch_pip_index_url: ""

@@ -1,0 +1,19 @@
+---
+- name: OMXPatch — inventário (Linux)
+  hosts: linux
+  become: true
+  gather_facts: true
+  tasks:
+    - ansible.builtin.package_facts:
+        manager: auto
+    - ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: omx_rb
+    - ansible.builtin.debug:
+        msg: >-
+          OMXPATCH_RESULT={{ {'status': 'succeeded', 'os_name': ansible_facts.distribution ~ ' ' ~ ansible_facts.distribution_version,
+          'os_version': ansible_facts.distribution_version, 'ip': ansible_facts.default_ipv4.address | default(''),
+          'mac': ansible_facts.default_ipv4.macaddress | default(''), 'fqdn': ansible_facts.fqdn,
+          'reboot_pending': omx_rb.stat.exists,
+          'hardware': {'cpu_count': ansible_facts.processor_vcpus, 'ram_gb': ((ansible_facts.memtotal_mb | int) / 1024) | round(1), 'arch': ansible_facts.architecture},
+          'software': ansible_facts.packages | dict2items | json_query('[].{name: key, version: value[0].version}')} | to_json }}

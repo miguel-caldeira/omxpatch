@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, pager, kev with context %}{% block title %}Inteligência de vulnerabilidades{% endblock %}
+{% block content %}
+<div class="actions"><h1>Vulnerability Intelligence</h1><span class="spacer"></span>
+{% if current_user.can_manage %}<form method="post" action="{{ url_for('main.intel_sync') }}" class="inline">{{ csrf() }}<button class="btn">Sincronizar fontes (NVD, KEV, EPSS, MITRE, feeds)</button></form>{% endif %}</div>
+<div class="grid"><div class="kpi"><div class="l">CVE no catálogo</div><div class="v">{{ stats.total }}</div></div><div class="kpi"><div class="l">CISA KEV</div><div class="v">{{ stats.kev }}</div></div>
+<div class="kpi"><div class="l">Com EPSS</div><div class="v">{{ stats.with_epss }}</div></div><div class="kpi"><div class="l">Ransomware</div><div class="v">{{ stats.ransomware }}</div></div><div class="kpi"><div class="l">Exploit weaponized</div><div class="v">{{ stats.weaponized }}</div></div></div>
+<div class="panel"><form method="get" class="filters"><div><label for="q">CVE</label><input type="text" id="q" name="q" value="{{ request.args.q }}"></div>
+<div><label class="chk"><input type="checkbox" name="kev" value="1" {{ 'checked' if request.args.kev }}> KEV</label><label class="chk"><input type="checkbox" name="ransomware" value="1" {{ 'checked' if request.args.ransomware }}> Ransomware</label></div><div><button class="btn">Filtrar</button></div></form></div>
+<div class="panel"><table><tr><th>CVE</th><th>CVSS</th><th>EPSS</th><th>KEV</th><th>Exploit</th><th>Malware</th><th>Fontes</th></tr>
+{% for c in pag.items %}<tr><td><a href="{{ url_for('main.intel_detail', cve_id=c.cve_id) }}">{{ c.cve_id }}</a><div class="small muted">{{ (c.title or c.description)[:100] }}</div></td><td>{{ c.cvss if c.cvss is not none else '—' }}</td>
+<td>{{ ('%.1f %%' % (c.epss * 100)) if c.epss is not none else '—' }}</td><td>{% if c.kev %}{{ kev() }}{% endif %}{% if c.ransomware %} <span class="badge risk-critical">ransomware</span>{% endif %}</td>
+<td>{{ EXPLOIT_MATURITY[c.exploit_maturity] }}</td><td class="small">{{ c.malware_list|join(', ') }}</td><td class="small">{{ c.sources }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Catálogo vazio: sincronize as fontes ou importe um ficheiro.</td></tr>{% endfor %}</table>{{ pager(pag, 'main.intel_page') }}</div>
+{% if current_user.can_manage %}<div class="panel"><h2>Importar ficheiro (ambientes sem Internet)</h2>
+<form method="post" action="{{ url_for('main.intel_import') }}" enctype="multipart/form-data">{{ csrf() }}<p class="small muted">JSON do CISA KEV, EPSS (FIRST), NVD 2.0, feed de ameaças (<code>[{"cve","exploit","malware","ransomware"}]</code>) ou avisos de fabricante (<code>{"advisories":[{"cve","vendor","product","fixed_version","kb","url"}]}</code>).</p>
+<input type="file" name="file" accept=".json" required> <button class="btn sec">Importar</button></form></div>{% endif %}
+{% endblock %}

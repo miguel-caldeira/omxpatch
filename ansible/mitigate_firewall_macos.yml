@@ -1,0 +1,25 @@
+---
+- name: OMXPatch — firewall (macOS, pf)
+  hosts: macos
+  become: true
+  gather_facts: false
+  vars:
+    proto: tcp
+  tasks:
+    - ansible.builtin.assert:
+        that:
+          - name is match('^OMXPatch-[A-Za-z0-9._-]{1,100}$')
+          - op in ['firewall_block_port', 'firewall_remove']
+          - op != 'firewall_block_port' or (port | int >= 1 and port | int <= 65535 and proto in ['tcp', 'udp'])
+    - name: Regra no anchor omxpatch
+      ansible.builtin.blockinfile:
+        path: /etc/pf.anchors/omxpatch
+        create: true
+        mode: "0644"
+        marker: "# {mark} {{ name }}"
+        block: "block in quick proto {{ proto }} from any to any port {{ port | default(0) }}"
+        state: "{{ 'absent' if op == 'firewall_remove' else 'present' }}"
+    - ansible.builtin.shell: pfctl -E 2>/dev/null; pfctl -a omxpatch -f /etc/pf.anchors/omxpatch
+      changed_when: true
+    - ansible.builtin.debug:
+        msg: "OMXPATCH_RESULT={{ {'status': 'succeeded', 'verified': op != 'firewall_remove', 'detail': 'Regra ' ~ name ~ (' removida' if op == 'firewall_remove' else ' aplicada (pf)')} | to_json }}"

@@ -1,0 +1,46 @@
+---
+# Modo sem agente — aplica um patch em macOS. Variáveis: installer (softwareupdate|brew|pkg), package/uid, local_file, reboot_policy.
+- name: OMXPatch — aplicar patch (macOS)
+  hosts: macos
+  become: true
+  gather_facts: true
+  vars:
+    installer: softwareupdate
+    reboot_policy: if_needed
+  tasks:
+    - name: softwareupdate
+      ansible.builtin.command: softwareupdate -i "{{ package | default(uid) }}" --agree-to-license
+      when: installer == 'softwareupdate'
+      register: omx_su
+      changed_when: true
+      failed_when: false
+    - name: Homebrew (como o utilizador de consola)
+      community.general.homebrew:
+        name: "{{ package }}"
+        state: latest
+      become: false
+      when: installer in ['brew', 'ansible']
+      register: omx_brew
+      failed_when: false
+    - name: Pacote .pkg
+      when: installer == 'pkg'
+      block:
+        - ansible.builtin.copy:
+            src: "{{ local_file }}"
+            dest: /private/tmp/omxpatch-installer.pkg
+            mode: "0600"
+        - ansible.builtin.command: installer -pkg /private/tmp/omxpatch-installer.pkg -target /
+          register: omx_pkg
+          changed_when: true
+          failed_when: false
+      always:
+        - ansible.builtin.file: {path: /private/tmp/omxpatch-installer.pkg, state: absent}
+    - ansible.builtin.set_fact:
+        omx_ok: "{{ (omx_su.rc | default(1)) == 0 or not (omx_brew.failed | default(true)) or (omx_pkg.rc | default(1)) == 0 }}"
+        omx_reboot: "{{ 'restart' in ((omx_su.stdout | default('')) | lower) }}"
+    - name: Reiniciar conforme a política
+      ansible.builtin.reboot:
+        reboot_timeout: 900
+      when: omx_ok and (reboot_policy == 'force' or (reboot_policy == 'if_needed' and omx_reboot))
+    - ansible.builtin.debug:
+        msg: "OMXPATCH_RESULT={{ {'status': ('succeeded' if omx_ok else 'failed'), 'reboot_pending': false} | to_json }}"

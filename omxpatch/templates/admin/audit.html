@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% from "_macros.html" import pager with context %}{% block title %}Auditoria{% endblock %}
+{% block content %}<h1>Registo de auditoria</h1><div class="panel"><form method="get" class="filters"><div><label for="q">Pesquisa</label><input type="text" id="q" name="q" value="{{ request.args.q }}"></div><div><button class="btn">Filtrar</button></div></form></div>
+<div class="panel"><table><tr><th>Data</th><th>Utilizador</th><th>Ação</th><th>Detalhe</th><th>IP</th></tr>
+{% for a in pag.items %}<tr><td class="nowrap">{{ a.created_at|dt('%Y-%m-%d %H:%M:%S') }}</td><td>{{ a.user.email if a.user else '—' }}</td><td>{{ a.action }}</td><td class="wrap">{{ a.detail }}</td><td>{{ a.ip }}</td></tr>{% endfor %}</table>{{ pager(pag, 'admin.audit_log') }}</div>{% endblock %}

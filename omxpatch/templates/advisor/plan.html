@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Plano #{{ p.id }}{% endblock %}
+{% block content %}<h1>{{ p.question }}</h1>
+<div class="panel"><p class="muted">Ativo: {{ p.asset.name if p.asset else '—' }} · objetivo: abaixo de {{ p.target_score }}</p>
+<p><span class="score">{{ p.before_score }}</span><span class="arrow">→</span><span class="score {{ 'ok' if p.after_score <= p.target_score else 'bad' }}">{{ p.after_score }}</span></p>
+<table><tr><th>#</th><th>Ação</th><th>Detalhe</th><th>Redução</th><th>Risco após</th><th>Esforço</th></tr>
+{% for s in p.steps %}<tr><td>{{ s.n }}</td><td><b>{{ s.label }}</b></td><td class="small">{{ s.detail }}</td><td>−{{ s.reduction }}</td><td>{{ s.projected }}</td><td>{{ s.effort }}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">Sem ações necessárias ou disponíveis.</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Explicação</h2><pre>{{ p.narrative }}</pre></div>
+{% if current_user.can_manage and p.status != 'applied' and p.steps %}<form method="post" action="{{ url_for('secops.advisor_apply', plan_id=p.id) }}">{{ csrf() }}<button class="btn">Aplicar plano (cria controlos aprovados e campanhas)</button></form>{% endif %}{% endblock %}

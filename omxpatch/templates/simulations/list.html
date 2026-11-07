@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, pager, st, yn with context %}{% block title %}Simulação de ataques{% endblock %}
+{% block content %}<h1>Threat Exposure Simulation (BAS)</h1>
+<p class="muted small">Simulação segura e não destrutiva (ficheiros canário, ligações TCP, leitura de configurações de proteção). Executada pelo agente; mostra se a defesa resiste a cada fase do ataque e se a remediação realmente bloqueia o ataque.</p>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('secops.simulation_new') }}" class="panel row">{{ csrf() }}
+<div><label for="asset_id">Ativo (com agente)</label><select id="asset_id" name="asset_id">{% for a in assets if a.agent %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select></div>
+<div><label for="scenario">Cenário</label><select id="scenario" name="scenario">{% for k, v in SIMULATIONS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div><div><label>&nbsp;</label><button class="btn">Simular</button></div></form>{% endif %}
+<div class="panel"><table><tr><th>#</th><th>Cenário</th><th>Ativo</th><th>Fase</th><th>Resultado</th><th>Passos (✔ defesa resistiu)</th><th>Antes → depois</th></tr>
+{% for s in pag.items %}<tr><td>{{ s.id }}</td><td>{{ SIMULATIONS[s.scenario] }}{% if s.cve_id %}<div class="small muted">{{ s.cve_id }}</div>{% endif %}</td><td>{{ s.asset.name }}</td><td>{{ 'depois da correção' if s.phase == 'after_fix' else 'antes' }}</td>
+<td>{{ st(s.outcome or s.status, {'blocked': 'Bloqueado', 'partial': 'Parcial', 'not_blocked': 'Não bloqueado', 'error': 'Erro'}.get(s.outcome, s.status)) }}</td>
+<td class="small">{% for x in s.step_list %}{{ yn(x.passed) }} {{ x.label }}{% if x.detail %} <span class="muted">({{ x.detail }})</span>{% endif %}<br>{% endfor %}</td>
+<td class="small">{% set cmp = comps.get(s.id) %}{% if cmp %}{{ cmp.verdict }}{% endif %}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem simulações.</td></tr>{% endfor %}</table>{{ pager(pag, 'secops.simulations') }}</div>{% endblock %}

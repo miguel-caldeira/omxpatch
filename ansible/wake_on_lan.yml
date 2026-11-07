@@ -1,0 +1,10 @@
+---
+# Wake-on-LAN a partir de um anfitrião na mesma sub-rede:  -e omxpatch_mac=aa:bb:cc:dd:ee:ff
+- name: OMXPatch — Wake-on-LAN
+  hosts: omxpatch_relay
+  gather_facts: false
+  tasks:
+    - community.general.wakeonlan:
+        mac: "{{ omxpatch_mac }}"
+        broadcast: "{{ omxpatch_broadcast | default('255.255.255.255') }}"
+      delegate_to: localhost

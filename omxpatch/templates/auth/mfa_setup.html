@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Ativar MFA{% endblock %}
+{% block content %}
+<h1>Ativar autenticação multifator</h1>
+<div class="panel">
+{% if current_user.tenant and current_user.tenant.require_mfa and not current_user.mfa_enabled %}<div class="flash flash-warning">A sua organização exige MFA (NIS2, art. 21.º, n.º 2, al. j)).</div>{% endif %}
+<p>Use uma aplicação autenticadora compatível com TOTP: <b>Google Authenticator</b>, <b>FreeOTP</b> / FreeOTP+, Microsoft Authenticator, Authy, 1Password ou Bitwarden.</p>
+<div class="grid2">
+<div><h3>1. Leia o QR code</h3>
+{% if qr %}<div class="qr"><img src="{{ qr }}" alt="QR code para a aplicação autenticadora"></div>{% else %}<p class="muted">QR code indisponível (módulo segno não instalado) — use a chave manual.</p>{% endif %}
+<p class="small muted">No Google Authenticator: «+» → «Ler código QR». No FreeOTP: ícone de QR code.</p></div>
+<div><h3>…ou introduza a chave manualmente</h3>
+<dl class="kv"><dt>Conta</dt><dd>{{ current_user.email }}</dd><dt>Chave</dt><dd><code class="secret">{{ secret }}</code></dd>
+<dt>Tipo</dt><dd>Baseado em tempo (TOTP), {{ provider.digits }} dígitos, {{ provider.period }} s, {{ provider.algorithm }}</dd></dl>
+<h3>2. Confirme com o código gerado</h3>
+<form method="post">{{ csrf() }}<div class="row"><div><input type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" required autocomplete="one-time-code" aria-label="Código de 6 dígitos"></div><div><button class="btn">Confirmar e ativar</button></div></div></form>
+</div></div>
+<details><summary class="small">URI otpauth (para gestores de passwords)</summary><pre>{{ uri }}</pre></details>
+</div>
+{% endblock %}

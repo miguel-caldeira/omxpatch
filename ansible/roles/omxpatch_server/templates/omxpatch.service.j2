@@ -1,0 +1,21 @@
+[Unit]
+Description=OMXPatch — centro de comando (web)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User={{ omxpatch_user }}
+Environment=OMXPATCH_CONFIG=/etc/omxpatch/omxpatch.toml
+Environment=OMXPATCH_EMBEDDED_WORKER=false
+Environment=ANSIBLE_COLLECTIONS_PATH={{ omxpatch_home }}/ansible/collections
+{% if not omxpatch_nginx and (omxpatch_listen_port < 1024 or omxpatch_agent_port < 1024) %}AmbientCapabilities=CAP_NET_BIND_SERVICE
+{% endif %}
+ExecStart={{ omxpatch_home }}/venv/bin/omxpatch serve --no-worker{{ ' --no-tls' if (omxpatch_nginx or not omxpatch_tls_enabled) else '' }}
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

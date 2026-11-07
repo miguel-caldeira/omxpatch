@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Utilizador{% endblock %}
+{% block content %}<h1>{{ u.email if u else 'Novo utilizador' }}</h1><form method="post" class="panel">{{ csrf() }}<div class="row">
+{% if not u %}<div><label for="email">E-mail</label><input type="email" id="email" name="email" required></div><div><label for="name">Nome</label><input type="text" id="name" name="name"></div>{% endif %}
+<div><label for="role">Perfil</label><select id="role" name="role" {{ 'disabled' if u and u.is_superadmin }}>{% for k, v in ROLES.items() %}<option value="{{ k }}" {{ 'selected' if u and u.role == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="password">{{ 'Nova password (vazio = manter)' if u else 'Password inicial' }}</label><input type="password" id="password" name="password" {{ '' if u else 'required' }} autocomplete="new-password"></div></div>
+{% if u %}<label class="chk"><input type="checkbox" name="enabled" value="1" {{ 'checked' if u.enabled }}> Ativo</label>{% endif %}
+<p class="muted small">Operador: gere patches, campanhas e controlos. Auditor: só leitura. Administrador: tudo na organização (aprovações, integrações, utilizadores).</p>
+<p class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('admin.users') }}">Cancelar</a></p></form>{% endblock %}

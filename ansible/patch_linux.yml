@@ -1,0 +1,72 @@
+---
+# Modo sem agente — aplica um patch em Linux. Variáveis (vindas da tarefa): package, version_fixed, reboot_policy.
+- name: OMXPatch — aplicar patch (Linux)
+  hosts: linux
+  become: true
+  gather_facts: true
+  vars:
+    reboot_policy: if_needed
+  tasks:
+    - name: Validar o nome do pacote
+      ansible.builtin.assert:
+        that: package is defined and package is match('^[A-Za-z0-9][A-Za-z0-9._+:@/=~-]{0,200}$')
+        fail_msg: "Nome de pacote inválido"
+
+    - name: Versão antes da atualização
+      ansible.builtin.package_facts:
+        manager: auto
+    - ansible.builtin.set_fact:
+        omx_before: "{{ ansible_facts.packages[package][0].version | default('') if package in ansible_facts.packages else '' }}"
+
+    - name: Atualizar (apt)
+      ansible.builtin.apt:
+        name: "{{ package }}"
+        state: latest
+        only_upgrade: true
+        update_cache: true
+      when: ansible_pkg_mgr == 'apt'
+      register: omx_apt
+    - name: Atualizar (dnf/yum)
+      ansible.builtin.dnf:
+        name: "{{ package }}"
+        state: latest
+        update_only: true
+      when: ansible_pkg_mgr in ['dnf', 'dnf5', 'yum']
+      register: omx_dnf
+    - name: Atualizar (zypper)
+      community.general.zypper:
+        name: "{{ package }}"
+        state: latest
+        update_cache: true
+      when: ansible_pkg_mgr == 'zypper'
+      register: omx_zypper
+
+    - name: Versão depois da atualização
+      ansible.builtin.package_facts:
+        manager: auto
+    - ansible.builtin.set_fact:
+        omx_after: "{{ ansible_facts.packages[package][0].version | default('') if package in ansible_facts.packages else '' }}"
+
+    - name: Reinício necessário (Debian)
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: omx_reboot_file
+    - name: Reinício necessário (RHEL)
+      ansible.builtin.command: needs-restarting -r
+      register: omx_needs_restart
+      failed_when: false
+      changed_when: false
+      when: ansible_os_family == 'RedHat'
+    - ansible.builtin.set_fact:
+        omx_reboot: "{{ omx_reboot_file.stat.exists or (omx_needs_restart.rc | default(0)) == 1 }}"
+
+    - name: Reiniciar conforme a política da campanha
+      ansible.builtin.reboot:
+        reboot_timeout: 900
+      when: omx_after | length > 0 and (reboot_policy == 'force' or (reboot_policy == 'if_needed' and omx_reboot))
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: >-
+          OMXPATCH_RESULT={{ {'status': ('succeeded' if omx_after | length > 0 else 'failed'),
+          'installed_version': omx_after, 'previous_version': omx_before, 'reboot_pending': false} | to_json }}

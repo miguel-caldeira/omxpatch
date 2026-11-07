@@ -1,0 +1,36 @@
+---
+- name: Verificar o Python 3 (Xcode Command Line Tools ou Homebrew)
+  ansible.builtin.command: /usr/bin/python3 --version
+  changed_when: false
+
+- name: Ambiente virtual e agente
+  ansible.builtin.pip:
+    name: "{{ omxpatch_pip_spec }}"
+    virtualenv: "/Library/OMXPatchAgent/venv"
+    virtualenv_command: /usr/bin/python3 -m venv
+    extra_args: "{{ ('--index-url ' ~ omxpatch_pip_index_url) if omxpatch_pip_index_url else '' }}"
+
+- name: Registar o agente (uma única vez)
+  ansible.builtin.command:
+    argv: >-
+      {{ ['/Library/OMXPatchAgent/venv/bin/omxpatch-agent', 'enroll', '--server', omxpatch_server_url, '--token', omxpatch_enrollment_token]
+         + (['--pin-sha256', omxpatch_pin_sha256] if omxpatch_pin_sha256 else [])
+         + (['--ca-file', omxpatch_ca_file] if omxpatch_ca_file else []) }}
+    creates: "/Library/Application Support/OMXPatchAgent/agent.json"
+  no_log: true
+
+- name: LaunchDaemon do agente
+  ansible.builtin.template:
+    src: pt.oramix.omxpatch.agent.plist.j2
+    dest: /Library/LaunchDaemons/pt.oramix.omxpatch.agent.plist
+    owner: root
+    group: wheel
+    mode: "0644"
+  register: omxpatch_plist
+
+- name: Carregar o LaunchDaemon
+  ansible.builtin.shell: |
+    launchctl unload -w /Library/LaunchDaemons/pt.oramix.omxpatch.agent.plist 2>/dev/null || true
+    launchctl load -w /Library/LaunchDaemons/pt.oramix.omxpatch.agent.plist
+  when: omxpatch_plist.changed
+  changed_when: true

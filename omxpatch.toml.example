@@ -1,0 +1,80 @@
+# OMXPatch — configuração (copie para omxpatch.toml no diretório de dados ou aponte OMXPATCH_CONFIG).
+# Qualquer chave pode ser definida por variável de ambiente OMXPATCH_<CHAVE> (ex.: OMXPATCH_OMXVULN_URL).
+# data_dir = "/var/lib/omxpatch"
+
+[server]
+tls_enabled = true                 # HTTPS no próprio servidor (certificado autoassinado gerido, ver «omxpatch tls info»)
+tls_hostname = "omxpatch.oramix.local"      # certificado da consola
+port = 4434                        # consola de gestão (HTTPS)
+# url_prefix = "/omxpatch"        # publicado num subdiretório (IIS / NGINX)
+# base_url = "https://omxpatch.exemplo.pt"
+embedded_worker = true            # false: execute «omxpatch worker» como serviço separado (vários processos web)
+
+[database]
+# url = "postgresql+psycopg://omxpatch:segredo@db/omxpatch"     # por omissão: SQLite no diretório de dados
+
+[agents]
+port = 4444                        # agentes → consola (HTTPS, certificado próprio)
+tls_hostname = "omxpatchcli.oramix.local"
+# server_ip = "10.0.0.5"          # os scripts de instalação acrescentam «IP nome» ao ficheiro hosts dos postos
+heartbeat_seconds = 300
+offline_minutes = 20
+# package_dir = "/var/lib/omxpatch/packages"      # repositório local de instaladores (MSI/EXE/PKG) com SHA-256
+
+[ansible]                          # modo sem agente, descoberta Hyper-V e playbooks de mitigação
+enabled = true
+playbook = "ansible-playbook"
+# dir = "/opt/omxpatch/ansible"
+timeout_minutes = 90
+
+# --- Inteligência de vulnerabilidades (Módulo 2) ---
+[nvd]
+# api_key = "…"                    # sem chave, a NVD limita fortemente os pedidos
+[kev]
+enabled = true
+[epss]
+enabled = true
+[intel]
+sync_hours = 24
+# threat_feeds = "https://feeds.exemplo.pt/threat.json"      # um URL por linha: [{"cve","exploit","malware":[],"ransomware"}]
+# vendor_advisories = "https://feeds.exemplo.pt/advisories.json"
+
+# --- Ferramentas irmãs ---
+[omxvuln]                          # também configurável por organização em Integrações
+# url = "https://omxvuln.oramix.local"
+# token = "omx_…"                  # token de API de um Administrador do OMXVuln
+# tenant_id = 0                    # X-Tenant-ID (só para super-administradores do OMXVuln)
+sync_minutes = 30
+push_status = true                 # devolve «remediada» ao OMXVuln após a validação em ciclo fechado
+rescan = true                      # pede novo scan ao ativo para verificação independente
+[omxgrc]
+# url = "https://omxgrc.oramix.local"
+# token = "…"
+push_minutes = 60
+evidence_path = "/api/v1/evidence"
+metrics_path = "/api/v1/metrics"
+
+# --- IA generativa (opcional; o planeador de remediação é determinístico) ---
+[ai]
+enabled = false
+# api_key = "…"
+model = "claude-sonnet-5-5"
+
+[rings]                            # critérios de promoção por omissão (editáveis por organização)
+min_success = 95.0
+max_crash = 1.0
+min_ux = 80.0
+soak_hours = 24
+
+[smtp]
+# host = "smtp.exemplo.pt"
+# port = 587
+# username = "…"
+# password = "…"
+
+[syslog]                           # auditoria para o SIEM
+enabled = false
+# host = "siem.exemplo.pt"
+# port = 514
+# protocol = "udp"                 # udp | tcp
+# format = "rfc5424"               # rfc5424 | json

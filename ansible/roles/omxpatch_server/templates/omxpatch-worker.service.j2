@@ -1,0 +1,16 @@
+[Unit]
+Description=OMXPatch — worker (correlação, campanhas, anéis, validação, Ansible)
+After=omxpatch.service
+
+[Service]
+User={{ omxpatch_user }}
+Environment=OMXPATCH_CONFIG=/etc/omxpatch/omxpatch.toml
+Environment=ANSIBLE_COLLECTIONS_PATH={{ omxpatch_home }}/ansible/collections
+ExecStart={{ omxpatch_home }}/venv/bin/omxpatch worker
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

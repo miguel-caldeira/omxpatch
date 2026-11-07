@@ -1,0 +1,12 @@
+---
+- name: reiniciar omxpatch
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+    daemon_reload: true
+  loop: [omxpatch, omxpatch-worker]
+
+- name: recarregar nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded

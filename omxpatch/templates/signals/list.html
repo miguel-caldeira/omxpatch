@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, pager with context %}{% block title %}Sinais multi-vendor{% endblock %}
+{% block content %}
+<h1>Sinais de outras plataformas de segurança</h1>
+<p class="muted small">Defender, SentinelOne, CrowdStrike, Tenable, Qualys, Rapid7, Wiz, Prisma Cloud, Check Point, Palo Alto, Fortinet e Zscaler — recolhidos por API (Integrações) ou por webhook/ficheiro (<code>POST /api/v1/signals?vendor=…</code>).</p>
+<div class="panel"><form method="get" class="filters"><div><label for="kind">Tipo</label><select id="kind" name="kind"><option value="">Todos</option>{% for k, v in SIGNAL_KINDS.items() %}<option value="{{ k }}" {{ 'selected' if request.args.kind == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="source">Fonte</label><select id="source" name="source"><option value="">Todas</option>{% for s in sources %}<option {{ 'selected' if request.args.source == s }}>{{ s }}</option>{% endfor %}</select></div><div><button class="btn">Filtrar</button></div></form></div>
+<div class="panel"><table><tr><th>Fonte</th><th>Tipo</th><th>CVE</th><th>Ativo</th><th>Valor</th><th>Observado</th></tr>
+{% for s in pag.items %}<tr><td>{{ s.source }}</td><td>{{ SIGNAL_KINDS.get(s.kind, s.kind) }}</td><td>{{ s.cve_id or '—' }}</td><td>{{ s.asset_ref or '—' }}</td><td class="wrap">{{ s.value }}</td><td class="nowrap">{{ s.observed_at|dt }}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">Sem sinais.</td></tr>{% endfor %}</table>{{ pager(pag, 'main.signals_page') }}</div>
+{% if current_user.can_write %}<div class="panel"><h2>Importar sinais (JSON/CSV)</h2><form method="post" action="{{ url_for('main.signals_import') }}" enctype="multipart/form-data" class="row">{{ csrf() }}
+<div><label for="vendor">Fabricante</label><select id="vendor" name="vendor">{% for v in ['generic','defender','sentinelone','crowdstrike','tenable','qualys','rapid7','wiz','prisma','checkpoint','paloalto','fortinet','zscaler'] %}<option>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="file">Ficheiro</label><input type="file" id="file" name="file" required></div><div><label>&nbsp;</label><button class="btn">Importar</button></div></form>
+<p class="small muted">CSV genérico: colunas <code>cve, asset, kind (vuln|active_exploit|fw_blocked|fw_allowed|edr_detected|edr_missed|waf_protected|ioc), value, source</code> (ou <code>action</code>: block/allow/detected/missed).</p></div>{% endif %}
+{% endblock %}

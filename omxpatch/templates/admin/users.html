@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}Utilizadores{% endblock %}
+{% block content %}<div class="actions"><h1>Utilizadores</h1><span class="spacer"></span><a class="btn" href="{{ url_for('admin.user_new') }}">Novo utilizador</a></div>
+<div class="panel"><table><tr><th>E-mail</th><th>Perfil</th><th>MFA</th><th>Ativo</th><th>Último acesso</th><th></th></tr>
+{% for u in rows %}<tr><td>{{ u.email }}{% if u.is_primary %} <span class="chip">inicial</span>{% endif %}</td><td>{{ 'Super-administrador' if u.is_superadmin else ROLES[u.role] }}</td><td>{{ 'sim' if u.mfa_enabled else '—' }}</td><td>{{ 'sim' if u.enabled else 'não' }}</td><td>{{ u.last_login|dt }}</td><td><a href="{{ url_for('admin.user_edit', user_id=u.id) }}">editar</a></td></tr>{% endfor %}</table></div>{% endblock %}

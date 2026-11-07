@@ -1,0 +1,13 @@
+OMXPatch — instalação em Ubuntu Server 24.04 / 26.04 (ou Debian)
+================================================================
+1. Extraia o pacote:      tar xzf omxpatch-ubuntu-<versão>.tar.gz && cd omxpatch-ubuntu-<versão>
+2. Instale (como root):   sudo ./install.sh --hostname omxpatch.empresa.pt --agent-hostname omxpatchcli.empresa.pt --server-ip 10.0.0.5
+   (sem opções usa omxpatch.oramix.local e omxpatchcli.oramix.local)
+3. Aceda a https://<nome>:4434/ com o utilizador e a password mostrados no fim (altere-a no primeiro login).
+4. Em «Organizações» crie a organização; em «Agentes» gere os scripts de auto-instalação (Windows/Linux/macOS).
+
+Portas:  4434 = consola de gestão · 4444 = agentes → consola (cada uma com o seu certificado autoassinado de 2 anos).
+Opções:  --with-ansible (modo sem agente) · --no-firewall · --port · --agent-port
+Atualizar: extraia a nova versão e execute ./install.sh outra vez (dados e configuração mantidos).
+Remover:   sudo /opt/omxpatch/uninstall.sh [--purge]
+Registo:   /var/log/omxpatch-install.log

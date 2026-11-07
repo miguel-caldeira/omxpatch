@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Perfil{% endblock %}
+{% block content %}
+<h1>Perfil</h1>
+<div class="grid2">
+<div class="panel"><h2>Conta</h2>
+<dl class="kv"><dt>E-mail</dt><dd>{{ current_user.email }}</dd><dt>Perfil</dt><dd>{{ 'Super-administrador' if current_user.is_superadmin else ROLES[current_user.role] }}</dd>
+<dt>Organização</dt><dd>{{ current_user.tenant.name if current_user.tenant else '— (plataforma)' }}</dd><dt>Último acesso</dt><dd>{{ current_user.last_login|dt }}</dd>
+<dt>MFA</dt><dd>{{ 'Ativo' if current_user.mfa_enabled else 'Inativo' }}</dd></dl>
+<p class="actions"><a class="btn sec" href="{{ url_for('auth.change_password') }}">Alterar password</a>
+{% if not current_user.mfa_enabled %}<a class="btn" href="{{ url_for('auth.mfa_setup') }}">Ativar MFA</a>{% endif %}</p>
+{% if current_user.mfa_enabled %}<p class="small">Códigos de recuperação disponíveis: <b>{{ recovery_left }}</b></p>
+<form method="post" action="{{ url_for('auth.mfa_recovery') }}" class="row">{{ csrf() }}<div><input type="text" name="code" inputmode="numeric" placeholder="Código TOTP atual" required autocomplete="one-time-code"></div><div><button class="btn sec sm">Gerar novos códigos de recuperação</button></div></form>{% endif %}
+{% if current_user.mfa_enabled %}<form method="post" action="{{ url_for('auth.mfa_disable') }}" class="row">{{ csrf() }}<div><input type="password" name="password" placeholder="Password para desativar MFA" required></div><div><button class="btn danger sm">Desativar MFA</button></div></form>{% endif %}
+</div>
+<div class="panel"><h2>Tokens de API</h2>
+{% if new_token %}<div class="flash flash-success">Novo token (copie agora — não volta a ser mostrado):<pre>{{ new_token }}</pre></div>{% endif %}
+<table><tr><th>Nome</th><th>Prefixo</th><th>Expira</th><th>Último uso</th><th></th></tr>
+{% for t in tokens %}<tr><td>{{ t.name }}</td><td><code>{{ t.prefix }}…</code></td><td>{{ t.expires_at|dt('%Y-%m-%d') }}</td><td>{{ t.last_used|dt }}</td>
+<td><form method="post" action="{{ url_for('auth.delete_token', token_id=t.id) }}" data-confirm="Revogar token?">{{ csrf() }}<button class="btn sm danger">Revogar</button></form></td></tr>
+{% else %}<tr><td colspan="5" class="muted">Sem tokens.</td></tr>{% endfor %}</table>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('auth.create_token') }}" class="row">{{ csrf() }}
+<div><label>Nome</label><input type="text" name="name" required placeholder="ex.: pipeline CI"></div>
+<div><label>Validade (dias)</label><input type="number" name="days" value="90" min="1" max="365"></div>
+<div><label>&nbsp;</label><button class="btn">Criar token</button></div></form>
+<p class="muted small">Uso: <code>Authorization: Bearer &lt;token&gt;</code> em <code>{{ url_for('api.me', _external=True) }}</code></p>{% endif %}
+</div></div>
+{% endblock %}

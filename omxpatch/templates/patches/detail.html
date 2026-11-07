@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st, level, bar with context %}{% block title %}{{ p.patch_uid }}{% endblock %}
+{% block content %}
+<div class="actions"><h1>{{ p.patch_uid }}</h1><span class="spacer"></span>{{ st(p.status, PATCH_STATUSES[p.status]) }} {{ level(intel.level) }}
+{% if current_user.can_write and p.status == 'approved' %}<a class="btn" href="{{ url_for('patching.campaign_new', patch_id=p.id) }}">Criar campanha</a>{% endif %}</div>
+<div class="grid2"><div class="panel"><h2>Detalhes</h2><dl class="kv"><dt>Título</dt><dd>{{ p.title }}</dd><dt>Fabricante / produto</dt><dd>{{ p.vendor }} {{ p.product }}</dd>
+<dt>SO / instalador</dt><dd>{{ OS_FAMILIES.get(p.os_family, 'qualquer') }} · {{ INSTALLER_TYPES.get(p.installer, p.installer) }}{% if p.package_name %} ({{ p.package_name }}){% endif %}</dd>
+<dt>Versão corrigida</dt><dd>{{ p.version_fixed or '—' }}</dd><dt>CVE</dt><dd>{% for c in p.cve_list %}<a href="{{ url_for('main.intel_detail', cve_id=c) }}">{{ c }}</a> {% else %}—{% endfor %}</dd>
+<dt>Severidade</dt><dd>{{ p.severity }}</dd><dt>Reinício</dt><dd>{{ 'sim' if p.reboot_required else 'não' }}</dd><dt>Origem</dt><dd>{{ p.source }}</dd>
+<dt>Boletim</dt><dd>{% if p.bulletin_url %}<a href="{{ p.bulletin_url }}" rel="noopener noreferrer">{{ p.bulletin_url[:70] }}</a>{% else %}—{% endif %}</dd>
+<dt>Exposições abertas</dt><dd><a href="{{ url_for('main.exposures') }}">{{ affected }}</a></dd></dl>
+<h3>Ficheiro no repositório</h3><p>{% if p.local_file %}<code>{{ p.local_file }}</code> · {{ (p.size_bytes / 1048576)|round(1) }} MB · SHA-256 <code class="small">{{ p.sha256[:24] }}…</code> <a href="{{ url_for('patching.patch_file', patch_id=p.id) }}">transferir</a>{% else %}<span class="muted">Sem ficheiro (apt/dnf/winget/brew/softwareupdate/KB não precisam).</span>{% endif %}</p>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('patching.patch_upload', patch_id=p.id) }}" enctype="multipart/form-data" class="row">{{ csrf() }}<div><input type="file" name="file" required></div><div><button class="btn sm sec">Carregar instalador</button></div></form>
+{% if p.download_url %}<form method="post" action="{{ url_for('patching.patch_download', patch_id=p.id) }}" class="inline">{{ csrf() }}<button class="btn sm sec">Descarregar do fabricante (verifica SHA-256)</button></form>{% endif %}{% endif %}
+{% if current_user.can_manage %}<div class="actions mt">{% for s, label in [('approved', 'Aprovar'), ('rejected', 'Rejeitar'), ('superseded', 'Marcar substituído'), ('identified', 'Repor como identificado')] if p.status != s %}<form method="post" action="{{ url_for('patching.patch_status', patch_id=p.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="status" value="{{ s }}"><button class="btn sm {{ '' if s == 'approved' else 'sec' }}">{{ label }}</button></form>{% endfor %}</div>{% endif %}</div>
+<div class="panel"><h2>Patch Intelligence</h2><p>{{ level(intel.level) }} · pontuação de segurança <b>{{ intel.score }}</b>/100</p>{{ bar(intel.score, 100, 'good' if intel.score >= 80 else '') }}
+<ul>{% for r in intel.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+<dl class="kv"><dt>Taxa de sucesso (comunidade)</dt><dd>{{ ('%.1f %%' % intel.community.success_rate) if intel.community.success_rate is not none else 'n/d' }} ({{ intel.community.reports }} relatórios)</dd>
+<dt>Telemetria da organização</dt><dd>{{ intel.tenant.n }} aplicações · sucesso {{ intel.tenant.success_rate if intel.tenant.success_rate is not none else 'n/d' }} % · crash {{ intel.tenant.crash_rate if intel.tenant.crash_rate is not none else 'n/d' }} % · UX {{ intel.tenant.ux if intel.tenant.ux is not none else 'n/d' }}</dd>
+<dt>Rollbacks</dt><dd>{{ intel.tenant.rollbacks }}</dd><dt>Problemas reportados</dt><dd>{{ intel.reported_problems }}</dd><dt>Impacto operacional</dt><dd>{{ intel.impact }}{% if intel.reboot_required %} · exige reinício{% endif %}</dd>
+<dt>Incidentes do fabricante</dt><dd>{% for i in intel.known_issues %}{{ i.title }} <span class="chip">{{ i.severity }}</span> {% else %}nenhum{% endfor %}</dd></dl>
+{% if current_user.can_manage %}<details><summary>Atualizar dados da base comunitária / fabricante</summary><form method="post" action="{{ url_for('patching.patch_community', patch_id=p.id) }}" class="row">{{ csrf() }}
+<div><label for="success_rate">Taxa de sucesso (%)</label><input type="number" step="0.1" id="success_rate" name="success_rate" value="{{ p.community_success_rate if p.community_success_rate is not none else '' }}"></div>
+<div><label for="reports">Relatórios</label><input type="number" id="reports" name="reports" value="{{ p.community_reports }}"></div><div><label for="problems">Problemas reportados</label><input type="number" id="problems" name="problems" value="{{ p.reported_problems }}"></div>
+<div><label for="impact">Impacto</label><select id="impact" name="impact">{% for k in ['low','medium','high'] %}<option value="{{ k }}" {{ 'selected' if p.impact == k }}>{{ k }}</option>{% endfor %}</select></div>
+<div><label for="issues">Incidentes conhecidos (um por linha: título|gravidade)</label><textarea id="issues" name="issues">{% for i in p.known_issues %}{{ i.title }}|{{ i.severity }}
+{% endfor %}</textarea></div><div><label>&nbsp;</label><button class="btn sm">Guardar</button></div></form></details>{% endif %}</div></div>
+<div class="panel"><h2>Campanhas</h2><table>{% for c in camps %}<tr><td><a href="{{ url_for('patching.campaign_detail', campaign_id=c.id) }}">{{ c.name }}</a></td><td>{{ st(c.status, CAMPAIGN_STATUSES[c.status]) }}</td><td>{{ c.created_at|dt }}</td></tr>{% else %}<tr><td class="muted">Sem campanhas.</td></tr>{% endfor %}</table></div>
+{% endblock %}

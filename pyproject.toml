@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omxpatch"
+version = "1.0.0"
+description = "OMXPatch - centro de comando de gestão de patches e remediação contínua (Ativo → Exposição → Risco → Mitigação → Patch → Validação), com agentes Windows/Linux/macOS e Ansible"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Proprietary" }
+dependencies = [
+    "Flask>=3.0",
+    "Flask-SQLAlchemy>=3.1",
+    "Flask-Login>=0.6.3",
+    "SQLAlchemy>=2.0",
+    "waitress>=3.0",
+    "cheroot>=10.0",
+    "requests>=2.31",
+    "defusedxml>=0.7.1",
+    "segno>=1.5",
+    "cryptography>=41",
+    "tzdata; sys_platform == 'win32'",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+mssql = ["pyodbc>=5.0"]
+ansible = ["ansible-core>=2.15", "pywinrm>=0.4"]
+cloud = ["boto3>=1.28"]
+ad = ["ldap3>=2.9"]
+dev = ["pytest>=8.0", "pyinstaller>=6.0"]
+
+[project.scripts]
+omxpatch = "omxpatch.cli:main"
+omxpatch-agent = "omxpatch_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["omxpatch*", "omxpatch_agent*"]
+
+[tool.setuptools.package-data]
+omxpatch = ["templates/**/*", "static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Playbooks Ansible instalados em <prefixo>/share/omxpatch/ansible (o servidor procura-os aí quando instalado por pip)
+[tool.setuptools.data-files]
+"share/omxpatch/ansible" = ["ansible/*.yml", "ansible/ansible.cfg", "ansible/inventory.example.ini"]
+"share/omxpatch/ansible/group_vars" = ["ansible/group_vars/*.yml"]
+"share/omxpatch/ansible/roles/omxpatch_server/tasks" = ["ansible/roles/omxpatch_server/tasks/*.yml"]
+"share/omxpatch/ansible/roles/omxpatch_server/handlers" = ["ansible/roles/omxpatch_server/handlers/*.yml"]
+"share/omxpatch/ansible/roles/omxpatch_server/defaults" = ["ansible/roles/omxpatch_server/defaults/*.yml"]
+"share/omxpatch/ansible/roles/omxpatch_server/templates" = ["ansible/roles/omxpatch_server/templates/*"]
+"share/omxpatch/ansible/roles/omxpatch_agent/tasks" = ["ansible/roles/omxpatch_agent/tasks/*.yml"]
+"share/omxpatch/ansible/roles/omxpatch_agent/handlers" = ["ansible/roles/omxpatch_agent/handlers/*.yml"]
+"share/omxpatch/ansible/roles/omxpatch_agent/defaults" = ["ansible/roles/omxpatch_agent/defaults/*.yml"]
+"share/omxpatch/ansible/roles/omxpatch_agent/templates" = ["ansible/roles/omxpatch_agent/templates/*"]

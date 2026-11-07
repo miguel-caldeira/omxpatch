@@ -1,0 +1,8 @@
+---
+# Instala o centro de comando OMXPatch (serviço web + worker) num servidor Linux.
+#   ansible-playbook -i inventory.ini site.yml -e omxpatch_server_name=omxpatch.exemplo.pt
+- name: OMXPatch — centro de comando
+  hosts: omxpatch_server
+  become: true
+  roles:
+    - omxpatch_server

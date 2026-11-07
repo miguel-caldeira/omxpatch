@@ -1,0 +1,41 @@
+---
+# Instala o agente executando nos postos o script de auto-instalação gerado na consola (Agentes → Gerar script).
+# O script já leva o token da organização, o URL (porta 4444) e o pinning do certificado omxpatchcli.oramix.local.
+#   ansible-playbook -i inventory.ini install_agent_script.yml -e omxpatch_script=/caminho/omxpatch-install-empresa-linux.sh
+# (use o script linux para o grupo «linux», o macos para «macos» e o .ps1 para «windows»)
+- name: OMXPatch Agent — script de auto-instalação (Linux)
+  hosts: linux
+  become: true
+  tasks:
+    - ansible.builtin.script: "{{ omxpatch_script_linux | default(omxpatch_script) }}"
+      args:
+        creates: /etc/omxpatch-agent/agent.json
+      no_log: true
+
+- name: OMXPatch Agent — script de auto-instalação (macOS)
+  hosts: macos
+  become: true
+  tasks:
+    - ansible.builtin.script: "{{ omxpatch_script_macos | default(omxpatch_script) }}"
+      args:
+        creates: "/Library/Application Support/OMXPatchAgent/agent.json"
+      no_log: true
+
+- name: OMXPatch Agent — script de auto-instalação (Windows)
+  hosts: windows
+  tasks:
+    - ansible.windows.win_stat:
+        path: C:\ProgramData\OMXPatchAgent\agent.json
+      register: omx_cfg
+    - when: not omx_cfg.stat.exists
+      block:
+        - ansible.windows.win_copy:
+            src: "{{ omxpatch_script_windows | default(omxpatch_script) }}"
+            dest: C:\Windows\Temp\omxpatch-install.ps1
+          no_log: true
+        - ansible.windows.win_shell: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\omxpatch-install.ps1
+          no_log: true
+      always:
+        - ansible.windows.win_file:
+            path: C:\Windows\Temp\omxpatch-install.ps1
+            state: absent

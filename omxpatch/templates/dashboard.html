@@ -1,0 +1,46 @@
+{% extends "base.html" %}{% from "_macros.html" import risk, kev, bar with context %}{% block title %}Painel executivo{% endblock %}
+{% block content %}
+<div class="actions"><h1>Painel executivo (CISO) — {{ tenant.name }}</h1><span class="spacer"></span>
+<a class="btn sec" href="{{ url_for('secops.compliance_page') }}">Conformidade</a>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('main.exposures_correlate') }}" class="inline">{% from "_macros.html" import csrf with context %}{{ csrf() }}<button class="btn">Correlacionar agora</button></form>{% endif %}</div>
+<p class="muted small">Ativo → Exposição → Risco → Mitigação → Patch → Validação → Monitorização contínua.</p>
+
+<div class="grid">
+  <a class="kpi" href="{{ url_for('main.assets') }}"><div class="l">Total de ativos</div><div class="v">{{ k.total_assets }}</div><div class="small muted">{{ k.managed_assets }} geridos · {{ k.shadow_it }} Shadow IT</div></a>
+  <a class="kpi" href="{{ url_for('main.exposures') }}"><div class="l">Total de CVE em aberto</div><div class="v">{{ k.total_cves }}</div><div class="small muted">{{ k.open_exposures }} exposições</div></a>
+  <a class="kpi" href="{{ url_for('main.exposures') }}"><div class="l">Ativos expostos</div><div class="v">{{ k.exposed_assets }}</div><div class="small muted">{{ k.internet_exposed_assets }} expostos à Internet</div></a>
+  <div class="kpi"><div class="l">Mean Time To Patch</div><div class="v">{{ k.mttp_days if k.mttp_days is not none else '—' }}<span class="unit"> d</span></div></div>
+  <div class="kpi"><div class="l">Mean Time To Remediate</div><div class="v">{{ k.mttr_days if k.mttr_days is not none else '—' }}<span class="unit"> d</span></div></div>
+  <div class="kpi"><div class="l">% Compliance de patching</div><div class="v">{{ k.patch_compliance }}<span class="unit">%</span></div><div class="small muted">{{ k.sla_breaches }} fora do SLA</div></div>
+  <a class="kpi" href="{{ url_for('main.exposures', kev=1) }}"><div class="l">Exposição KEV</div><div class="v">{{ k.kev_exposures }}</div><div class="small muted">{{ k.kev_assets }} ativos</div></a>
+  <a class="kpi" href="{{ url_for('main.exposures', nopatch=1) }}"><div class="l">Sem patch disponível</div><div class="v">{{ k.no_patch_open }}</div><div class="small muted">{{ k.controls_active }} controlos compensatórios ativos</div></a>
+</div>
+
+<div class="grid2 mt">
+<div class="panel"><h2>Exposições por categoria de risco</h2>
+{% for c in RISK_CATEGORIES|reverse %}<div class="bar"><span class="badge risk-{{ c }}">{{ RISK_LABELS[c] }}</span>{{ bar(k.by_category[c], max_cat) }}<a class="right" href="{{ url_for('main.exposures', category=c) }}">{{ k.by_category[c] }}</a></div>{% endfor %}
+</div>
+<div class="panel"><h2>Remediação em curso</h2>
+<dl class="kv"><dt>Campanhas ativas</dt><dd><a href="{{ url_for('patching.campaigns') }}">{{ k.campaigns_active }}</a></dd>
+<dt>Fechadas (30 dias)</dt><dd>{{ k.closed_period }}</dd><dt>Mitigadas</dt><dd>{{ k.mitigated }}</dd>
+<dt>Validações falhadas</dt><dd><a href="{{ url_for('secops.validations', status='failed') }}">{{ k.validation_failed }}</a></dd>
+<dt>Fluxos autónomos</dt><dd><a href="{{ url_for('secops.autonomous_page') }}">{{ k.autonomous_completed }}/{{ k.autonomous_runs }} concluídos</a></dd>
+<dt>Simulações bloqueadas</dt><dd><a href="{{ url_for('secops.simulations') }}">{{ k.simulations_blocked }}</a></dd>
+<dt>Patches no repositório</dt><dd><a href="{{ url_for('patching.patches_list') }}">{{ k.patches_repo }}</a></dd></dl></div>
+</div>
+
+<div class="panel viz-root"><h2>Tendência (12 semanas): exposições abertas vs fechadas</h2>
+{% set mx = (k.trend|map(attribute='opened')|list + k.trend|map(attribute='closed')|list + [1])|max %}
+<svg class="chart trend-chart" viewBox="0 0 600 140" role="img" aria-label="Exposições abertas e fechadas por semana">
+{% for w in k.trend %}{% set x = loop.index0 * 50 + 6 %}
+<rect x="{{ x }}" y="{{ 110 - (w.opened / mx * 100)|round }}" width="18" height="{{ (w.opened / mx * 100)|round }}" fill="var(--r-high)"><title>{{ w.week }}: {{ w.opened }} abertas</title></rect>
+<rect x="{{ x + 20 }}" y="{{ 110 - (w.closed / mx * 100)|round }}" width="18" height="{{ (w.closed / mx * 100)|round }}" fill="var(--ok)"><title>{{ w.week }}: {{ w.closed }} fechadas</title></rect>
+<text class="axis" x="{{ x + 19 }}" y="126" text-anchor="middle">{{ w.week }}</text>{% endfor %}
+</svg><p class="small muted"><span class="badge risk-high">abertas</span> <span class="badge risk-low">fechadas</span></p></div>
+
+<div class="panel"><h2>Ativos mais exploráveis (top 10 por risco agregado)</h2>
+<table><tr><th>Ativo</th><th>Risco</th><th>Exposições</th><th>KEV</th><th>Internet</th><th>Criticidade</th><th>Owner</th></tr>
+{% for a in k.top_assets %}<tr><td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.name }}</a></td><td>{{ risk(a.risk, a.category) }}</td><td>{{ a.exposures }}</td>
+<td>{{ a.kev or '' }}</td><td>{{ 'sim' if a.internet else '—' }}</td><td>{{ CRITICALITIES.get(a.criticality) }}</td><td>{{ a.owner or '—' }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem exposições em aberto.</td></tr>{% endfor %}</table></div>
+{% endblock %}

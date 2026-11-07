@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Organizações{% endblock %}
+{% block content %}<div class="actions"><h1>Organizações</h1><span class="spacer"></span><a class="btn" href="{{ url_for('admin.tenant_new') }}">Nova organização</a></div>
+<div class="panel"><table><tr><th>Nome</th><th>Identificador</th><th>Licença</th><th>Estado</th><th>Modo autónomo</th><th></th></tr>
+{% for t in rows %}{% set s = status[t.id] %}<tr><td>{{ t.name }}</td><td>{{ t.slug }}</td><td>{{ s.label }}{% if s.expires %} — {{ s.expires.strftime('%d/%m/%Y') }}{% endif %}</td><td>{{ 'ativa' if t.active else 'inativa' }}</td><td>{{ AUTONOMOUS_MODES[t.autonomous_mode] }}</td>
+<td><form method="post" action="{{ url_for('admin.tenant_license', tenant_id=t.id) }}" class="row">{{ csrf() }}<div><input type="date" name="license_expires_on" value="{{ t.license_expires_on or '' }}" aria-label="Expiração"></div><div><input type="text" name="license_ref" value="{{ t.license_ref }}" placeholder="Contrato" aria-label="Contrato"></div><div><button class="btn sm sec">Renovar</button></div></form></td></tr>{% endfor %}</table></div>{% endblock %}

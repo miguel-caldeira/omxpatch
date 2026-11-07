@@ -1,0 +1,6 @@
+---
+- name: reiniciar agente (systemd)
+  ansible.builtin.systemd:
+    name: omxpatch-agent
+    state: restarted
+    daemon_reload: true

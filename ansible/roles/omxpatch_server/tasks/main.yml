@@ -1,0 +1,118 @@
+---
+- name: Pacotes do sistema (Debian/Ubuntu)
+  when: ansible_os_family == 'Debian'
+  ansible.builtin.apt:
+    name: [python3, python3-venv, python3-pip, openssh-client, sshpass, "{{ 'nginx' if omxpatch_nginx else 'ca-certificates' }}"]
+    state: present
+    update_cache: true
+
+- name: Pacotes do sistema (RHEL/derivados)
+  when: ansible_os_family == 'RedHat'
+  ansible.builtin.dnf:
+    name: [python3, python3-pip, openssh-clients, "{{ 'nginx' if omxpatch_nginx else 'ca-certificates' }}"]
+    state: present
+
+- name: Utilizador de serviço
+  ansible.builtin.user:
+    name: "{{ omxpatch_user }}"
+    system: true
+    home: "{{ omxpatch_home }}"
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Diretórios
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ omxpatch_user }}"
+    group: "{{ omxpatch_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ omxpatch_home }}", mode: "0755"}
+    - {path: "{{ omxpatch_data_dir }}", mode: "0750"}
+    - {path: /etc/omxpatch, mode: "0750"}
+
+- name: Ambiente virtual e pacote OMXPatch
+  ansible.builtin.pip:
+    name: "{{ [omxpatch_pip_spec] + (['ansible-core>=2.15', 'pywinrm', 'requests-credssp', 'jmespath'] if omxpatch_install_ansible else []) }}"
+    virtualenv: "{{ omxpatch_home }}/venv"
+    virtualenv_command: python3 -m venv
+    extra_args: "{{ ('--index-url ' ~ omxpatch_pip_index_url) if omxpatch_pip_index_url else '' }}"
+  notify: reiniciar omxpatch
+
+- name: Playbooks Ansible usados pelo modo sem agente
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/"
+    dest: "{{ omxpatch_home }}/ansible/"
+    delete: false
+    rsync_opts: ["--exclude=inventory.example.ini"]
+  notify: reiniciar omxpatch
+
+- name: Coleções Ansible (Windows, macOS, firewall)
+  ansible.builtin.command: "{{ omxpatch_home }}/venv/bin/ansible-galaxy collection install -r {{ omxpatch_home }}/ansible/requirements.yml -p {{ omxpatch_home }}/ansible/collections"
+  when: omxpatch_install_ansible
+  changed_when: false
+
+- name: Configuração (omxpatch.toml)
+  ansible.builtin.template:
+    src: omxpatch.toml.j2
+    dest: /etc/omxpatch/omxpatch.toml
+    owner: root
+    group: "{{ omxpatch_user }}"
+    mode: "0640"
+  notify: reiniciar omxpatch
+
+- name: Serviços systemd (web e worker)
+  ansible.builtin.template:
+    src: "{{ item }}.service.j2"
+    dest: "/etc/systemd/system/{{ item }}.service"
+    mode: "0644"
+  loop: [omxpatch, omxpatch-worker]
+  notify: reiniciar omxpatch
+
+- name: NGINX (proxy reverso)
+  when: omxpatch_nginx
+  ansible.builtin.template:
+    src: nginx-omxpatch.conf.j2
+    dest: /etc/nginx/conf.d/omxpatch.conf
+    mode: "0644"
+  notify: recarregar nginx
+
+- name: Abrir a porta no firewall (ufw)
+  when: omxpatch_open_firewall and ansible_facts.services['ufw.service'] is defined
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ [omxpatch_listen_port, omxpatch_agent_port] if not omxpatch_nginx else [443, omxpatch_agent_port] }}"
+
+- name: Ativar e arrancar
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: [omxpatch, omxpatch-worker]
+
+- name: Aguardar o servidor
+  ansible.builtin.uri:
+    url: "{{ 'http://127.0.0.1:8000' if omxpatch_nginx else 'https://127.0.0.1:' ~ omxpatch_listen_port }}/healthz"
+    validate_certs: false
+  register: omxpatch_health
+  retries: 20
+  delay: 3
+  until: omxpatch_health.status == 200
+
+- name: Password inicial do super-administrador
+  ansible.builtin.command: "{{ omxpatch_home }}/venv/bin/omxpatch initial-password"
+  environment:
+    OMXPATCH_CONFIG: /etc/omxpatch/omxpatch.toml
+  become_user: "{{ omxpatch_user }}"
+  register: omxpatch_initial
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Mostrar a password inicial (altere-a no primeiro acesso)
+  ansible.builtin.debug:
+    msg: "{{ omxpatch_initial.stdout_lines | default([]) }}"

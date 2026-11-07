@@ -1,0 +1,74 @@
+---
+# Modo sem agente — aplica um patch em Windows (WinRM). Variáveis: installer (wua|winget|msi|exe), uid/package,
+# silent_args, local_file (ficheiro do repositório no controlador), sha256, reboot_policy.
+- name: OMXPatch — aplicar patch (Windows)
+  hosts: windows
+  gather_facts: false
+  vars:
+    reboot_policy: if_needed
+    installer: wua
+  tasks:
+    - name: Windows Update (KB)
+      when: installer == 'wua'
+      block:
+        - name: Validar o identificador KB
+          ansible.builtin.assert:
+            that: (uid | default(package)) is match('(?i)^KB[0-9]{6,8}$')
+        - name: Instalar a atualização
+          ansible.windows.win_updates:
+            accept_list: ["{{ (uid | default(package)) | upper }}"]
+            category_names: [SecurityUpdates, CriticalUpdates, UpdateRollups, Updates, DefinitionUpdates]
+            state: installed
+            reboot: "{{ reboot_policy == 'force' }}"
+          register: omx_wua
+        - ansible.builtin.set_fact:
+            omx_ok: "{{ not omx_wua.failed }}"
+            omx_reboot: "{{ omx_wua.reboot_required | default(false) }}"
+
+    - name: winget
+      when: installer in ['winget', 'ansible'] and package is defined
+      block:
+        - name: Atualizar com winget
+          ansible.windows.win_command: winget upgrade --id {{ package }} --silent --accept-source-agreements --accept-package-agreements --disable-interactivity
+          register: omx_winget
+          failed_when: false
+        - ansible.builtin.set_fact:
+            omx_ok: "{{ omx_winget.rc in [0, -1979842517] }}"
+            omx_reboot: false
+
+    - name: MSI / EXE a partir do repositório
+      when: installer in ['msi', 'exe']
+      block:
+        - name: Copiar o instalador do controlador
+          ansible.windows.win_copy:
+            src: "{{ local_file }}"
+            dest: 'C:\Windows\Temp\omxpatch-installer.{{ installer }}'
+        - name: Verificar o SHA-256
+          ansible.windows.win_stat:
+            path: 'C:\Windows\Temp\omxpatch-installer.{{ installer }}'
+            checksum_algorithm: sha256
+          register: omx_file
+          failed_when: sha256 | length > 0 and omx_file.stat.checksum != sha256
+        - name: Executar o instalador
+          ansible.windows.win_command: >-
+            {{ ('msiexec /i "C:\Windows\Temp\omxpatch-installer.msi" ' ~ (silent_args | default('/qn /norestart')))
+               if installer == 'msi' else ('"C:\Windows\Temp\omxpatch-installer.exe" ' ~ (silent_args | default('/S'))) }}
+          register: omx_inst
+          failed_when: omx_inst.rc not in [0, 3010]
+        - ansible.builtin.set_fact:
+            omx_ok: true
+            omx_reboot: "{{ omx_inst.rc == 3010 }}"
+      always:
+        - ansible.windows.win_file:
+            path: 'C:\Windows\Temp\omxpatch-installer.{{ installer }}'
+            state: absent
+
+    - name: Reiniciar conforme a política
+      ansible.windows.win_reboot:
+        reboot_timeout: 900
+      when: omx_ok | default(false) and (reboot_policy == 'force' or (reboot_policy == 'if_needed' and omx_reboot | default(false)))
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: >-
+          OMXPATCH_RESULT={{ {'status': ('succeeded' if omx_ok | default(false) else 'failed'), 'reboot_pending': false} | to_json }}

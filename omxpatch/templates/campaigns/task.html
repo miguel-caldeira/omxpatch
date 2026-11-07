@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% from "_macros.html" import st with context %}{% block title %}Tarefa #{{ t.id }}{% endblock %}
+{% block content %}<h1>Tarefa #{{ t.id }} — {{ TASK_TYPES.get(t.type) }}</h1>
+<div class="panel"><dl class="kv"><dt>Ativo</dt><dd><a href="{{ url_for('main.asset_detail', asset_id=t.asset_id) }}">{{ t.asset.name }}</a></dd><dt>Estado</dt><dd>{{ st(t.status, TASK_STATUSES[t.status]) }}</dd>
+<dt>Modo</dt><dd>{{ 'Ansible (sem agente)' if t.mode == 'ansible' else 'Agente' }}</dd><dt>Tentativas</dt><dd>{{ t.attempts }}</dd><dt>Enviada / iniciada / concluída</dt><dd>{{ t.sent_at|dt }} / {{ t.started_at|dt }} / {{ t.finished_at|dt }}</dd>
+{% if t.campaign_id %}<dt>Campanha</dt><dd><a href="{{ url_for('patching.campaign_detail', campaign_id=t.campaign_id) }}">{{ t.campaign.name }}</a></dd>{% endif %}</dl></div>
+<div class="panel"><h2>Pedido</h2><pre>{{ t.payload_data|tojson_pretty }}</pre><h2>Resultado</h2><pre>{{ t.result_data|tojson_pretty }}</pre><h2>Saída</h2><pre>{{ t.output or '—' }}</pre></div>{% endblock %}

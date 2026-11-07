@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st, bar, level with context %}{% block title %}{{ c.name }}{% endblock %}
+{% block content %}
+<div class="actions"><h1>{{ c.name }}</h1><span class="spacer"></span>{{ st(c.status, CAMPAIGN_STATUSES[c.status]) }}
+{% if current_user.can_write %}{% if c.status in ('draft', 'scheduled') %}<form method="post" action="{{ url_for('patching.campaign_action', campaign_id=c.id, action='start') }}" class="inline">{{ csrf() }}<button class="btn">Iniciar</button></form>{% endif %}
+{% if c.status in ('running', 'scheduled') %}<form method="post" action="{{ url_for('patching.campaign_action', campaign_id=c.id, action='pause') }}" class="inline">{{ csrf() }}<button class="btn sec">Pausar</button></form>{% endif %}
+{% if c.status == 'paused' %}<form method="post" action="{{ url_for('patching.campaign_action', campaign_id=c.id, action='resume') }}" class="inline">{{ csrf() }}<button class="btn">Retomar</button></form>
+<form method="post" action="{{ url_for('patching.campaign_action', campaign_id=c.id, action='promote') }}" class="inline" data-confirm="Promover para o anel seguinte sem cumprir os critérios? A decisão fica registada.">{{ csrf() }}<input type="hidden" name="confirm" value="1"><button class="btn accent">Promover manualmente</button></form>{% endif %}
+{% if c.status not in ('completed', 'cancelled') %}<form method="post" action="{{ url_for('patching.campaign_action', campaign_id=c.id, action='cancel') }}" class="inline" data-confirm="Cancelar a campanha?">{{ csrf() }}<button class="btn danger">Cancelar</button></form>{% endif %}{% endif %}</div>
+<div class="grid2"><div class="panel"><dl class="kv"><dt>Patch</dt><dd><a href="{{ url_for('patching.patch_detail', patch_id=c.patch_id) }}">{{ c.patch.patch_uid }}</a> {{ level(intel.level) }}</dd>
+<dt>Origem</dt><dd>{{ 'Autónomo (fluxo #' ~ c.run_id ~ ')' if c.origin == 'autonomous' else 'Manual' }}</dd><dt>Âmbito</dt><dd><code class="small">{{ c.scope }}</code></dd>
+<dt>Opções</dt><dd>{{ 'anéis · ' if c.use_rings }}{{ 'janelas · ' if c.respect_windows }}{{ 'Wake-on-LAN · ' if c.use_wol }}{{ 'emergência · ' if c.emergency }}{{ 'banda ' ~ c.bandwidth_kbps ~ ' kbit/s · ' if c.bandwidth_kbps }}reinício: {{ c.reboot_policy }}</dd>
+<dt>Início / fim</dt><dd>{{ c.started_at|dt }} / {{ c.finished_at|dt }}</dd></dl></div>
+<div class="panel"><h2>Progresso</h2>{{ bar(summary.progress) }} {{ summary.progress }} %<p class="small muted">{% for k, n in summary.by_status.items() %}<span class="chip">{{ TASK_STATUSES.get(k, k) }}: {{ n }}</span> {% endfor %}</p></div></div>
+<div class="panel"><h2>Anéis de teste</h2>
+{% for r in ring_info %}<div class="ringrow"><div><b>{{ RINGS[r.ring] }}</b><div>{{ st(r.state.get('state', 'pending'), {'active': 'ativo', 'done': 'concluído', 'hold': 'em pausa'}.get(r.state.get('state', ''), 'por iniciar')) }}</div>{% if r.state.get('override') %}<div class="small muted">promoção manual</div>{% endif %}</div>
+<div><div class="small">Dispositivos {{ r.metrics.devices }} · concluídos {{ r.metrics.done }} · sucesso {{ r.metrics.success_rate if r.metrics.success_rate is not none else '—' }} % (mín. {{ r.policy.min_success }}) · crash {{ r.metrics.crash_rate if r.metrics.crash_rate is not none else '—' }} % (máx. {{ r.policy.max_crash }}) · UX {{ r.metrics.ux if r.metrics.ux is not none else '—' }} (mín. {{ r.policy.min_ux }})</div>
+{% for m in r.state.get('reasons', []) %}<div class="small {{ 'bad' if r.state.get('state') == 'hold' else 'muted' }}">{{ m }}</div>{% endfor %}</div></div>{% else %}<p class="muted">Sem anéis (campanha ainda não iniciada).</p>{% endfor %}</div>
+<div class="panel"><h2>Tarefas</h2><table><tr><th>#</th><th>Ativo</th><th>Anel</th><th>Modo</th><th>Estado</th><th>Notas</th><th></th></tr>
+{% for t in tasks %}<tr><td><a href="{{ url_for('patching.task_detail', task_id=t.id) }}">{{ t.id }}</a></td><td><a href="{{ url_for('main.asset_detail', asset_id=t.asset_id) }}">{{ t.asset.name }}</a></td><td>{{ t.ring }}</td><td>{{ 'Ansible' if t.mode == 'ansible' else 'Agente' }}</td>
+<td>{{ st(t.status, TASK_STATUSES[t.status]) }}</td><td class="small wrap">{{ t.output[-120:] if t.status in ('waiting_window','waking','failed') else '' }}</td>
+<td>{% if current_user.can_write and t.status in ('failed','cancelled','rolled_back','skipped') %}<form method="post" action="{{ url_for('patching.task_retry', task_id=t.id) }}" class="inline">{{ csrf() }}<button class="btn sm sec">Repetir</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Ainda sem tarefas.</td></tr>{% endfor %}</table></div>
+{% endblock %}

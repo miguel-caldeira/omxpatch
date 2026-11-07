@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, risk, st, kev, yn, level, bar with context %}{% block title %}{{ ex.cve_id }} em {{ ex.asset.name }}{% endblock %}
+{% block content %}{% set v = ex.verdict_data %}
+<div class="actions"><h1>{{ ex.cve_id }} — <a href="{{ url_for('main.asset_detail', asset_id=ex.asset_id) }}">{{ ex.asset.name }}</a></h1><span class="spacer"></span>
+{{ risk(ex.risk_score, ex.risk_category) }} {{ st(ex.status, EXPOSURE_STATUSES[ex.status]) }} {% if cve and cve.kev %}{{ kev() }}{% endif %}</div>
+{% if v.critical %}<div class="panel verdict-critical"><h2>Risco crítico (correlação multi-vendor)</h2><p>{{ v.summary }}</p></div>{% endif %}
+<div class="grid2">
+<div class="panel"><h2>Risco dinâmico: {{ ex.risk_score }}/100{% if ex.residual_score != ex.risk_score %} → residual {{ ex.residual_score }}{% endif %}</h2>
+{% for f in ex.factor_list %}<div class="factor"><span>{{ f.label }}</span>{{ bar(f.points, f.max) }}<span class="right">{{ f.points }}/{{ f.max }}</span><span class="d small muted">{{ f.detail }}{% if f.residual != f.points %} · residual {{ f.residual }}{% endif %}</span></div>{% endfor %}
+<p class="small muted">Prazo (SLA {{ RISK_LABELS[ex.risk_category] }}): {{ ex.due_date|dt('%Y-%m-%d') }}</p></div>
+<div class="panel"><h2>Correlação multi-vendor</h2>
+<div class="concl">{% for c in v.conclusions %}<div class="{{ 'adverse' if c.adverse else 'good' }}">{{ '✘' if c.adverse else '✔' }} {{ c.text }}</div>{% else %}<span class="muted">Sem veredicto ainda.</span>{% endfor %}</div>
+<h3>Sinais</h3><table>{% for s in signals %}<tr><td>{{ s.source }}</td><td>{{ SIGNAL_KINDS.get(s.kind, s.kind) }}</td><td>{{ s.value }}</td><td>{{ s.observed_at|dt }}</td></tr>{% else %}<tr><td class="muted">Sem sinais de outras plataformas.</td></tr>{% endfor %}</table></div></div>
+<div class="grid2"><div class="panel"><h2>Software e versão</h2><dl class="kv"><dt>Software</dt><dd>{{ ex.software_name or '—' }}</dd><dt>Instalada</dt><dd>{{ ex.installed_version or '?' }}</dd><dt>Corrigida em</dt><dd>{{ ex.fixed_version or '?' }}</dd>
+<dt>Origem</dt><dd>{{ ex.source }}{% if ex.omxvuln_finding_id %} (OMXVuln #{{ ex.omxvuln_finding_id }}){% endif %}</dd>
+{% if cve %}<dt>CVSS / EPSS</dt><dd>{{ cve.cvss if cve.cvss is not none else 'n/d' }} / {{ ('%.1f %%' % (cve.epss * 100)) if cve.epss is not none else 'n/d' }}</dd>
+<dt>Exploit</dt><dd>{{ EXPLOIT_MATURITY[cve.exploit_maturity] }}{% if cve.malware_list %} · malware: {{ cve.malware_list|join(', ') }}{% endif %}{% if cve.ransomware %} · <b class="bad">ransomware</b>{% endif %}</dd>
+<dt>Descrição</dt><dd>{{ cve.description[:400] }}</dd>{% endif %}</dl>
+<p><a href="{{ url_for('main.intel_detail', cve_id=ex.cve_id) }}">Inteligência do CVE</a></p></div>
+<div class="panel"><h2>Patch</h2>{% if ex.patch %}<p><a href="{{ url_for('patching.patch_detail', patch_id=ex.patch_id) }}">{{ ex.patch.patch_uid }}</a> — {{ ex.patch.title }} {{ st(ex.patch.status, PATCH_STATUSES[ex.patch.status]) }}</p>
+{% if intelligence %}<p>Patch Intelligence: {{ level(intelligence.level) }}</p><ul>{% for r in intelligence.reasons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+{% if current_user.can_write and ex.patch.status == 'approved' %}<a class="btn" href="{{ url_for('patching.campaign_new', patch_id=ex.patch_id, cve_id=ex.cve_id) }}">Criar campanha</a>{% endif %}
+{% else %}<p class="muted">Sem patch disponível: proponha controlos compensatórios.</p>{% endif %}</div></div>
+<div class="panel"><div class="actions"><h2>Controlos compensatórios</h2><span class="spacer"></span>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('secops.controls_propose', exposure_id=ex.id) }}" class="inline">{{ csrf() }}<button class="btn sm">Propor controlos</button></form>{% endif %}</div>
+<table><tr><th>Categoria</th><th>Ação</th><th>Estado</th><th>Redução</th><th></th></tr>
+{% for c in ctrls %}<tr><td>{{ CONTROL_CATEGORIES[c.category] }}</td><td>{{ CONTROL_ACTIONS[c.action][1] }} {{ c.params_data.get('port', '') }}</td><td>{{ st(c.status, CONTROL_STATUSES[c.status]) }}</td><td>−{{ c.risk_reduction }}</td><td><a href="{{ url_for('secops.control_detail', control_id=c.id) }}">abrir</a></td></tr>
+{% else %}<tr><td colspan="5" class="muted">Sem controlos.</td></tr>{% endfor %}</table>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('secops.control_new', exposure_id=ex.id) }}" class="row mt">{{ csrf() }}
+<div><label for="action">Nova ação manual</label><select id="action" name="action">{% for k, (cat, label) in CONTROL_ACTIONS.items() %}<option value="{{ k }}">{{ CONTROL_CATEGORIES[cat] }}: {{ label }}</option>{% endfor %}</select></div>
+<div><label for="port">Porta</label><input type="number" id="port" name="port" min="1" max="65535"></div><div><label for="ioc">IOC (IP/domínio/SHA-256)</label><input type="text" id="ioc" name="ioc"></div>
+<div><label for="country">País</label><input type="text" id="country" name="country" maxlength="2"></div><div><label for="account">Conta</label><input type="text" id="account" name="account"></div><div><label>&nbsp;</label><button class="btn sec">Criar</button></div></form>{% endif %}</div>
+<div class="grid2"><div class="panel"><h2>Validação (ciclo fechado)</h2><table><tr><th>Estado</th><th>Verificações</th><th>Tent.</th></tr>
+{% for x in vals %}<tr><td>{{ st(x.status) }}</td><td class="small">{% for k, ok in x.check_data.items() %}{{ yn(ok) }} {{ k }} {% endfor %}</td><td>{{ x.attempts }}</td></tr>{% else %}<tr><td colspan="3" class="muted">Sem validações.</td></tr>{% endfor %}</table>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('main.exposure_validate', exposure_id=ex.id) }}" class="inline">{{ csrf() }}<button class="btn sm sec">Validar agora</button></form>{% endif %}</div>
+<div class="panel"><h2>Simulação de ataque</h2><table>{% for s in sims %}<tr><td>{{ SIMULATIONS[s.scenario] }} ({{ 'depois' if s.phase == 'after_fix' else 'antes' }})</td><td>{{ st(s.outcome or s.status, s.outcome or s.status) }}</td><td>{{ s.created_at|dt }}</td></tr>{% else %}<tr><td class="muted">Sem simulações.</td></tr>{% endfor %}</table>
+{% if current_user.can_write and ex.asset.agent %}<form method="post" action="{{ url_for('secops.simulation_new') }}" class="row">{{ csrf() }}<input type="hidden" name="asset_id" value="{{ ex.asset_id }}"><input type="hidden" name="exposure_id" value="{{ ex.id }}"><input type="hidden" name="scenario" value="exploit_chain">
+<div><label class="chk"><input type="checkbox" name="after_fix" value="1"> Depois da correção</label></div><div><button class="btn sm sec">Simular cadeia de exploração</button></div></form>{% endif %}</div></div>
+<div class="panel"><h2>Decisões</h2><div class="accept-form">
+{% if current_user.can_manage and ex.status in ('open','mitigated') %}<form method="post" action="{{ url_for('main.exposure_accept', exposure_id=ex.id) }}" class="accept-form">{{ csrf() }}<input type="text" name="reason" placeholder="Justificação da aceitação do risco (mín. 10 caracteres)" aria-label="Justificação" required><button class="btn sec">Aceitar risco</button></form>{% endif %}
+{% if current_user.can_manage and ex.status in ('closed','accepted','remediated') %}<form method="post" action="{{ url_for('main.exposure_reopen', exposure_id=ex.id) }}" class="inline">{{ csrf() }}<button class="btn sec">Reabrir</button></form>{% endif %}
+{% if current_user.can_write %}<form method="post" action="{{ url_for('main.exposure_notify', exposure_id=ex.id) }}" class="inline">{{ csrf() }}<button class="btn sec">Enviar a SIEM/SOAR/ITSM</button></form>{% endif %}</div></div>
+{% endblock %}

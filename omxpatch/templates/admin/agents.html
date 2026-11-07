@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st with context %}{% block title %}Agentes{% endblock %}
+{% block content %}<h1>Agentes e instalação (Windows · Linux · macOS)</h1>
+{% if new_token %}<div class="flash flash-success">Novo token de registo (copie agora — não volta a ser mostrado):<pre>{{ new_token }}</pre>
+<p>Instalação em massa com Ansible:</p><pre>ansible-playbook -i inventario.ini ansible/deploy_agent.yml \
+  -e omxpatch_server_url={{ base_url or 'https://omxpatch.exemplo.pt' }} -e omxpatch_enrollment_token={{ new_token }}</pre></div>{% endif %}
+<div class="panel"><h2>Agentes ({{ agents|length }})</h2><table><tr><th>Ativo</th><th>Organização</th><th>SO</th><th>Versão</th><th>IP</th><th>Último contacto</th><th>Estado</th><th></th></tr>
+{% for a in agents %}<tr><td>{% if a.asset %}<a href="{{ url_for('main.asset_detail', asset_id=a.asset_id) }}">{{ a.hostname }}</a>{% else %}{{ a.hostname }}{% endif %}</td><td>{{ tenant.name }}</td><td>{{ OS_FAMILIES.get(a.os_family, a.os_family) }}</td><td>{{ a.version }}</td><td>{{ a.ip }}</td><td>{{ a.last_seen|dt }}</td>
+<td>{% if a.revoked %}{{ st('rejected', 'revogado') }}{% elif a.last_seen and (now - a.last_seen).total_seconds() < offline * 60 %}{{ st('approved', 'online') }}{% else %}{{ st('waiting_window', 'offline') }}{% endif %}</td>
+<td class="nowrap">{% if current_user.can_manage %}{% if not a.revoked %}<form method="post" action="{{ url_for('admin.agent_revoke', agent_id=a.id) }}" class="inline" data-confirm="Revogar o agente?">{{ csrf() }}<button class="btn sm sec">Revogar</button></form>{% endif %}<form method="post" action="{{ url_for('admin.agent_delete', agent_id=a.id) }}" class="inline" data-confirm="Eliminar o agente?">{{ csrf() }}<button class="btn sm danger">Eliminar</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="8" class="muted">Sem agentes. Crie um token de registo e execute o playbook de instalação.</td></tr>{% endfor %}</table></div>
+{% if current_user.can_manage %}<div class="grid2"><div class="panel"><h2>Tokens de registo</h2><table><tr><th>Nome</th><th>Prefixo</th><th>Anel</th><th>Usos</th><th>Expira</th><th></th></tr>
+{% for t in tokens %}<tr><td>{{ t.name }}</td><td><code>{{ t.prefix }}…</code></td><td>{{ t.ring }}</td><td>{{ t.uses }}{{ '/' ~ t.max_uses if t.max_uses }}</td><td>{{ t.expires_at|dt('%Y-%m-%d') }}{{ ' (revogado)' if t.revoked }}</td>
+<td>{% if not t.revoked %}<form method="post" action="{{ url_for('admin.agent_token_revoke', token_id=t.id) }}" class="inline">{{ csrf() }}<button class="btn sm danger">Revogar</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="6" class="muted">Sem tokens.</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Novo token de registo</h2><form method="post" action="{{ url_for('admin.agent_token_new') }}" class="row">{{ csrf() }}
+<div><label for="name">Nome</label><input type="text" id="name" name="name" value="ansible"></div>
+<div><label for="ring">Anel inicial dos ativos</label><select id="ring" name="ring">{% for k, v in RINGS.items() %}<option value="{{ k }}" {{ 'selected' if k == 4 }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="days">Validade (dias)</label><input type="number" id="days" name="days" value="30" min="1" max="365"></div><div><label for="max_uses">Máx. utilizações (0 = ilimitado)</label><input type="number" id="max_uses" name="max_uses" value="0" min="0"></div>
+<div><label>&nbsp;</label><button class="btn">Criar token</button></div></form></div></div>{% endif %}
+<div class="panel"><h2>Scripts de auto-instalação — {{ current_tenant.name if current_tenant else '' }}</h2>
+<p class="muted small">Cada script regista o equipamento <b>apenas nesta organização</b> (leva um token dela), descarrega o agente por TLS com pinning do certificado <code>{{ base_url }}</code> e instala o serviço. Não precisa de pip nem de acesso à Internet (só de Python 3, que o script instala se faltar).</p>
+{% if current_user.can_manage %}<form method="post" action="{{ url_for('admin.agent_script') }}" class="row">{{ csrf() }}
+<div><label for="os">Sistema operativo</label><select id="os" name="os"><option value="windows">Windows (.ps1)</option><option value="linux">Linux (.sh)</option><option value="macos">macOS (.sh)</option></select></div>
+<div><label for="sring">Anel inicial</label><select id="sring" name="ring">{% for k, v in RINGS.items() %}<option value="{{ k }}" {{ 'selected' if k == 4 }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="sdays">Validade do token (dias)</label><input type="number" id="sdays" name="days" value="7" min="1" max="365"></div>
+<div><label for="smax">Máx. instalações (0 = ilimitado)</label><input type="number" id="smax" name="max_uses" value="0" min="0"></div>
+<div><label>&nbsp;</label><button class="btn">Gerar e descarregar script</button></div></form>
+<p class="small">Remoção: {% for k in ['windows', 'linux', 'macos'] %}<a href="{{ url_for('admin.agent_uninstall_script', os_kind=k) }}">{{ k }}</a> {% endfor %}</p>{% endif %}
+<dl class="kv"><dt>Servidor de agentes</dt><dd><code>{{ base_url }}</code></dd><dt>Impressão digital (SHA-256)</dt><dd><code class="small">{{ agent_pin or 'TLS desativado' }}</code></dd><dt>IP no ficheiro hosts</dt><dd>{{ server_ip or '— (o nome tem de resolver por DNS)' }}</dd></dl>
+<h3>Instalação remota</h3><ul><li><b>Ansible:</b> <code>ansible-playbook -i inventario.ini ansible/install_agent_script.yml -e omxpatch_script=omxpatch-install-….ps1|.sh</code> (SSH/WinRM).</li>
+<li><b>Linux/macOS por SSH:</b> <code>ssh root@posto 'sh -s' &lt; omxpatch-install-….sh</code></li><li><b>Windows:</b> GPO, Intune, SCCM ou <code>Invoke-Command -FilePath omxpatch-install-….ps1 -ComputerName …</code></li></ul></div>
+{% endblock %}

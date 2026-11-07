@@ -1,0 +1,15 @@
+---
+omxpatch_user: omxpatch
+omxpatch_home: /opt/omxpatch
+omxpatch_data_dir: /var/lib/omxpatch
+omxpatch_server_name: omxpatch.oramix.local
+omxpatch_listen_port: 4434           # consola de gestão (HTTPS, omxpatch.oramix.local)
+omxpatch_agent_port: 4444            # agentes → consola (HTTPS, omxpatchcli.oramix.local)
+omxpatch_agent_hostname: omxpatchcli.oramix.local
+omxpatch_tls_enabled: true
+omxpatch_nginx: false                # true: NGINX termina o TLS e faz proxy para 127.0.0.1:8000
+omxpatch_nginx_cert: /etc/ssl/certs/omxpatch.pem
+omxpatch_nginx_key: /etc/ssl/private/omxpatch.key
+omxpatch_install_ansible: true       # o modo sem agente e a descoberta Hyper-V precisam do ansible-core
+omxpatch_open_firewall: true
+omxpatch_extra_config: {}            # chaves adicionais do omxpatch.toml (ex.: omxvuln: {url: …, token: …})

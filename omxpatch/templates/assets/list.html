@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, pager, st with context %}{% block title %}Ativos{% endblock %}
+{% block content %}
+<div class="actions"><h1>Ativos e inventário (CMDB)</h1><span class="spacer"></span>
+{% if current_user.can_write %}<a class="btn" href="{{ url_for('main.asset_new') }}">Novo ativo</a>{% endif %}</div>
+<div class="grid">
+<div class="kpi"><div class="l">Total</div><div class="v">{{ stats.total }}</div></div>
+<div class="kpi"><div class="l">Geridos</div><div class="v">{{ stats.managed }}</div></div>
+<a class="kpi" href="{{ url_for('main.assets', shadow=1) }}"><div class="l">Shadow IT</div><div class="v">{{ stats.shadow_it }}</div></a>
+<div class="kpi"><div class="l">Windows / Linux / macOS</div><div class="v">{{ stats.by_os.windows }} / {{ stats.by_os.linux }} / {{ stats.by_os.macos }}</div></div>
+</div>
+<div class="panel"><form method="get" class="filters">
+<div><label for="q">Pesquisa</label><input type="text" id="q" name="q" value="{{ request.args.q }}" placeholder="nome, IP, owner, etiqueta"></div>
+<div><label for="os_family">SO</label><select id="os_family" name="os_family"><option value="">Todos</option>{% for k, v in OS_FAMILIES.items() %}<option value="{{ k }}" {{ 'selected' if request.args.os_family == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="kind">Tipo</label><select id="kind" name="kind"><option value="">Todos</option>{% for k, v in ASSET_KINDS.items() %}<option value="{{ k }}" {{ 'selected' if request.args.kind == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="source">Origem</label><select id="source" name="source"><option value="">Todas</option>{% for k, v in ASSET_SOURCES.items() %}<option value="{{ k }}" {{ 'selected' if request.args.source == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label class="chk"><input type="checkbox" name="shadow" value="1" {{ 'checked' if request.args.shadow }}> Só Shadow IT</label><label class="chk"><input type="checkbox" name="unmanaged" value="1" {{ 'checked' if request.args.unmanaged }}> Não geridos</label></div>
+<div><button class="btn">Filtrar</button></div></form></div>
+<div class="panel"><table><tr><th>Ativo</th><th>IP</th><th>Tipo</th><th>SO</th><th>Utilizador / owner</th><th>Criticidade</th><th>Anel</th><th>Origem</th><th>Exposições</th><th>Visto</th></tr>
+{% for a in pag.items %}<tr><td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.name }}</a>{% if a.shadow_it %} <span class="badge st-accepted">Shadow IT</span>{% endif %}{% if not a.managed %} <span class="chip">não gerido</span>{% endif %}</td>
+<td>{{ a.ip or '—' }}</td><td>{{ ASSET_KINDS.get(a.kind, a.kind) }}</td><td>{{ OS_FAMILIES.get(a.os_family, '—') }} {{ a.os_version }}</td>
+<td>{{ a.primary_user or '—' }}<div class="small muted">{{ a.owner }}</div></td><td>{{ CRITICALITIES.get(a.criticality) }}</td><td>{{ a.ring }}</td><td>{{ ASSET_SOURCES.get(a.source, a.source) }}</td>
+<td>{{ open_by_asset.get(a.id, 0) or '' }}</td><td class="nowrap">{{ a.last_seen|dt }}</td></tr>
+{% else %}<tr><td colspan="10" class="muted">Sem ativos. Instale agentes (Agentes), execute uma descoberta ou ligue o OMXVuln.</td></tr>{% endfor %}</table>
+{{ pager(pag, 'main.assets') }}</div>
+{% if current_user.can_manage %}
+<div class="grid2"><div class="panel"><h2>Descoberta sem agente (TCP)</h2>
+<form method="post" action="{{ url_for('main.assets_discover') }}">{{ csrf() }}
+<label for="targets">Redes / intervalos / IPs (um por linha; máx. 1024 endereços)</label><textarea id="targets" name="targets" placeholder="10.0.1.0/24&#10;10.0.2.10-60"></textarea>
+<label class="chk"><input type="checkbox" name="probe_ot" value="1"> Incluir portas IoT/OT (apenas ligação TCP, sem tráfego de protocolo) — usar só com autorização do responsável pela rede industrial</label>
+<p><button class="btn">Descobrir</button></p></form></div>
+<div class="panel"><h2>Importar CSV</h2><form method="post" action="{{ url_for('main.assets_import') }}" enctype="multipart/form-data">{{ csrf() }}
+<p class="small muted">Colunas: name, ip, fqdn, os_name, os_version, kind, owner, primary_user, criticality, country, city, tags…</p>
+<input type="file" name="file" accept=".csv" required><p><button class="btn sec">Importar</button></p></form>
+<p class="small muted">Integrações de descoberta (AD, Entra ID, VMware, Hyper-V, AWS, Azure, GCP, Kubernetes) em <a href="{{ url_for('admin.integrations') }}">Integrações</a>.</p></div></div>
+{% endif %}
+{% endblock %}

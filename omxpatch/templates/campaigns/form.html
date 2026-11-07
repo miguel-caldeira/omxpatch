@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, level with context %}{% block title %}Nova campanha{% endblock %}
+{% block content %}<h1>Nova campanha — {{ patch.patch_uid }}</h1>
+<div class="panel"><p>Patch Intelligence: {{ level(intel.level) }}</p><ul>{% for r in intel.reasons %}<li>{{ r }}</li>{% endfor %}</ul></div>
+<form method="post" class="panel">{{ csrf() }}<input type="hidden" name="patch_id" value="{{ patch.id }}">
+<div class="row"><div><label for="name">Nome</label><input type="text" id="name" name="name" value="{{ form.get('name', patch.patch_uid) }}"></div>
+<div><label for="cve_id">Âmbito: ativos com este CVE em aberto</label><input type="text" id="cve_id" name="cve_id" value="{{ form.get('cve_id', '') }}" placeholder="CVE-…"></div>
+<div><label for="tags">Âmbito: etiquetas</label><input type="text" id="tags" name="tags" value="{{ form.get('tags', '') }}"></div>
+<div><label for="asset_ids">Âmbito: IDs de ativos</label><input type="text" id="asset_ids" name="asset_ids" value="{{ form.get('asset_ids', '') }}" placeholder="1,2,3"></div>
+<div><label for="start_at">Início (vazio = já)</label><input type="datetime-local" id="start_at" name="start_at"></div>
+<div><label for="bandwidth_kbps">Limite de largura de banda por ativo (kbit/s; 0 = sem limite)</label><input type="number" id="bandwidth_kbps" name="bandwidth_kbps" min="0" value="{{ form.get('bandwidth_kbps', 0) }}"></div>
+<div><label for="reboot_policy">Reinício</label><select id="reboot_policy" name="reboot_policy">{% for k, l in [('if_needed', 'Se necessário'), ('none', 'Nunca (fica pendente)'), ('force', 'Forçar')] %}<option value="{{ k }}" {{ 'selected' if form.get('reboot_policy') == k }}>{{ l }}</option>{% endfor %}</select></div></div>
+<label class="chk"><input type="checkbox" name="use_rings" value="1" {{ 'checked' if form.get('use_rings') }}> Usar anéis de teste (Ring 0 → Ring 4) com promoção automática</label>
+<label class="chk"><input type="checkbox" name="auto_promote" value="1" {{ 'checked' if form.get('auto_promote') }}> Promover automaticamente quando os critérios do anel forem cumpridos</label>
+<label class="chk"><input type="checkbox" name="respect_windows" value="1" {{ 'checked' if form.get('respect_windows') }}> Respeitar janelas de manutenção</label>
+<label class="chk"><input type="checkbox" name="use_wol" value="1" {{ 'checked' if form.get('use_wol') }}> Wake-on-LAN para ativos desligados</label>
+<label class="chk"><input type="checkbox" name="emergency" value="1"> Emergência (ignora janelas permitidas e o período de observação dos anéis)</label>
+{% if intel.level == 'hold' %}<label class="chk"><input type="checkbox" name="force" value="1"> Aplicar mesmo assim (a Patch Intelligence recomenda não aplicar; decisão registada)</label>{% endif %}
+<p class="actions"><button class="btn">Criar campanha</button><a class="btn sec" href="{{ url_for('patching.patch_detail', patch_id=patch.id) }}">Cancelar</a></p></form>{% endblock %}

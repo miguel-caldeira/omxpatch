@@ -1,0 +1,23 @@
+---
+# Descoberta de VMs em anfitriões Hyper-V (WinRM). Devolve {"vms": [...]} para o OMXPatch.
+- name: OMXPatch — descoberta Hyper-V
+  hosts: all
+  gather_facts: false
+  tasks:
+    - ansible.windows.win_shell: |
+        Get-VM | ForEach-Object {
+          $vm = $_
+          [pscustomobject]@{
+            VMId = $vm.VMId.ToString(); Name = $vm.Name; State = $vm.State.ToString();
+            ProcessorCount = $vm.ProcessorCount; MemoryAssigned = $vm.MemoryAssigned;
+            NetworkAdapters = @($vm.NetworkAdapters | ForEach-Object { [pscustomobject]@{ MacAddress = $_.MacAddress; IPAddresses = @($_.IPAddresses) } })
+          }
+        } | ConvertTo-Json -Depth 4 -Compress
+      register: omx_vms
+      changed_when: false
+    - ansible.builtin.set_fact:
+        omx_list: "{{ omx_list | default([]) + ([omx_vms.stdout | from_json] if (omx_vms.stdout | from_json) is mapping else (omx_vms.stdout | from_json)) }}"
+      when: omx_vms.stdout | trim | length > 0
+    - ansible.builtin.debug:
+        msg: "OMXPATCH_RESULT={{ {'vms': omx_list | default([])} | to_json }}"
+      run_once: true

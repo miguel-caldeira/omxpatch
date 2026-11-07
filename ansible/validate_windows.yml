@@ -1,0 +1,33 @@
+---
+- name: OMXPatch — validar remediação (Windows)
+  hosts: windows
+  gather_facts: false
+  vars:
+    software: ""
+    fixed_version: ""
+    patch: {}
+  tasks:
+    - name: Hotfixes instalados
+      ansible.windows.win_shell: Get-HotFix | Select-Object -ExpandProperty HotFixID | ConvertTo-Json -Compress
+      register: omx_hf
+      changed_when: false
+    - name: Software instalado (registo)
+      ansible.windows.win_shell: |
+        $paths = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        Get-ItemProperty $paths -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName } |
+          Select-Object @{n='name';e={$_.DisplayName}}, @{n='version';e={[string]$_.DisplayVersion}}, @{n='vendor';e={$_.Publisher}} | ConvertTo-Json -Compress
+      register: omx_sw_raw
+      changed_when: false
+    - ansible.builtin.set_fact:
+        omx_hotfixes: "{{ (omx_hf.stdout | from_json) if omx_hf.stdout | trim | length > 0 else [] }}"
+        omx_all: "{{ (omx_sw_raw.stdout | from_json) if omx_sw_raw.stdout | trim | length > 0 else [] }}"
+    - ansible.builtin.set_fact:
+        omx_token: "{{ (software | lower).split(' ')[0] }}"
+        omx_hotfix_list: "{{ [omx_hotfixes] if omx_hotfixes is string else omx_hotfixes }}"
+    - ansible.builtin.set_fact:
+        omx_sw: "{{ omx_all | selectattr('name', 'search', '(?i)' ~ omx_token) | list if omx_token | length > 0 else [] }}"
+        omx_installed: >-
+          {{ ((patch.uid | default(fixed_version)) | upper) in (omx_hotfix_list | map('upper') | list)
+             if ((patch.uid | default(fixed_version)) | upper) is match('^KB[0-9]+$') else none }}
+    - ansible.builtin.debug:
+        msg: "OMXPATCH_RESULT={{ {'status': 'succeeded', 'checks': {'patch_installed': omx_installed, 'service_restarted': none}, 'software': omx_sw, 'hotfixes': omx_hotfix_list, 'ports_open': []} | to_json }}"

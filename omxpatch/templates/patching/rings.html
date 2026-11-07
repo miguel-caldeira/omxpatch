@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Anéis de teste{% endblock %}
+{% block content %}<div class="actions"><h1>Smart Test Rings</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('patching.windows') }}">Janelas de manutenção</a>
+{% if current_user.can_manage %}<form method="post" action="{{ url_for('patching.rings_assign') }}" class="inline">{{ csrf() }}<button class="btn sec">Atribuir anéis (etiquetas, departamento, tipo)</button></form>{% endif %}</div>
+<p class="muted small">Ring 0 Laboratório → Ring 1 TI → Ring 2 Power Users → Ring 3 Unidades de negócio → Ring 4 Produção global. A promoção é automática quando a taxa de sucesso, o crash rate e a experiência do utilizador cumprem o critério e o período de observação termina.</p>
+<form method="post" class="panel">{{ csrf() }}<table><tr><th>Anel</th><th>Ativos</th><th>Sucesso mín. (%)</th><th>Crash máx. (%)</th><th>UX mín.</th><th>Amostra mín.</th><th>Observação (h)</th><th>Auto</th></tr>
+{% for p in pols %}<tr><td>{{ RINGS[p.ring] }}</td><td><a href="{{ url_for('main.assets', ring=p.ring) }}">{{ counts[p.ring] }}</a></td>
+<td><input type="number" step="0.1" name="min_success_{{ p.ring }}" value="{{ p.min_success }}"></td><td><input type="number" step="0.1" name="max_crash_{{ p.ring }}" value="{{ p.max_crash }}"></td>
+<td><input type="number" step="0.1" name="min_ux_{{ p.ring }}" value="{{ p.min_ux }}"></td><td><input type="number" name="min_devices_{{ p.ring }}" value="{{ p.min_devices }}"></td>
+<td><input type="number" name="soak_hours_{{ p.ring }}" value="{{ p.soak_hours }}"></td><td><input type="checkbox" name="auto_{{ p.ring }}" value="1" {{ 'checked' if p.auto_promote }}></td></tr>{% endfor %}</table>
+{% if current_user.can_manage %}<p><button class="btn">Guardar critérios</button></p>{% endif %}</form>{% endblock %}

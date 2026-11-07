@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Nova organização{% endblock %}
+{% block content %}<h1>Nova organização</h1><form method="post" class="panel">{{ csrf() }}<div class="row">
+<div><label for="name">Nome</label><input type="text" id="name" name="name" required></div><div><label for="slug">Identificador</label><input type="text" id="slug" name="slug"></div>
+<div><label for="country">País (ISO)</label><input type="text" id="country" name="country" value="PT" maxlength="2"></div>
+<div><label for="license_expires_on">Licença válida até</label><input type="date" id="license_expires_on" name="license_expires_on"></div><div><label for="license_ref">N.º de contrato</label><input type="text" id="license_ref" name="license_ref"></div></div>
+<p class="actions"><button class="btn">Criar</button><a class="btn sec" href="{{ url_for('admin.tenants') }}">Cancelar</a></p></form>{% endblock %}

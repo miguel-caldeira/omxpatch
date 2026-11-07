@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Janelas de manutenção{% endblock %}
+{% block content %}<div class="actions"><h1>Janelas de manutenção</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('patching.rings_page') }}">Anéis</a></div>
+<p class="muted small">Sem janelas definidas, os patches podem ser aplicados a qualquer hora. Com janelas, uma tarefa só segue para o ativo dentro de uma janela aplicável (salvo campanhas de emergência, se a janela o permitir).</p>
+<div class="panel"><table><tr><th>Nome</th><th>Dias</th><th>Início</th><th>Duração</th><th>Fuso</th><th>Anéis</th><th>Grupo</th><th>Emergência</th><th></th></tr>
+{% for w in rows %}<tr><td>{{ w.name }}</td><td>{{ w.weekdays.split(',')|map('int')|map('string')|list|join(' ')|replace('0','Seg')|replace('1','Ter')|replace('2','Qua')|replace('3','Qui')|replace('4','Sex')|replace('5','Sáb')|replace('6','Dom') }}</td><td>{{ w.start_time }}</td><td>{{ w.duration_minutes }} min</td><td>{{ w.timezone or 'servidor' }}</td><td>{{ w.rings or 'todos' }}</td><td>{{ w.group or 'todos' }}</td><td>{{ 'sim' if w.allow_emergency else 'não' }}</td>
+<td>{% if current_user.can_manage %}<form method="post" action="{{ url_for('patching.window_delete', window_id=w.id) }}" class="inline" data-confirm="Eliminar a janela?">{{ csrf() }}<button class="btn sm danger">Eliminar</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="9" class="muted">Sem janelas.</td></tr>{% endfor %}</table></div>
+{% if current_user.can_manage %}<form method="post" class="panel">{{ csrf() }}<h2>Nova janela</h2><div class="row">
+<div><label for="name">Nome</label><input type="text" id="name" name="name" required placeholder="Noite de servidores"></div><div><label for="start_time">Início (HH:MM)</label><input type="text" id="start_time" name="start_time" value="22:00" pattern="[0-2][0-9]:[0-5][0-9]"></div>
+<div><label for="duration">Duração (min)</label><input type="number" id="duration" name="duration" value="240" min="15"></div><div><label for="timezone">Fuso (ex.: Europe/Lisbon)</label><input type="text" id="timezone" name="timezone"></div>
+<div><label for="group">Grupo de manutenção</label><input type="text" id="group" name="group"></div></div>
+<label>Dias</label><div class="chips">{% for i, d in [(0,'Seg'),(1,'Ter'),(2,'Qua'),(3,'Qui'),(4,'Sex'),(5,'Sáb'),(6,'Dom')] %}<label class="chk"><input type="checkbox" name="weekdays" value="{{ i }}" checked> {{ d }}</label>{% endfor %}</div>
+<label>Anéis (vazio = todos)</label><div class="chips">{% for k, v in RINGS.items() %}<label class="chk"><input type="checkbox" name="rings" value="{{ k }}"> {{ k }}</label>{% endfor %}</div>
+<label class="chk"><input type="checkbox" name="allow_emergency" value="1" checked> Permitir campanhas de emergência fora da janela</label>
+<p><button class="btn">Criar janela</button></p></form>{% endif %}{% endblock %}

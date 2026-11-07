@@ -1,0 +1,14 @@
+{% macro csrf() %}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{% endmacro %}
+{% macro risk(score, cat) %}<span class="badge risk-{{ cat or 'low' }}" title="Risco {{ score or 0 }}/100">{{ RISK_LABELS.get(cat or 'low') }} · {{ score or 0 }}</span>{% endmacro %}
+{% macro st(s, label=None) %}<span class="badge st-{{ s }}">{{ label or s }}</span>{% endmacro %}
+{% macro kev() %}<span class="badge kev">KEV</span>{% endmacro %}
+{% macro yn(v) %}{% if v is none %}<span class="muted">?</span>{% elif v %}<span class="ok">✔</span>{% else %}<span class="bad">✘</span>{% endif %}{% endmacro %}
+{% macro pager(pag, endpoint) %}
+{% if pag.pages > 1 %}<div class="pager">
+{% if pag.has_prev %}<a class="btn sm sec" href="{{ url_for(endpoint, page=pag.prev_num, **request.args.to_dict(flat=True)|reject_page) }}">&laquo; Anterior</a>{% endif %}
+<span class="muted">Página {{ pag.page }} de {{ pag.pages }} ({{ pag.total }})</span>
+{% if pag.has_next %}<a class="btn sm sec" href="{{ url_for(endpoint, page=pag.next_num, **request.args.to_dict(flat=True)|reject_page) }}">Seguinte &raquo;</a>{% endif %}
+</div>{% endif %}
+{% endmacro %}
+{% macro level(l) %}<span class="badge lvl-{{ l }}">{{ {'go': 'Aplicar', 'caution': 'Cautela', 'hold': 'Não aplicar'}[l] }}</span>{% endmacro %}
+{% macro bar(value, max=100, cls='') %}<progress class="{{ cls }}" value="{{ value or 0 }}" max="{{ max }}"></progress>{% endmacro %}

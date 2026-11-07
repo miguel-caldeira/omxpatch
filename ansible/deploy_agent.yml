@@ -1,0 +1,17 @@
+---
+# Instala e regista o agente OMXPatch em Windows, Linux e macOS.
+#   ansible-playbook -i inventory.ini deploy_agent.yml \
+#       -e omxpatch_server_url=https://omxpatch.exemplo.pt -e omxpatch_enrollment_token=omxe_… [-e omxpatch_pin_sha256=AB:CD:…]
+- name: OMXPatch Agent — Linux
+  hosts: linux
+  become: true
+  roles: [omxpatch_agent]
+
+- name: OMXPatch Agent — macOS
+  hosts: macos
+  become: true
+  roles: [omxpatch_agent]
+
+- name: OMXPatch Agent — Windows
+  hosts: windows
+  roles: [omxpatch_agent]

@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Verificação MFA{% endblock %}
+{% block content %}
+<div class="login panel"><div class="logo"><b>OMX</b>Patch</div>
+<form method="post">{{ csrf() }}
+<label for="code">Código da aplicação autenticadora</label>
+<input type="text" id="code" name="code" autocomplete="one-time-code" required autofocus>
+<p class="small muted">Google Authenticator, FreeOTP ou equivalente. Sem acesso ao telemóvel? Introduza um código de recuperação (ex.: <code>a1b2c-3d4e5</code>).</p>
+<p><button class="btn" type="submit">Verificar</button></p></form>
+<form method="post" action="{{ url_for('auth.logout') }}">{{ csrf() }}<button class="btn sec sm">Cancelar</button></form>
+</div>
+{% endblock %}

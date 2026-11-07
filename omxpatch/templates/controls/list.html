@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% from "_macros.html" import pager, st with context %}{% block title %}Controlos compensatórios{% endblock %}
+{% block content %}<h1>Compensating Controls</h1>
+<p class="muted small">Quando não existe patch (ou enquanto não é aplicado): Firewall, EDR, SIEM, IAM e WAF (virtual patch). Fluxo: proposto → aprovado → aplicado → verificado; revertido quando o patch é validado.</p>
+<div class="grid">{% for s, n in summary.items() %}<a class="kpi" href="{{ url_for('secops.controls_list', status=s) }}"><div class="l">{{ CONTROL_STATUSES[s] }}</div><div class="v">{{ n }}</div></a>{% endfor %}</div>
+<div class="panel"><form method="get" class="filters"><div><label for="category">Categoria</label><select id="category" name="category"><option value="">Todas</option>{% for k, v in CONTROL_CATEGORIES.items() %}<option value="{{ k }}" {{ 'selected' if request.args.category == k }}>{{ v }}</option>{% endfor %}</select></div><div><button class="btn">Filtrar</button></div></form></div>
+<div class="panel"><table><tr><th>#</th><th>Categoria</th><th>Ação</th><th>CVE</th><th>Ativo</th><th>Redução</th><th>Estado</th><th>Via</th></tr>
+{% for c in pag.items %}<tr><td><a href="{{ url_for('secops.control_detail', control_id=c.id) }}">{{ c.id }}</a></td><td>{{ CONTROL_CATEGORIES[c.category] }}</td><td>{{ CONTROL_ACTIONS[c.action][1] }} {{ c.params_data.get('port', '') }}</td><td>{{ c.cve_id }}</td><td>{{ c.asset.name if c.asset else '—' }}</td><td>−{{ c.risk_reduction }}</td><td>{{ st(c.status, CONTROL_STATUSES[c.status]) }}</td><td>{{ c.via or '—' }}</td></tr>
+{% else %}<tr><td colspan="8" class="muted">Sem controlos. Proponha-os a partir de uma exposição.</td></tr>{% endfor %}</table>{{ pager(pag, 'secops.controls_list') }}</div>{% endblock %}

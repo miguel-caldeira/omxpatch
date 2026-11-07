@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st with context %}{% block title %}Remediação autónoma{% endblock %}
+{% block content %}<h1>Autonomous Remediation</h1>
+<p class="muted small">Novo CVE → descoberta → avaliação de risco → mapeamento dos ativos → procura de patch → teste automático (Ring 0) → ring deployment → validação → fecho automático → atualização da CMDB → reporte executivo.</p>
+<form method="post" class="panel">{{ csrf() }}<h2>Modo da organização</h2><div class="row">
+<div><label for="mode">Modo</label><select id="mode" name="mode" {{ 'disabled' if not current_user.can_manage }}>{% for k, v in AUTONOMOUS_MODES.items() %}<option value="{{ k }}" {{ 'selected' if tenant.autonomous_mode == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="min_score">Risco mínimo para abrir fluxo (0–100)</label><input type="number" id="min_score" name="min_score" min="0" max="100" value="{{ tenant.autonomous_min_score }}"></div>
+<div><label class="chk"><input type="checkbox" name="kev_only" value="1" {{ 'checked' if tenant.autonomous_kev_only }}> Só CVE na lista KEV</label></div></div>
+{% if current_user.can_manage %}<p><button class="btn">Guardar</button></p>{% endif %}
+<p class="small muted">No modo autónomo, a plataforma aprova patches sem alertas graves, testa no Ring 0, promove pelos anéis, valida e fecha sozinha. Patch Intelligence em «não aplicar», critérios de anel falhados ou validações falhadas devolvem sempre o controlo a um humano.</p></form>
+{% if current_user.can_manage %}<form method="post" action="{{ url_for('secops.autonomous_trigger') }}" class="panel row">{{ csrf() }}<div><label for="cve">Iniciar fluxo para um CVE</label><input type="text" id="cve" name="cve" placeholder="CVE-2026-XXXX"></div><div><label>&nbsp;</label><button class="btn sec">Iniciar</button></div></form>{% endif %}
+<div class="panel"><h2>Fluxos</h2><table><tr><th>#</th><th>CVE</th><th>Etapa</th><th>Estado</th><th>Modo</th><th>Início</th><th>Fim</th></tr>
+{% for r in runs %}<tr><td><a href="{{ url_for('secops.autonomous_run', run_id=r.id) }}">{{ r.id }}</a></td><td>{{ r.cve_id }}</td><td>{{ AUTONOMOUS_STAGE_LABELS[r.stage] }}</td>
+<td>{{ st(r.status, {'running': 'em curso', 'waiting': 'a aguardar', 'approval': 'aprovação humana', 'completed': 'concluído', 'failed': 'falhou', 'stopped': 'interrompido'}[r.status]) }}</td><td>{{ r.mode }}</td><td>{{ r.created_at|dt }}</td><td>{{ r.finished_at|dt }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem fluxos.</td></tr>{% endfor %}</table></div>{% endblock %}

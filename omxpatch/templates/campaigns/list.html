@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% from "_macros.html" import st, bar with context %}{% block title %}Campanhas{% endblock %}
+{% block content %}<h1>Campanhas de patching</h1>
+<div class="panel"><table><tr><th>Campanha</th><th>Patch</th><th>Estado</th><th>Anel atual</th><th>Progresso</th><th>Origem</th><th>Criada</th></tr>
+{% for c in rows %}{% set s = summaries[c.id] %}<tr><td><a href="{{ url_for('patching.campaign_detail', campaign_id=c.id) }}">{{ c.name }}</a>{% if c.emergency %} <span class="badge risk-emergency">emergência</span>{% endif %}</td>
+<td><a href="{{ url_for('patching.patch_detail', patch_id=c.patch_id) }}">{{ c.patch.patch_uid }}</a></td><td>{{ st(c.status, CAMPAIGN_STATUSES[c.status]) }}</td><td>{{ RINGS[c.current_ring] if c.use_rings else 'sem anéis' }}</td>
+<td>{{ bar(s.progress) }} <span class="small">{{ s.succeeded }}/{{ s.total }}</span></td><td>{{ 'Autónomo' if c.origin == 'autonomous' else 'Manual' }}</td><td>{{ c.created_at|dt }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem campanhas. Aprove um patch no <a href="{{ url_for('patching.patches_list') }}">repositório</a> e crie a campanha.</td></tr>{% endfor %}</table></div>{% endblock %}

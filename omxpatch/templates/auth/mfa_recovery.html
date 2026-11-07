@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block title %}Códigos de recuperação{% endblock %}
+{% block content %}
+<h1>Códigos de recuperação</h1>
+<div class="panel">
+<div class="flash flash-warning">Guarde estes códigos num local seguro (ex.: gestor de passwords). <b>Não voltam a ser mostrados.</b> Cada código pode ser usado uma única vez para entrar se perder o telemóvel.</div>
+<pre class="codes">{% for c in codes %}{{ c }}
+{% endfor %}</pre>
+<p class="actions"><button class="btn sec" data-print>Imprimir</button><a class="btn" href="{{ url_for('auth.profile') }}">Já guardei os códigos</a></p>
+</div>
+{% endblock %}

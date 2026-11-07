@@ -1,0 +1,30 @@
+# Gerido pelo Ansible (role omxpatch_server)
+data_dir = "{{ omxpatch_data_dir }}"
+
+[server]
+tls_enabled = {{ 'true' if omxpatch_tls_enabled and not omxpatch_nginx else 'false' }}
+tls_hostname = "{{ omxpatch_server_name }}"
+port = {{ 8000 if omxpatch_nginx else omxpatch_listen_port }}
+agent_port = {{ omxpatch_agent_port }}
+host = "{{ '127.0.0.1' if omxpatch_nginx else '0.0.0.0' }}"
+base_url = "https://{{ omxpatch_server_name }}{{ '' if omxpatch_nginx else ':' ~ omxpatch_listen_port }}"
+trusted_proxies = {{ 1 if omxpatch_nginx else 0 }}
+session_cookie_secure = true
+embedded_worker = false
+
+[agents]
+tls_hostname = "{{ omxpatch_agent_hostname }}"
+port = {{ omxpatch_agent_port }}
+base_url = "https://{{ omxpatch_agent_hostname }}:{{ omxpatch_agent_port }}"
+
+[ansible]
+enabled = {{ 'true' if omxpatch_install_ansible else 'false' }}
+playbook = "{{ omxpatch_home }}/venv/bin/ansible-playbook"
+dir = "{{ omxpatch_home }}/ansible"
+{% for section, values in omxpatch_extra_config.items() %}
+
+[{{ section }}]
+{% for k, v in values.items() %}
+{{ k }} = {{ v | to_json }}
+{% endfor %}
+{% endfor %}

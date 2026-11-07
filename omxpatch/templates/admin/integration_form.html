@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}{{ spec.label }}{% endblock %}
+{% block content %}<h1>{{ spec.label }}</h1><form method="post" class="panel">{{ csrf() }}<div class="row">
+<div><label for="base_url">Endereço (URL)</label><input type="text" id="base_url" name="base_url" value="{{ c.base_url if c else spec.url }}"></div>
+<div><label for="username">{{ spec.get('user_label') or 'Utilizador (se aplicável)' }}</label><input type="text" id="username" name="username" value="{{ c.username if c else '' }}" autocomplete="off"></div>
+{% for k, label in spec.secrets.items() %}<div><label for="secret_{{ k }}">{{ label }}</label><input type="password" id="secret_{{ k }}" name="secret_{{ k }}" autocomplete="new-password" placeholder="{{ '•••••• (guardado; vazio = manter)' if c and c.secret else '' }}"></div>{% endfor %}
+{% for k, default in spec.options.items() %}<div><label for="opt_{{ k }}">{{ k }}</label><input type="text" id="opt_{{ k }}" name="opt_{{ k }}" value="{{ c.opts.get(k, default) if c else default }}"></div>{% endfor %}</div>
+<label class="chk"><input type="checkbox" name="verify_tls" value="1" {{ 'checked' if not c or c.verify_tls }}> Verificar o certificado TLS</label>
+<label class="chk"><input type="checkbox" name="enabled" value="1" {{ 'checked' if not c or c.enabled }}> Ativa</label>
+{% if spec.group == 'vuln' %}<p class="small muted">O OMXPatch lê <code>/api/v1/findings</code> do OMXVuln e devolve o estado de remediação (<code>/findings/&lt;id&gt;/status</code>) e pedidos de novo scan. Crie o token no perfil de um utilizador Administrador do OMXVuln; <code>tenant_id</code> só é necessário para super-administradores.</p>{% endif %}
+{% if spec.group == 'grc' %}<p class="small muted">O OMXPatch envia métricas de conformidade e evidências de remediação ao OMXGRC; o OMXGRC também pode consultar <code>/api/v1/grc/controls</code> e <code>/api/v1/grc/evidence</code> neste servidor.</p>{% endif %}
+<p class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('admin.integrations') }}">Cancelar</a>
+{% if c %}<button class="btn danger" formaction="{{ url_for('admin.integration_action', kind=kind, action='delete') }}" formnovalidate>Remover</button>{% endif %}</p></form>{% endblock %}

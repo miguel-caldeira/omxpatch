@@ -1,0 +1,28 @@
+---
+- name: OMXPatch — validar remediação (macOS)
+  hosts: macos
+  become: true
+  gather_facts: true
+  vars:
+    software: ""
+    patch: {}
+  tasks:
+    - name: Aplicações e pacotes Homebrew
+      ansible.builtin.shell: |
+        set -o pipefail
+        system_profiler SPApplicationsDataType -json 2>/dev/null | /usr/bin/python3 -c 'import json,sys; d=json.load(sys.stdin).get("SPApplicationsDataType",[]); print(json.dumps([{"name":a.get("_name",""),"version":str(a.get("version",""))} for a in d]))'
+      args:
+        executable: /bin/bash
+      register: omx_apps
+      changed_when: false
+    - ansible.builtin.set_fact:
+        omx_token: "{{ (software | lower).split(' ')[0] }}"
+        omx_all: "{{ omx_apps.stdout | from_json }}"
+    - ansible.builtin.set_fact:
+        omx_sw: "{{ omx_all | selectattr('name', 'search', '(?i)' ~ omx_token) | list if omx_token | length > 0 else [] }}"
+    - ansible.builtin.set_fact:
+        omx_installed: >-
+          {{ (omx_sw | length > 0 and (omx_sw | map(attribute='version') | select('version', patch.version_fixed, '<', version_type='loose') | list | length) == 0)
+             if (patch.version_fixed | default('')) | length > 0 else none }}
+    - ansible.builtin.debug:
+        msg: "OMXPATCH_RESULT={{ {'status': 'succeeded', 'checks': {'patch_installed': omx_installed, 'service_restarted': none}, 'software': omx_sw, 'ports_open': []} | to_json }}"

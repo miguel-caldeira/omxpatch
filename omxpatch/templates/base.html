@@ -1,0 +1,65 @@
+{% from "_macros.html" import csrf with context %}<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}OMXPatch{% endblock %} · OMXPatch</title>
+<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+{% if current_tenant %}<link rel="stylesheet" href="{{ url_for('branding.theme', t=current_tenant.id, v=current_tenant.brand_version or 0) }}">{% endif %}
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+{% if current_user.is_authenticated and not session.get('mfa_pending') %}
+<header class="top">
+  <a class="logo" href="{{ url_for('main.dashboard') }}">{% if current_tenant and current_tenant.logo_file %}<img class="tenant-logo" src="{{ url_for('branding.logo', tenant_id=current_tenant.id, v=current_tenant.brand_version) }}" alt="{{ current_tenant.name }}">{% endif %}<span class="mark"><b>OMX</b>Patch</span></a>
+  {% set ep = request.endpoint or '' %}
+  <nav class="main">
+    <a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if ep == 'main.dashboard' }}">Painel</a>
+    <a href="{{ url_for('main.assets') }}" class="{{ 'active' if 'asset' in ep }}">Ativos</a>
+    <a href="{{ url_for('main.exposures') }}" class="{{ 'active' if 'exposure' in ep }}">Exposição e risco</a>
+    <a href="{{ url_for('main.intel_page') }}" class="{{ 'active' if 'intel' in ep }}">Inteligência</a>
+    <a href="{{ url_for('main.signals_page') }}" class="{{ 'active' if 'signal' in ep }}">Sinais</a>
+    <a href="{{ url_for('patching.patches_list') }}" class="{{ 'active' if ep.startswith('patching.patch') }}">Patches</a>
+    <a href="{{ url_for('patching.campaigns') }}" class="{{ 'active' if 'campaign' in ep or 'task' in ep }}">Campanhas</a>
+    <a href="{{ url_for('patching.rings_page') }}" class="{{ 'active' if ep in ('patching.rings_page','patching.windows') }}">Anéis e janelas</a>
+    <a href="{{ url_for('secops.controls_list') }}" class="{{ 'active' if 'control' in ep }}">Controlos</a>
+    <a href="{{ url_for('secops.advisor_page') }}" class="{{ 'active' if 'advisor' in ep }}">IA</a>
+    <a href="{{ url_for('secops.validations') }}" class="{{ 'active' if 'validation' in ep }}">Validação</a>
+    <a href="{{ url_for('secops.simulations') }}" class="{{ 'active' if 'simulation' in ep }}">Simulação</a>
+    <a href="{{ url_for('secops.autonomous_page') }}" class="{{ 'active' if 'autonomous' in ep }}">Autónomo</a>
+    <a href="{{ url_for('secops.compliance_page') }}" class="{{ 'active' if 'compliance' in ep }}">Conformidade</a>
+    <a href="{{ url_for('admin.agents') }}" class="{{ 'active' if ep.startswith('admin.agent') }}">Agentes</a>
+    {% if current_user.has_role('admin') %}
+    <a href="{{ url_for('admin.integrations') }}" class="{{ 'active' if ep.startswith('admin.integration') }}">Integrações</a>
+    <a href="{{ url_for('admin.users') }}" class="{{ 'active' if ep.startswith('admin.user') }}">Utilizadores</a>
+    <a href="{{ url_for('admin.tenant_settings') }}" class="{{ 'active' if ep in ('admin.tenant_settings','admin.audit_log') }}">Organização</a>
+    {% endif %}
+    {% if current_user.is_superadmin %}
+    <a href="{{ url_for('admin.tenants') }}" class="{{ 'active' if ep in ('admin.tenants','admin.tenant_new') }}">Organizações</a>
+    <a href="{{ url_for('admin.system') }}" class="{{ 'active' if ep == 'admin.system' }}">Sistema</a>
+    {% endif %}
+  </nav>
+  <div class="userbox">
+    {% if current_user.is_superadmin and all_tenants %}
+    <form method="post" action="{{ url_for('auth.select_tenant') }}" class="inline">{{ csrf() }}
+      <select name="tenant_id" data-autosubmit aria-label="Organização">
+        {% for t in all_tenants %}<option value="{{ t.id }}" {{ 'selected' if current_tenant and current_tenant.id == t.id }}>{{ t.name }}</option>{% endfor %}
+      </select></form>
+    {% elif current_tenant %}<span>{{ current_tenant.name }}</span>{% endif %}
+    <a href="{{ url_for('auth.profile') }}">{{ current_user.email }}</a>
+    <form method="post" action="{{ url_for('auth.logout') }}" class="inline">{{ csrf() }}<button class="btn sm sec" type="submit">Sair</button></form>
+  </div>
+</header>
+{% endif %}
+<main>
+{% if license_banner %}<div class="flash flash-{{ license_banner.level }}">{{ license_banner.text }}</div>{% endif %}
+{% set license_notice = session.pop('license_notice', None) %}{% if license_notice %}
+<dialog class="license-notice" open aria-labelledby="license-notice-title"><h2 id="license-notice-title">{{ license_notice.title }}</h2>
+<p>{{ license_notice.text }}</p>{% if license_notice['items'] %}<ul>{% for i in license_notice['items'] %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
+<form method="dialog"><button class="btn">Tomei conhecimento</button></form></dialog>{% endif %}
+{% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
+{% block content %}{% endblock %}
+</main>
+<footer>OMXPatch {{ version }} · Ativo → Exposição → Risco → Mitigação → Patch → Validação → Monitorização contínua</footer>
+</body>
+</html>

@@ -1,0 +1,36 @@
+---
+# Controlos de firewall local (Linux, sem agente). Variáveis: op (firewall_block_port|firewall_block_ioc|firewall_remove), name, port, proto, ioc.
+- name: OMXPatch — firewall (Linux)
+  hosts: linux
+  become: true
+  gather_facts: false
+  vars:
+    proto: tcp
+  tasks:
+    - ansible.builtin.assert:
+        that:
+          - name is match('^OMXPatch-[A-Za-z0-9._-]{1,100}$')
+          - op in ['firewall_block_port', 'firewall_block_ioc', 'firewall_remove']
+          - op != 'firewall_block_port' or (port | int >= 1 and port | int <= 65535 and proto in ['tcp', 'udp'])
+          - op != 'firewall_block_ioc' or ioc is match('^[0-9a-fA-F:.]+$')
+    - name: Bloquear porta
+      ansible.builtin.iptables:
+        chain: INPUT
+        protocol: "{{ proto }}"
+        destination_port: "{{ port }}"
+        jump: DROP
+        comment: "{{ name }}"
+        action: insert
+        state: "{{ 'absent' if op == 'firewall_remove' else 'present' }}"
+      when: op in ['firewall_block_port', 'firewall_remove'] and port is defined
+    - name: Bloquear IOC (saída)
+      ansible.builtin.iptables:
+        chain: OUTPUT
+        destination: "{{ ioc }}"
+        jump: DROP
+        comment: "{{ name }}"
+        action: insert
+        state: present
+      when: op == 'firewall_block_ioc'
+    - ansible.builtin.debug:
+        msg: "OMXPATCH_RESULT={{ {'status': 'succeeded', 'verified': op != 'firewall_remove', 'detail': 'Regra ' ~ name ~ (' removida' if op == 'firewall_remove' else ' aplicada (iptables)')} | to_json }}"

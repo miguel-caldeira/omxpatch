@@ -1,0 +1,6 @@
+---
+omxpatch_agent_home_linux: /opt/omxpatch-agent
+omxpatch_agent_home_windows: 'C:\OMXPatchAgent'
+omxpatch_windows_python_url: "https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe"
+omxpatch_windows_python_sha256: ""          # indique o SHA-256 do instalador para o verificar
+omxpatch_windows_python_dir: 'C:\Python312'

@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Novo patch{% endblock %}
+{% block content %}<h1>Novo patch</h1>
+<form method="post" class="panel">{{ csrf() }}<div class="row">
+<div><label for="patch_uid">Identificador (KB, pacote…)</label><input type="text" id="patch_uid" name="patch_uid" required value="{{ form.get('patch_uid', '') }}" placeholder="KB5031234"></div>
+<div><label for="title">Título</label><input type="text" id="title" name="title" value="{{ form.get('title', '') }}"></div>
+<div><label for="vendor">Fabricante</label><input type="text" id="vendor" name="vendor" value="{{ form.get('vendor', '') }}"></div>
+<div><label for="product">Produto</label><input type="text" id="product" name="product" value="{{ form.get('product', '') }}"></div>
+<div><label for="os_family">Sistema operativo</label><select id="os_family" name="os_family"><option value="">Qualquer</option>{% for k, v in OS_FAMILIES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+<div><label for="installer">Instalador</label><select id="installer" name="installer">{% for k, v in INSTALLER_TYPES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+<div><label for="package_name">Pacote / ID (winget, apt, brew…)</label><input type="text" id="package_name" name="package_name" value="{{ form.get('package_name', '') }}"></div>
+<div><label for="version_fixed">Versão corrigida</label><input type="text" id="version_fixed" name="version_fixed" value="{{ form.get('version_fixed', '') }}"></div>
+<div><label for="cves">CVE (vírgulas)</label><input type="text" id="cves" name="cves" value="{{ form.get('cves', '') }}"></div>
+<div><label for="severity">Severidade</label><select id="severity" name="severity"><option>critical</option><option>high</option><option selected>medium</option><option>low</option></select></div>
+<div><label for="download_url">URL de transferência (https)</label><input type="url" id="download_url" name="download_url" value="{{ form.get('download_url', '') }}"></div>
+<div><label for="sha256">SHA-256 do fabricante</label><input type="text" id="sha256" name="sha256" value="{{ form.get('sha256', '') }}"></div>
+<div><label for="silent_args">Argumentos silenciosos (EXE/MSI)</label><input type="text" id="silent_args" name="silent_args" value="{{ form.get('silent_args', '') }}"></div>
+<div><label for="impact">Impacto operacional</label><select id="impact" name="impact"><option value="low">Baixo</option><option value="medium">Médio</option><option value="high">Alto</option></select></div>
+<div><label for="released_at">Data de publicação</label><input type="date" id="released_at" name="released_at"></div>
+<div><label for="bulletin_url">Boletim do fabricante</label><input type="url" id="bulletin_url" name="bulletin_url" value="{{ form.get('bulletin_url', '') }}"></div></div>
+<label class="chk"><input type="checkbox" name="reboot_required" value="1"> Exige reinício</label>
+<p class="actions"><button class="btn">Criar</button><a class="btn sec" href="{{ url_for('patching.patches_list') }}">Cancelar</a></p></form>{% endblock %}

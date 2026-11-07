@@ -1,0 +1,45 @@
+---
+# Validação em ciclo fechado (Linux, sem agente). Variáveis: software, patched_at_epoch, patch{package,version_fixed}.
+- name: OMXPatch — validar remediação (Linux)
+  hosts: linux
+  become: true
+  gather_facts: true
+  vars:
+    software: ""
+    patch: {}
+  tasks:
+    - ansible.builtin.package_facts:
+        manager: auto
+    - name: Pacotes relacionados com o software
+      ansible.builtin.set_fact:
+        omx_token: "{{ (software | lower).split(' ')[0] | regex_replace('[^a-z0-9._+-]', '') }}"
+    - ansible.builtin.set_fact:
+        omx_sw: "{{ ansible_facts.packages | dict2items | json_query(\"[?contains(key, '\" ~ omx_token ~ \"')].{name: key, version: value[0].version}\") if omx_token | length > 0 else [] }}"
+    - ansible.builtin.set_fact:
+        omx_pkg_version: "{{ ansible_facts.packages[patch.package][0].version if (patch.package | default('')) in ansible_facts.packages else '' }}"
+    - name: Idade dos processos do software (segundos)
+      ansible.builtin.shell: set -o pipefail; ps -eo etimes=,comm= | grep -i -F -- "{{ omx_token }}" | awk '{print $1}' || true
+      args:
+        executable: /bin/bash
+      register: omx_ps
+      changed_when: false
+      when: omx_token | length > 0
+    - name: Portas em escuta
+      ansible.builtin.shell: set -o pipefail; ss -Hltn | awk '{n=split($4,a,":"); print a[n]}' | sort -un
+      args:
+        executable: /bin/bash
+      register: omx_ports
+      changed_when: false
+      failed_when: false
+    - ansible.builtin.set_fact:
+        omx_since: "{{ (ansible_facts.date_time.epoch | int) - (patched_at_epoch | int) }}"
+        omx_ages: "{{ omx_ps.stdout_lines | default([]) | map('int') | list }}"
+    - ansible.builtin.set_fact:
+        omx_restarted: "{{ (omx_ages | select('gt', omx_since | int) | list | length) == 0 if omx_ages | length > 0 else none }}"
+        omx_installed: >-
+          {{ (omx_pkg_version | length > 0 and omx_pkg_version is version(patch.version_fixed, '>=', version_type='loose'))
+             if ((patch.package | default('')) | length > 0 and (patch.version_fixed | default('')) | length > 0) else none }}
+    - ansible.builtin.debug:
+        msg: >-
+          OMXPATCH_RESULT={{ {'status': 'succeeded', 'checks': {'patch_installed': omx_installed, 'service_restarted': omx_restarted},
+          'software': omx_sw, 'ports_open': omx_ports.stdout_lines | default([])} | to_json }}

@@ -1,0 +1,50 @@
+---
+- name: Python e venv (Debian/Ubuntu)
+  when: ansible_os_family == 'Debian'
+  ansible.builtin.apt:
+    name: [python3, python3-venv, python3-pip]
+    state: present
+    update_cache: true
+
+- name: Python (RHEL/derivados)
+  when: ansible_os_family == 'RedHat'
+  ansible.builtin.dnf:
+    name: [python3, python3-pip]
+    state: present
+
+- name: Python (SUSE)
+  when: ansible_os_family == 'Suse'
+  community.general.zypper:
+    name: [python3, python3-pip]
+    state: present
+
+- name: Ambiente virtual e agente
+  ansible.builtin.pip:
+    name: "{{ omxpatch_pip_spec }}"
+    virtualenv: "{{ omxpatch_agent_home_linux }}/venv"
+    virtualenv_command: python3 -m venv
+    extra_args: "{{ ('--index-url ' ~ omxpatch_pip_index_url) if omxpatch_pip_index_url else '' }}"
+  notify: reiniciar agente (systemd)
+
+- name: Registar o agente (uma única vez)
+  ansible.builtin.command:
+    argv: >-
+      {{ [omxpatch_agent_home_linux ~ '/venv/bin/omxpatch-agent', 'enroll', '--server', omxpatch_server_url, '--token', omxpatch_enrollment_token]
+         + (['--pin-sha256', omxpatch_pin_sha256] if omxpatch_pin_sha256 else [])
+         + (['--ca-file', omxpatch_ca_file] if omxpatch_ca_file else []) }}
+    creates: /etc/omxpatch-agent/agent.json
+  no_log: true
+
+- name: Serviço systemd do agente
+  ansible.builtin.template:
+    src: omxpatch-agent.service.j2
+    dest: /etc/systemd/system/omxpatch-agent.service
+    mode: "0644"
+  notify: reiniciar agente (systemd)
+
+- name: Ativar e arrancar o agente
+  ansible.builtin.systemd:
+    name: omxpatch-agent
+    enabled: true
+    state: started
+    daemon_reload: true

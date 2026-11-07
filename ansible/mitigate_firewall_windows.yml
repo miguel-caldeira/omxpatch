@@ -1,0 +1,37 @@
+---
+- name: OMXPatch — firewall (Windows)
+  hosts: windows
+  gather_facts: false
+  vars:
+    proto: tcp
+  tasks:
+    - ansible.builtin.assert:
+        that:
+          - name is match('^OMXPatch-[A-Za-z0-9._-]{1,100}$')
+          - op in ['firewall_block_port', 'firewall_block_ioc', 'firewall_remove']
+    - name: Bloquear porta
+      community.windows.win_firewall_rule:
+        name: "{{ name }}"
+        localport: "{{ port }}"
+        protocol: "{{ proto }}"
+        direction: in
+        action: block
+        state: "{{ 'absent' if op == 'firewall_remove' else 'present' }}"
+        enabled: true
+      when: op in ['firewall_block_port', 'firewall_remove'] and port is defined
+    - name: Bloquear IOC (saída)
+      community.windows.win_firewall_rule:
+        name: "{{ name }}"
+        remoteip: "{{ ioc }}"
+        direction: out
+        action: block
+        state: present
+        enabled: true
+      when: op == 'firewall_block_ioc'
+    - name: Remover regra do IOC
+      community.windows.win_firewall_rule:
+        name: "{{ name }}"
+        state: absent
+      when: op == 'firewall_remove' and port is not defined
+    - ansible.builtin.debug:
+        msg: "OMXPATCH_RESULT={{ {'status': 'succeeded', 'verified': op != 'firewall_remove', 'detail': 'Regra ' ~ name ~ (' removida' if op == 'firewall_remove' else ' aplicada (Windows Firewall)')} | to_json }}"

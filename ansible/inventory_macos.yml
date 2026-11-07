@@ -1,0 +1,18 @@
+---
+- name: OMXPatch — inventário (macOS)
+  hosts: macos
+  become: true
+  gather_facts: true
+  tasks:
+    - ansible.builtin.shell: |
+        set -o pipefail
+        system_profiler SPApplicationsDataType -json 2>/dev/null | /usr/bin/python3 -c 'import json,sys; d=json.load(sys.stdin).get("SPApplicationsDataType",[]); print(json.dumps([{"name":a.get("_name",""),"version":str(a.get("version",""))} for a in d]))'
+      args:
+        executable: /bin/bash
+      register: omx_apps
+      changed_when: false
+    - ansible.builtin.debug:
+        msg: >-
+          OMXPATCH_RESULT={{ {'status': 'succeeded', 'os_name': 'macOS', 'os_version': ansible_facts.distribution_version,
+          'ip': ansible_facts.default_ipv4.address | default(''), 'mac': ansible_facts.default_ipv4.macaddress | default(''),
+          'fqdn': ansible_facts.fqdn, 'reboot_pending': false, 'software': omx_apps.stdout | from_json} | to_json }}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st with context %}{% block title %}Fluxo {{ run.cve_id }}{% endblock %}
+{% block content %}{% set d = run.data_dict %}{% set rep = run.report_data %}
+<div class="actions"><h1>{{ run.cve_id }} — fluxo autónomo #{{ run.id }}</h1><span class="spacer"></span>{{ st(run.status, {'running': 'em curso', 'waiting': 'a aguardar', 'approval': 'aprovação humana', 'completed': 'concluído', 'failed': 'falhou', 'stopped': 'interrompido'}[run.status]) }}
+{% if current_user.can_manage and run.status in ('approval', 'running', 'waiting') %}{% if run.status == 'approval' %}<form method="post" action="{{ url_for('secops.autonomous_action', run_id=run.id, action='approve') }}" class="inline">{{ csrf() }}<button class="btn">Aprovar e continuar</button></form>{% endif %}
+<form method="post" action="{{ url_for('secops.autonomous_action', run_id=run.id, action='advance') }}" class="inline">{{ csrf() }}<button class="btn sec">Avançar agora</button></form>
+<form method="post" action="{{ url_for('secops.autonomous_action', run_id=run.id, action='stop') }}" class="inline" data-confirm="Interromper o fluxo?">{{ csrf() }}<button class="btn danger">Interromper</button></form>{% endif %}</div>
+<div class="pipeline">{% for s in AUTONOMOUS_STAGES if s != 'done' %}<div class="s {{ 'done' if loop.index0 < stage_idx or run.status == 'completed' else 'cur' if loop.index0 == stage_idx }}">{{ loop.index }}. {{ AUTONOMOUS_STAGE_LABELS[s] }}</div>{% endfor %}</div>
+<div class="grid2"><div class="panel"><h2>Registo</h2><pre>{{ run.log }}</pre></div>
+<div class="panel"><h2>Dados</h2><dl class="kv"><dt>Modo</dt><dd>{{ AUTONOMOUS_MODES[run.mode] }}</dd><dt>Ativos afetados</dt><dd>{{ d.get('asset_ids', [])|length }}</dd>
+<dt>Patches</dt><dd>{% for i in d.get('patch_ids', []) %}<a href="{{ url_for('patching.patch_detail', patch_id=i) }}">#{{ i }}</a> {% else %}—{% endfor %}</dd>
+<dt>Campanhas</dt><dd>{% for i in d.get('campaign_ids', []) %}<a href="{{ url_for('patching.campaign_detail', campaign_id=i) }}">#{{ i }}</a> {% else %}—{% endfor %}</dd>
+<dt>Aprovado por</dt><dd>{{ d.get('approved_by') or ('autónomo' if run.mode == 'auto' else '—') }}</dd></dl>
+{% if rep %}<h2>Reporte executivo</h2><dl class="kv"><dt>Ativos</dt><dd>{{ rep.assets }}</dd><dt>Fechadas</dt><dd>{{ rep.closed }}</dd><dt>Ainda abertas</dt><dd>{{ rep.still_open }}</dd><dt>Duração</dt><dd>{{ rep.hours }} h</dd>
+{% for k, v in rep.kpis.items() %}<dt>{{ k }}</dt><dd>{{ v if v is not none else '—' }}</dd>{% endfor %}</dl>{% endif %}</div></div>{% endblock %}

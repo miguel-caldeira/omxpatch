@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st with context %}{% block title %}Integrações{% endblock %}
+{% block content %}<h1>Integrações</h1><p class="muted small">Segredos cifrados na base de dados (chave em <code>connectors.key</code>) e nunca mostrados de novo. Os destinos são validados contra SSRF (loopback e metadados da cloud recusados).</p>
+{% for g, label in groups.items() %}<div class="panel"><h2>{{ label }}</h2><table><tr><th>Sistema</th><th>Estado</th><th>Último contacto</th><th>Detalhe</th><th></th></tr>
+{% for k, spec in kinds.items() if spec.group == g %}{% set c = rows.get(k) %}<tr><td>{{ spec.label }}</td><td>{% if c %}{{ st('approved' if c.enabled and c.last_ok != false else 'failed' if c.last_ok == false else 'queued', 'ativo' if c.enabled else 'desativado') }}{% else %}<span class="muted">não configurado</span>{% endif %}</td>
+<td>{{ c.last_sync_at|dt if c else '—' }}</td><td class="small wrap">{{ c.last_detail[:120] if c else '' }}</td>
+<td class="nowrap"><a class="btn sm sec" href="{{ url_for('admin.integration_edit', kind=k) }}">Configurar</a>
+{% if c or k in ('omxvuln', 'omxgrc') %}<form method="post" action="{{ url_for('admin.integration_action', kind=k, action='test') }}" class="inline">{{ csrf() }}<button class="btn sm sec">Testar</button></form>
+{% if spec.group in ('vuln', 'grc', 'discovery', 'edr', 'vm', 'cspm', 'fw') %}<form method="post" action="{{ url_for('admin.integration_action', kind=k, action='sync') }}" class="inline">{{ csrf() }}<button class="btn sm">{{ 'Importar vulnerabilidades' if k == 'omxvuln' else 'Enviar métricas' if k == 'omxgrc' else 'Sincronizar' }}</button></form>{% endif %}{% endif %}</td></tr>{% endfor %}</table></div>{% endfor %}{% endblock %}

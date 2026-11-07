@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, risk, st with context %}{% block title %}{{ asset.name }}{% endblock %}
+{% block content %}
+<div class="actions"><h1>{{ asset.name }} {% if asset.shadow_it %}<span class="badge st-accepted">Shadow IT</span>{% endif %}</h1><span class="spacer"></span>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('main.asset_inventory', asset_id=asset.id) }}" class="inline">{{ csrf() }}<button class="btn sec">Pedir inventário</button></form>
+<a class="btn" href="{{ url_for('main.asset_edit', asset_id=asset.id) }}">Editar</a>{% endif %}
+{% if current_user.can_manage %}<form method="post" action="{{ url_for('main.asset_delete', asset_id=asset.id) }}" class="inline" data-confirm="Eliminar o ativo e os seus dados?">{{ csrf() }}<button class="btn danger">Eliminar</button></form>{% endif %}</div>
+<div class="grid2">
+<div class="panel"><h2>Identificação (CMDB)</h2><dl class="kv">
+<dt>IP / FQDN</dt><dd>{{ asset.ip or '—' }} {{ asset.fqdn }}</dd><dt>MAC</dt><dd>{{ asset.mac or '—' }}</dd>
+<dt>Tipo / origem</dt><dd>{{ ASSET_KINDS.get(asset.kind) }} · {{ ASSET_SOURCES.get(asset.source) }}{% if asset.cloud_provider %} · {{ asset.cloud_provider }} {{ asset.cloud_id }}{% endif %}</dd>
+<dt>Sistema operativo</dt><dd>{{ asset.os_name or OS_FAMILIES.get(asset.os_family, '—') }} {{ asset.os_version }}{% if asset.reboot_pending %} <span class="badge st-waiting_window">reinício pendente</span>{% endif %}</dd>
+<dt>Hardware</dt><dd>{% for k, v in asset.hw.items() if k not in ('hotfixes', 'services') %}<span class="chip">{{ k }}: {{ v }}</span> {% else %}—{% endfor %}</dd>
+<dt>Utilizador / owner</dt><dd>{{ asset.primary_user or '—' }} / {{ asset.owner or '—' }}{% if asset.department %} ({{ asset.department }}){% endif %}</dd>
+<dt>Criticidade / valor</dt><dd>{{ CRITICALITIES.get(asset.criticality) }} · {{ asset.business_value }}/100</dd>
+<dt>Geolocalização</dt><dd>{{ asset.country or '—' }} {{ asset.city }} {% if asset.latitude is not none %}({{ asset.latitude }}, {{ asset.longitude }}){% endif %}</dd>
+<dt>Portas abertas</dt><dd>{{ asset.open_ports or '—' }}</dd><dt>Etiquetas</dt><dd>{{ asset.tags or '—' }}</dd>
+<dt>Última atividade</dt><dd>{{ asset.last_seen|dt }}</dd><dt>CMDB externa</dt><dd>{{ asset.cmdb_ref or '—' }} {% if asset.cmdb_synced_at %}(sincronizada {{ asset.cmdb_synced_at|dt }}){% endif %}</dd></dl></div>
+<div class="panel"><h2>Gestão de patches</h2><dl class="kv">
+<dt>Risco agregado</dt><dd>{{ risk(risk_total, 'low' if risk_total < 25 else 'medium' if risk_total < 50 else 'high' if risk_total < 70 else 'critical' if risk_total < 85 else 'emergency') }}</dd>
+<dt>Ligação</dt><dd>{% if asset.agent %}Agente {{ asset.agent.version }} — {{ asset.agent.last_seen|dt }}{% elif asset.connection == 'ansible' %}Sem agente (Ansible){% else %}Sem agente instalado{% endif %}</dd>
+<dt>Anel</dt><dd>{{ RINGS[asset.ring] }}</dd><dt>Grupo de manutenção</dt><dd>{{ asset.maintenance_group or '—' }}</dd></dl>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('patching.asset_ring', asset_id=asset.id) }}" class="row">{{ csrf() }}<div><select name="ring" aria-label="Anel">{% for k, v in RINGS.items() %}<option value="{{ k }}" {{ 'selected' if asset.ring == k }}>{{ v }}</option>{% endfor %}</select></div><div><button class="btn sm sec">Mudar de anel</button></div></form>{% endif %}
+<h3>Simulações recentes</h3><table>{% for s in sims %}<tr><td>{{ SIMULATIONS[s.scenario] }}</td><td>{{ st(s.outcome or s.status, s.outcome or s.status) }}</td><td>{{ s.created_at|dt }}</td></tr>{% else %}<tr><td class="muted">Sem simulações.</td></tr>{% endfor %}</table></div></div>
+<div class="panel"><h2>Exposições</h2><table><tr><th>Risco</th><th>CVE</th><th>Software</th><th>Versão → corrigida</th><th>Estado</th><th>Patch</th></tr>
+{% for e in exps %}<tr><td>{{ risk(e.risk_score, e.risk_category) }}</td><td><a href="{{ url_for('main.exposure_detail', exposure_id=e.id) }}">{{ e.cve_id }}</a></td><td>{{ e.software_name or '—' }}</td>
+<td>{{ e.installed_version or '?' }} → {{ e.fixed_version or '?' }}</td><td>{{ st(e.status, EXPOSURE_STATUSES[e.status]) }}</td><td>{{ e.patch.patch_uid if e.patch else '—' }}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">Sem exposições.</td></tr>{% endfor %}</table></div>
+<div class="grid2"><div class="panel"><h2>Software ({{ software|length }})</h2><table><tr><th>Nome</th><th>Versão</th><th>Fabricante</th></tr>
+{% for s in software[:300] %}<tr><td>{{ s.name }}</td><td>{{ s.version }}</td><td>{{ s.vendor }}</td></tr>{% else %}<tr><td colspan="3" class="muted">Sem inventário de software.</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Tarefas recentes</h2><table>{% for t in tasks %}<tr><td><a href="{{ url_for('patching.task_detail', task_id=t.id) }}">#{{ t.id }}</a></td><td>{{ TASK_TYPES.get(t.type) }}</td><td>{{ st(t.status, TASK_STATUSES.get(t.status)) }}</td><td>{{ t.created_at|dt }}</td></tr>{% else %}<tr><td class="muted">Sem tarefas.</td></tr>{% endfor %}</table>
+<h2>Histórico da CMDB</h2><table>{% for h in history %}<tr><td class="nowrap">{{ h.created_at|dt }}</td><td>{{ h.field }}</td><td class="small">{{ h.old }} → {{ h.new }}</td><td>{{ h.source }}</td></tr>{% else %}<tr><td class="muted">Sem alterações registadas.</td></tr>{% endfor %}</table></div></div>
+{% endblock %}

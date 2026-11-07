@@ -1,0 +1,12 @@
+Flask>=3.0
+Flask-SQLAlchemy>=3.1
+Flask-Login>=0.6.3
+SQLAlchemy>=2.0
+waitress>=3.0
+cheroot>=10.0
+requests>=2.31
+defusedxml>=0.7.1
+segno>=1.5
+cryptography>=41
+tomli>=2.0; python_version < "3.11"
+tzdata; sys_platform == "win32"

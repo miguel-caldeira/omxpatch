@@ -1,0 +1,44 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}{{ 'Editar ativo' if asset else 'Novo ativo' }}{% endblock %}
+{% block content %}{% set a = asset %}{% set f = form %}
+<h1>{{ 'Editar ' ~ a.name if a else 'Novo ativo' }}</h1>
+<form method="post" class="panel">{{ csrf() }}
+<div class="row">
+<div><label for="name">Nome</label><input type="text" id="name" name="name" required value="{{ a.name if a else f.get('name', '') }}"></div>
+{% if not a %}<div><label for="uid">Identificador único (opcional)</label><input type="text" id="uid" name="uid" value="{{ f.get('uid', '') }}"></div>{% endif %}
+<div><label for="ip">IP</label><input type="text" id="ip" name="ip" value="{{ a.ip if a else f.get('ip', '') }}"></div>
+<div><label for="fqdn">FQDN</label><input type="text" id="fqdn" name="fqdn" value="{{ a.fqdn if a else f.get('fqdn', '') }}"></div>
+<div><label for="mac">MAC (Wake-on-LAN)</label><input type="text" id="mac" name="mac" value="{{ a.mac if a else f.get('mac', '') }}"></div>
+<div><label for="kind">Tipo</label><select id="kind" name="kind">{% for k, v in ASSET_KINDS.items() %}<option value="{{ k }}" {{ 'selected' if (a.kind if a else 'workstation') == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="os_family">Família do SO</label><select id="os_family" name="os_family"><option value="">—</option>{% for k, v in OS_FAMILIES.items() %}<option value="{{ k }}" {{ 'selected' if a and a.os_family == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="os_name">SO (nome)</label><input type="text" id="os_name" name="os_name" value="{{ a.os_name if a else '' }}"></div>
+<div><label for="os_version">SO (versão)</label><input type="text" id="os_version" name="os_version" value="{{ a.os_version if a else '' }}"></div>
+</div>
+<h2>Utilizador, responsável e criticidade</h2>
+<div class="row">
+<div><label for="primary_user">Utilizador principal</label><input type="text" id="primary_user" name="primary_user" value="{{ a.primary_user if a else '' }}"></div>
+<div><label for="owner">Owner</label><input type="text" id="owner" name="owner" value="{{ a.owner if a else '' }}"></div>
+<div><label for="department">Departamento</label><input type="text" id="department" name="department" value="{{ a.department if a else '' }}"></div>
+<div><label for="criticality">Criticidade</label><select id="criticality" name="criticality">{% for k, v in CRITICALITIES.items() %}<option value="{{ k }}" {{ 'selected' if (a.criticality if a else 'medium') == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="business_value">Valor de negócio (0–100)</label><input type="number" id="business_value" name="business_value" min="0" max="100" value="{{ a.business_value if a else 50 }}"></div>
+<div><label for="internet_exposed">Exposição à Internet</label><select id="internet_exposed" name="internet_exposed">{% for k, v in [('auto', 'Automática (IP público)'), ('yes', 'Exposto'), ('no', 'Interno')] %}<option value="{{ k }}" {{ 'selected' if a and a.internet_exposed == k }}>{{ v }}</option>{% endfor %}</select></div>
+</div>
+<h2>Geolocalização</h2>
+<div class="row"><div><label for="country">País (ISO)</label><input type="text" id="country" name="country" maxlength="2" value="{{ a.country if a else '' }}"></div>
+<div><label for="city">Cidade</label><input type="text" id="city" name="city" value="{{ a.city if a else '' }}"></div>
+<div><label for="latitude">Latitude</label><input type="text" id="latitude" name="latitude" value="{{ a.latitude if a and a.latitude is not none else '' }}"></div>
+<div><label for="longitude">Longitude</label><input type="text" id="longitude" name="longitude" value="{{ a.longitude if a and a.longitude is not none else '' }}"></div></div>
+<h2>Gestão de patches</h2>
+<div class="row">
+<div><label for="ring">Anel de teste</label><select id="ring" name="ring">{% for k, v in RINGS.items() %}<option value="{{ k }}" {{ 'selected' if (a.ring if a else 4) == k }}>{{ v }}</option>{% endfor %}</select></div>
+<div><label for="connection">Ligação</label><select id="connection" name="connection"><option value="agent" {{ 'selected' if not a or a.connection == 'agent' }}>Agente</option><option value="ansible" {{ 'selected' if a and a.connection == 'ansible' }}>Sem agente (Ansible SSH/WinRM)</option></select></div>
+<div><label for="ansible_user">Utilizador Ansible</label><input type="text" id="ansible_user" name="ansible_user" value="{{ a.ansible_user if a else '' }}"></div>
+<div><label for="ansible_port">Porta Ansible (0 = omissão)</label><input type="number" id="ansible_port" name="ansible_port" value="{{ a.ansible_port if a else 0 }}"></div>
+<div><label for="maintenance_group">Grupo de manutenção</label><input type="text" id="maintenance_group" name="maintenance_group" value="{{ a.maintenance_group if a else '' }}"></div>
+<div><label for="tags">Etiquetas (vírgulas; ex.: lab, ti, poweruser)</label><input type="text" id="tags" name="tags" value="{{ a.tags if a else '' }}"></div>
+<div><label for="open_ports">Portas abertas (vírgulas)</label><input type="text" id="open_ports" name="open_ports" value="{{ a.open_ports if a else '' }}"></div>
+<div><label for="cmdb_ref">Referência na CMDB externa</label><input type="text" id="cmdb_ref" name="cmdb_ref" value="{{ a.cmdb_ref if a else '' }}"></div>
+</div>
+<label class="chk"><input type="checkbox" name="managed" value="1" {{ 'checked' if a and a.managed }}> Ativo gerido (deixa de ser Shadow IT)</label>
+{% if a %}<label class="chk"><input type="checkbox" name="shadow_it" value="1" {{ 'checked' if a.shadow_it }}> Marcar como Shadow IT</label>{% endif %}
+<p class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('main.assets') }}">Cancelar</a></p></form>
+{% endblock %}

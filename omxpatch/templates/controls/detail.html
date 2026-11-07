@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st with context %}{% block title %}Controlo #{{ c.id }}{% endblock %}
+{% block content %}
+<div class="actions"><h1>{{ CONTROL_CATEGORIES[c.category] }}: {{ CONTROL_ACTIONS[c.action][1] }}</h1><span class="spacer"></span>{{ st(c.status, CONTROL_STATUSES[c.status]) }}</div>
+<div class="panel"><dl class="kv"><dt>CVE</dt><dd>{{ c.cve_id }}</dd><dt>Ativo</dt><dd>{{ c.asset.name if c.asset else '—' }}</dd>
+<dt>Exposição</dt><dd>{% if c.exposure_id %}<a href="{{ url_for('main.exposure_detail', exposure_id=c.exposure_id) }}">abrir</a>{% else %}—{% endif %}</dd>
+<dt>Redução de risco prevista</dt><dd>−{{ c.risk_reduction }} pontos</dd><dt>Parâmetros</dt><dd><code>{{ c.params_data }}</code></dd><dt>Aplicado por</dt><dd>{{ c.via or '—' }}</dd><dt>Detalhe</dt><dd>{{ c.detail or '—' }}</dd>
+<dt>Aplicado / verificado</dt><dd>{{ c.applied_at|dt }} / {{ c.verified_at|dt }}</dd><dt>Temporário</dt><dd>{{ 'sim — revertido quando o patch é validado' if c.expires_when_patched else 'não' }}</dd></dl></div>
+<div class="panel"><h2>Artefacto gerado</h2><pre class="art">{{ c.artifact }}</pre></div>
+{% if current_user.can_manage %}<div class="actions">
+{% if c.status == 'proposed' %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='approve') }}" class="inline">{{ csrf() }}<button class="btn">Aprovar</button></form>
+<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='reject') }}" class="inline">{{ csrf() }}<button class="btn sec">Rejeitar</button></form>{% endif %}
+{% if c.status in ('approved', 'failed') %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='apply') }}" class="inline" data-confirm="Aplicar o controlo? Poderá afetar o tráfego do ativo.">{{ csrf() }}<button class="btn">Aplicar</button></form>
+<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='mark_applied') }}" class="inline">{{ csrf() }}<label class="chk"><input type="checkbox" name="verified" value="1"> verificado</label><button class="btn sec">Marcar como aplicado manualmente</button></form>{% endif %}
+{% if c.status in ('applied', 'verified') %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='revert') }}" class="inline">{{ csrf() }}<button class="btn sec">Marcar como revertido</button></form>{% endif %}</div>{% endif %}
+{% endblock %}
