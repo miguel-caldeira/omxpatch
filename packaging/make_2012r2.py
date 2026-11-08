@@ -9,7 +9,7 @@ src, dst = sys.argv[1:3]
 s = open(src, encoding="utf-8-sig").read()
 
 s = s.replace("instalação em Windows Server 2019/2022/2025 (ou Windows 10/11)", "instalação em Windows Server 2012 R2 (também 2012/2016 e Windows 8.1+)")
-s = s.replace("python-3.12.8/python-3.12.8-amd64.exe", "python-3.11.9/python-3.11.9-amd64.exe")
+s = s.replace("python/3.12.8/python-3.12.8-amd64.exe", "python/3.11.9/python-3.11.9-amd64.exe")
 s = s.replace("TargetDir=C:\\Python312", "TargetDir=C:\\Python311")
 s = s.replace("Instale o Python 3.12 manualmente", "Instale o Python 3.11 manualmente")
 s = s.replace("'C:\\Python312\\python.exe',", "'C:\\Python311\\python.exe', 'C:\\Python312\\python.exe',", 1)
