@@ -246,6 +246,20 @@ A aplicação de boas práticas faz cópia de segurança, `nginx -t`/`apachectl 
 
 API: `GET /api/v1/practices`, `GET|POST /api/v1/plans`, `POST /api/v1/plans/<id>/simulate|approve|execute`.
 
+## Fluxo Descoberta → Simulação → Remediação (agente leve, inteligência no servidor)
+
+**Agente leve:** recolhe telemetria só de leitura (inventário, atualizações instaláveis e o *contexto* do ativo: processos, quem escuta em que porta e a partir de onde, serviços, estado da firewall, administradores, SSH/RDP/SMB/UAC, SELinux/Defender) com prioridade baixa e orçamento de tempo (medido: ~25 ms em Linux), e executa as ordens aprovadas. **Todo o processamento pesado** — correlação, simulação, prioridade — corre na consola. Tudo viaja por TLS com o certificado fixado (impressão digital).
+
+**Simulação de exposição (servidor, sem impacto no ativo):** para cada vulnerabilidade cruza a inteligência (KEV, maturidade do exploit, EPSS, vetor CVSS) com o contexto real e constrói o caminho de ataque em passos — componente em execução? escuta acessível pela rede (não só em loopback)? firewall do ativo permite? exposto à Internet? sem controlos eficazes? — e conclui `confirmada`, `provável`, `improvável`, `inalcançável` ou `sem contexto` (cada passo é ok/falha/desconhecido, com confiança). Reduz falsos positivos: `inalcançável` (p.ex. MySQL só em loopback, serviço parado, firewall a bloquear) baixa a prioridade. Bibliotecas sem processo próprio ficam «desconhecido», nunca «inalcançável».
+
+**Prioridade por impacto, não só CVSS:** perda esperada = P(exploração) × impacto, com P do EPSS/KEV × peso da simulação (1,0 … 0,03) × controlos, e impacto = custo/hora do ativo (próprio ou por criticidade) × horas de paragem × fator de valor de negócio. Os valores `IMPACT_*` são **pressupostos configuráveis** (Sistema → Configuração), não medições. O Centro de comando e *Exposição e risco* ordenam por perda esperada (`/exposures?sort=loss`, `/api/v1/priority`).
+
+**Remediação:** patches e boas práticas pelos planos (simular → OK → executar); **configurações incorretas** detetadas na postura do ativo (SSH com root/palavra-passe vazia, SMBv1, RDP sem NLA, firewall desativada, base de dados aberta) vêm com a ação recomendada e duas novas boas práticas — `ssh_hardening` (com salvaguarda contra bloqueio: só desativa a palavra-passe se existirem chaves autorizadas; `sshd -t`; reversão automática) e `windows_hardening` (SMBv1/NLA, com reposição); **isolamento preventivo** do ativo (controlo `isolate_host`, com aprovação): o agente corta tudo menos a ligação à consola (nftables/iptables, Windows Firewall, pf), testa a consola depois de isolar e desfaz sozinho se a perder, tem validade máxima de 24 h e repõe o estado anterior.
+
+**Linha de base (gold images):** cada remediação bem-sucedida entra em *Linha de base* (patch → versão mínima, boa prática → parâmetros); mede o desvio dos ativos e exporta para Ansible, shell (com verificação das versões mínimas), Packer ou JSON, para que as imagens novas não nasçam com a mesma vulnerabilidade.
+
+**ITSM (ServiceNow, Jira, Freshservice) — desativado por omissão.** Sem a opção `change_management = true` na integração, **todo o ciclo de aprovação é feito diretamente pela solução**. Ativada: o plano (ou o controlo) pede uma *change* no ITSM com as ações simuladas; a execução fica **bloqueada** até o ITSM a aprovar (ServiceNow: `approval = approved` e estado Scheduled/Implement); falha de comunicação ou rejeição nunca aprovam; no fim o resultado é escrito na change. O OK na solução continua a ser exigido. *Testado só com respostas simuladas da API do ServiceNow/Jira/Freshservice, não contra instâncias reais; os estados e campos devem ser validados na sua instância.*
+
 ## Descoberta de atualizações, descarga proativa e remediação
 
 *Atualizações* mostra, por ativo, **o que pode ser instalado**, com a garantia de que a informação chega à consola:

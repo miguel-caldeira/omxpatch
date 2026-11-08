@@ -117,9 +117,13 @@ def _bas(client: Client, task: dict) -> dict:
 def _control(client: Client, task: dict) -> dict:
     p = task["payload"]
     try:
-        res = firewall.remove(p) if p.get("op") == "firewall_remove" else firewall.block(p)
+        if p.get("op") in ("isolate", "isolate_release"):
+            from . import isolation
+            res = isolation.isolate(p) if p["op"] == "isolate" else isolation.release(p)
+        else:
+            res = firewall.remove(p) if p.get("op") == "firewall_remove" else firewall.block(p)
         return {"status": "succeeded", **res}
-    except (firewall.FirewallError, KeyError, ValueError) as exc:
+    except Exception as exc:  # noqa: BLE001 - FirewallError, IsolationError, KeyError, ValueError
         return {"status": "failed", "output": f"{exc.__class__.__name__}: {exc}"}
 
 
@@ -159,7 +163,7 @@ def _practice_apply(client: Client, task: dict) -> dict:
 def _practice_rollback(client: Client, task: dict) -> dict:
     from . import practices
     p = task["payload"]
-    return practices.rollback(f"item-{p['item_id']}", p.get("params") or {})
+    return practices.rollback(f"item-{p['item_id']}", {**(p.get("params") or {}), "practice": p.get("practice", "")})
 
 
 def _update_scan(client: Client, task: dict) -> dict:

@@ -44,6 +44,11 @@ def rule_name(cve_id: str, action: str, port: int | str = "") -> str:
 
 
 def artifact(action: str, cve_id: str, asset: Asset | None, params: dict, cve: CveIntel | None = None) -> str:
+    if action == "isolate_host":
+        return ("# Isolamento preventivo (o agente mantém só a ligação à consola; validade máx. %s min; desfaz-se se a consola ficar inacessível)\n"
+                "# Linux (nftables): política drop em input/output com exceção para loopback, ligações estabelecidas e a consola\n"
+                "# Windows: Set-NetFirewallProfile -All -DefaultInboundAction Block -DefaultOutboundAction Block + regras Allow para a consola\n"
+                "# macOS (pf): block drop quick all, exceto loopback e a consola\n") % params.get("ttl_minutes", 120)
     name = rule_name(cve_id, action, params.get("port", ""))
     port, proto = params.get("port"), (params.get("proto") or "tcp").lower()
     host = asset.name if asset else "<ativo>"
@@ -192,11 +197,24 @@ def apply(c: ControlAction, tenant: Tenant) -> ControlAction:
     """Aplica um controlo aprovado: agente/Ansible no host (firewall) ou conector (EDR/SIEM/IAM/WAF/NGFW)."""
     if c.status not in ("approved", "failed"):
         raise ValueError("Aprove o controlo antes de o aplicar")
+    from . import itsm
+    allowed, why = itsm.gate_control(c, tenant)
+    if not allowed:
+        raise ValueError(why)
     port = c.params_data.get("port")
     if c.action == "block_port" and port in MANAGEMENT_PORTS and not c.params_data.get("allow_management_port"):
         raise ValueError(f"A porta {port} ({MANAGEMENT_PORTS[port]}) é de gestão: bloqueá-la pode cortar o acesso ao ativo. "
                          "Use uma regra de rede com origens restritas ou confirme com allow_management_port.")
     asset = c.asset
+    if c.action == "isolate_host":
+        if asset is None or asset.agent is None:
+            raise ValueError("O isolamento exige um agente instalado no ativo (é o agente que mantém só a ligação à consola)")
+        ttl = max(5, min(int(c.params_data.get("ttl_minutes") or 120), 1440))
+        t = Task(tenant_id=tenant.id, type="control", asset_id=asset.id, exposure_id=c.exposure_id, mode="agent", status="queued",
+                 payload=json.dumps({"control_id": c.id, "op": "isolate", "ttl_minutes": ttl, "keep_ssh_from": c.params_data.get("keep_ssh_from") or []}))
+        db.session.add(t)
+        c.via, c.detail = "agent", f"Isolamento pedido (máx. {ttl} min; só a consola fica acessível)"
+        return c
     local_fw = c.action in ("block_port", "block_ioc") and asset is not None
     if local_fw:
         op = {"op": "firewall_block_port" if c.action == "block_port" else "firewall_block_ioc",
@@ -216,6 +234,22 @@ def apply(c: ControlAction, tenant: Tenant) -> ControlAction:
     else:
         c.detail = detail + " — aplique o artefacto manualmente e marque como aplicado."
     return c
+
+
+def propose_isolation(tenant: Tenant, asset: Asset, ttl_minutes: int = 120, keep_ssh_from: list | None = None, ex: Exposure | None = None, user=None) -> ControlAction:
+    """Propõe o isolamento preventivo do ativo (fica «proposto»: exige aprovação como qualquer controlo)."""
+    return make(tenant, ex, "isolate_host", {"ttl_minutes": max(5, min(int(ttl_minutes), 1440)), "keep_ssh_from": list(keep_ssh_from or [])}, cve_id=ex.cve_id if ex else "", asset=asset)
+
+
+def release_isolation(c: ControlAction, tenant: Tenant) -> Task:
+    """Pede ao agente que liberte o isolamento (a consola continua acessível durante todo o isolamento)."""
+    if c.action != "isolate_host" or c.asset is None:
+        raise ValueError("Não é um controlo de isolamento")
+    t = Task(tenant_id=tenant.id, type="control", asset_id=c.asset_id, exposure_id=c.exposure_id, mode="agent", status="queued",
+             payload=json.dumps({"control_id": c.id, "revert": True, "op": "isolate_release"}))
+    db.session.add(t)
+    c.detail = "Libertação do isolamento pedida"
+    return t
 
 
 def mark_applied(c: ControlAction, verified: bool = False) -> ControlAction:

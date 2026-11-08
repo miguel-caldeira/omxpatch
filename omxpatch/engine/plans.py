@@ -208,6 +208,10 @@ def execute(plan: OperationPlan, tenant: Tenant, user=None, now=None) -> dict:
     """Cria as tarefas dos itens aprovados (e só desses). Itens cuja simulação caducou voltam a «simulado»."""
     now = now or utcnow()
     done, skipped = 0, []
+    from . import itsm
+    allowed, why = itsm.gate(plan, tenant)          # só bloqueia se a gestão de changes no ITSM estiver ativada (desativada por omissão)
+    if not allowed:
+        return {"queued": 0, "skipped": [(it, why) for it in plan.items if it.status == "approved"][:1], "blocked_by_itsm": why}
     for it in plan.items:
         if it.status != "approved":
             continue
@@ -298,6 +302,9 @@ def on_task_done(task: Task, report: dict) -> None:
     it.output = str(report.get("output", ""))[-4000:]
     it.finished_at = utcnow()
     refresh_plan(it.plan)
+    if it.status == "succeeded":
+        from . import baseline
+        baseline.capture(it)                      # a remediação bem-sucedida passa para a linha de base (gold image)
 
 
 def revert(it: PlanItem, tenant: Tenant) -> Task:

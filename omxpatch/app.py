@@ -83,8 +83,8 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
     if app.config["URL_PREFIX"]:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, app.config["URL_PREFIX"])
 
-    from .web import admin, agent_api, api, auth, branding, main, patching, plans, secops, updates
-    for bp in (auth.bp, main.bp, patching.bp, secops.bp, admin.bp, api.bp, agent_api.bp, branding.bp, plans.bp, updates.bp):
+    from .web import admin, agent_api, api, auth, branding, main, patching, plans, secops, updates, baseline
+    for bp in (auth.bp, main.bp, patching.bp, secops.bp, admin.bp, api.bp, agent_api.bp, branding.bp, plans.bp, updates.bp, baseline.bp):
         app.register_blueprint(bp)
 
     @login_manager.user_loader
@@ -162,7 +162,7 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
         return {
             "csrf_token": csrf_token, "current_tenant": current_tenant() if current_user.is_authenticated else None,
             "ROLES": m.ROLES, "OS_FAMILIES": m.OS_FAMILIES, "ASSET_KINDS": m.ASSET_KINDS, "ASSET_SOURCES": m.ASSET_SOURCES,
-            "CRITICALITIES": m.CRITICALITIES, "RISK_LABELS": m.RISK_LABELS, "RISK_CATEGORIES": m.RISK_CATEGORIES,
+            "money": __import__("omxpatch.engine.priority", fromlist=["money"]).money, "CRITICALITIES": m.CRITICALITIES, "RISK_LABELS": m.RISK_LABELS, "RISK_CATEGORIES": m.RISK_CATEGORIES,
             "EXPOSURE_STATUSES": m.EXPOSURE_STATUSES, "PATCH_STATUSES": m.PATCH_STATUSES, "INSTALLER_TYPES": m.INSTALLER_TYPES,
             "CAMPAIGN_STATUSES": m.CAMPAIGN_STATUSES, "PLAN_STATUSES": m.PLAN_STATUSES, "ITEM_STATUSES": m.ITEM_STATUSES, "PREFLIGHT_OUTCOMES": m.PREFLIGHT_OUTCOMES, "TASK_STATUSES": m.TASK_STATUSES, "TASK_TYPES": m.TASK_TYPES,
             "RINGS": m.RINGS, "CONTROL_ACTIONS": m.CONTROL_ACTIONS, "CONTROL_CATEGORIES": m.CONTROL_CATEGORIES,

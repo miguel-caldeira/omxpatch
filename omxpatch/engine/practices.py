@@ -27,6 +27,16 @@ PRACTICES: dict[str, dict] = {
         "label": "Cabeçalhos de segurança (nosniff, X-Frame-Options, Referrer-Policy)", "category": "Servidor web / cabeçalhos", "risk": "baixo",
         "servers": ["nginx", "apache", "iis"], "desc": "X-Content-Type-Options: nosniff · X-Frame-Options: SAMEORIGIN · Referrer-Policy: same-origin.",
         "params": {}, "warn": "X-Frame-Options SAMEORIGIN impede que as páginas sejam embebidas por outros sites."},
+    "ssh_hardening": {
+        "label": "SSH: sem root, sem palavras-passe vazias (e sem palavra-passe, se houver chaves)", "category": "Sistema operativo", "risk": "médio", "servers": [], "os": ["linux", "macos"],
+        "desc": "Corrige configurações fracas do servidor OpenSSH: PermitRootLogin no, PermitEmptyPasswords no e, opcionalmente, PasswordAuthentication no. "
+                "Ficheiro próprio em sshd_config.d (ou o principal), validado com sshd -t, recarregado, verificado e revertido sozinho se falhar.",
+        "params": {"disable_password": ("Desativar palavra-passe (só com chaves autorizadas)", ["false", "true"], "false")},
+        "warn": "Desativar a palavra-passe corta quem ainda não tem chave: o plano bloqueia se não existir nenhuma chave autorizada, mas confirme com os administradores."},
+    "windows_hardening": {
+        "label": "Windows: desativar SMBv1 e exigir NLA no RDP", "category": "Sistema operativo", "risk": "médio", "servers": [], "os": ["windows"],
+        "desc": "Desativa o protocolo SMBv1 (vetor de WannaCry/EternalBlue) e ativa a autenticação ao nível da rede (NLA) no RDP. Valor anterior guardado e reposto se a verificação falhar.",
+        "params": {}, "warn": "Equipamentos muito antigos (XP/2003, impressoras antigas) deixam de partilhar ficheiros por SMBv1; clientes RDP sem NLA deixam de ligar."},
 }
 
 
@@ -55,6 +65,9 @@ def applicable(asset: Asset, practice: str) -> tuple[bool, str]:
     """(aplicável, motivo). Sem inventário de servidores web (agente antigo) aceita e deixa a simulação decidir."""
     if practice not in PRACTICES:
         return False, "Boa prática desconhecida"
+    oses = PRACTICES[practice].get("os")
+    if oses:
+        return (True, "") if asset.os_family in oses else (False, f"Esta boa prática aplica-se a {', '.join(oses)}")
     if asset.os_family == "macos":
         return False, "Sem servidores web suportados em macOS"
     known = asset.hw.get("webservers")

@@ -27,6 +27,11 @@
   <a class="kpi" href="{{ url_for('secops.validations', status='failed') }}"><div class="l">Validações falhadas</div><div class="v">{{ k.validation_failed }}</div><div class="small muted">{{ k.controls_active }} controlos ativos</div></a>
 </div>
 
+<div class="panel mt"><h2>Simulação de exposição e impacto</h2>
+<div class="chips"><span class="chip ex-confirmed"><b>{{ o.sim.confirmed }}</b> exploração confirmada</span><span class="chip ex-likely"><b>{{ o.sim.likely }}</b> provável</span><span class="chip ex-unlikely"><b>{{ o.sim.unlikely }}</b> improvável</span><span class="chip ex-unreachable"><b>{{ o.sim.unreachable }}</b> inalcançável (falso positivo provável)</span><span class="chip ex-unknown"><b>{{ o.sim.unknown }}</b> sem contexto</span></div>
+<p>Perda esperada total: <b>{{ money(o.loss.total) }}</b> · em exposições confirmadas: <b>{{ money(o.loss.confirmed) }}</b> · evitável com patches já disponíveis: <b>{{ money(o.loss.avoidable) }}</b></p>
+<p class="small muted">A simulação corre no servidor com o contexto enviado pelo agente (processos, escutas, firewall, acessos) — sem impacto no ativo. Os custos por hora são pressupostos configuráveis (<code>IMPACT_*</code>).</p></div>
+
 <div class="grid3 mt">
 <div class="panel"><h2>Exposição por risco</h2><div class="chart-wrap">{% set cats = [('Emergência', k.by_category.emergency, 'c-emergency'), ('Crítico', k.by_category.critical, 'c-critical'), ('Alto', k.by_category.high, 'c-high'), ('Médio', k.by_category.medium, 'c-medium'), ('Baixo', k.by_category.low, 'c-low')] %}
 {{ donut(cats, k.open_exposures, 'abertas') }}
@@ -36,9 +41,9 @@
 </div>
 
 <div class="grid2 mt">
-<div class="panel"><h2>Remediação prioritária <span class="small muted">(patches disponíveis, por risco)</span></h2>
-<table><tr><th>Patch</th><th>Risco</th><th>Ativos</th><th>CVE</th><th>Estado</th><th></th></tr>
-{% for r in o.priority %}<tr><td><a href="{{ url_for('patching.patch_detail', patch_id=r.id) }}">{{ r.uid }}</a><div class="small muted">{{ r.title[:50] }}</div></td><td>{{ risk(r.risk, r.cat) }}{% if r.kev %} <span class="badge risk-emergency" title="Explorado ativamente">KEV</span>{% endif %}</td><td>{{ r.assets }}</td><td>{{ r.cves }}</td>
+<div class="panel"><h2>Remediação prioritária <span class="small muted">(por perda esperada = probabilidade × impacto; não só CVSS)</span></h2>
+<table><tr><th>Patch</th><th>Risco</th><th>Perda esperada</th><th>Ativos</th><th>CVE</th><th>Estado</th><th></th></tr>
+{% for r in o.priority %}<tr><td><a href="{{ url_for('patching.patch_detail', patch_id=r.id) }}">{{ r.uid }}</a><div class="small muted">{{ r.title[:50] }}</div></td><td>{{ risk(r.risk, r.cat) }}{% if r.kev %} <span class="badge risk-emergency" title="Explorado ativamente">KEV</span>{% endif %}</td><td class="nowrap"><b>{{ money(r.loss) }}</b>{% if r.confirmed %}<div class="small"><span class="badge ex-confirmed">{{ r.confirmed }} confirmada(s)</span></div>{% elif r.unreachable %}<div class="small"><span class="badge ex-unreachable">{{ r.unreachable }} inalcançável(eis)</span></div>{% endif %}</td><td>{{ r.assets }}</td><td>{{ r.cves }}</td>
 <td class="small">{% if r.plan_state %}{% for s, n in r.plan_state.items() %}<span class="badge it-{{ s }}">{{ ITEM_STATUSES.get(s, s) }} {{ n }}</span> {% endfor %}{% else %}<span class="muted">sem plano</span>{% endif %}</td>
 <td class="nowrap">{{ quick('patch', r.id, 'Simular') }} {{ quick('patch', r.id, 'Remediar…', 'plan', 'sm sec') }}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">Sem exposições com patch disponível.</td></tr>{% endfor %}</table>

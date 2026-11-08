@@ -102,6 +102,12 @@ def _adopt_trust(client: Client, resp: dict) -> dict:
 
 def cycle(client: Client, state: dict) -> int:
     """Um contacto: inventário (se pedido/periódico) e execução das tarefas. Devolve o n.º de tarefas."""
+    try:
+        from . import isolation
+        if isolation.release_if_expired():
+            log.warning("Isolamento expirado: ativo libertado")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Verificação do isolamento: %s", exc)
     resp = client.poll()
     _adopt_servers(client, resp.get("server_urls"))
     cfg = _adopt_trust(client, resp)

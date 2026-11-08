@@ -21,7 +21,7 @@ import requests
 from flask import current_app
 
 from ..extensions import db
-from ..models import CONTROL_ACTIONS, AiPlan, Asset, Campaign, ControlAction, CveIntel, Exposure, Patch, Tenant
+from ..models import CONTROL_ACTIONS, AiPlan, Asset, Exposure, Patch, Tenant
 from ..security import check_outbound_url
 from . import controls, risk
 

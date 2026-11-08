@@ -3,6 +3,12 @@
 <div class="actions"><h1>{{ ex.cve_id }} — <a href="{{ url_for('main.asset_detail', asset_id=ex.asset_id) }}">{{ ex.asset.name }}</a></h1><span class="spacer"></span>
 {{ risk(ex.risk_score, ex.risk_category) }} {{ st(ex.status, EXPOSURE_STATUSES[ex.status]) }} {% if cve and cve.kev %}{{ kev() }}{% endif %}</div>
 {% if v.critical %}<div class="panel verdict-critical"><h2>Risco crítico (correlação multi-vendor)</h2><p>{{ v.summary }}</p></div>{% endif %}
+{% set sim = ex.sim_data %}
+<div class="panel"><h2>Simulação de exposição <span class="badge ex-{{ ex.exploitability }}">{{ sim.label or ex.exploitability }}</span></h2>
+<p class="small muted">Calculada no servidor a partir do contexto recolhido pelo agente (processos, escutas, firewall, acessos) e da inteligência; não toca no ativo.</p>
+<div class="concl">{% for s in sim.steps %}<div class="{{ 'good' if s.status == 'ok' else 'adverse' if s.status == 'fail' else '' }}">{{ '✔' if s.status == 'ok' else '✘' if s.status == 'fail' else '?' }} {{ s.label }}{% if s.detail %} <span class="small muted">— {{ s.detail }}</span>{% endif %}</div>{% else %}<span class="muted">Ainda sem simulação.</span>{% endfor %}</div>
+{% if sim.confidence %}<p class="small muted">Confiança: {{ (sim.confidence * 100)|round|int }}%</p>{% endif %}
+<h3>Prioridade por impacto</h3><p><b>Perda esperada: {{ loss_text }}</b></p><p class="small muted">{{ loss.explanation if loss else '' }}</p></div>
 <div class="grid2">
 <div class="panel"><h2>Risco dinâmico: {{ ex.risk_score }}/100{% if ex.residual_score != ex.risk_score %} → residual {{ ex.residual_score }}{% endif %}</h2>
 {% for f in ex.factor_list %}<div class="factor"><span>{{ f.label }}</span>{{ bar(f.points, f.max) }}<span class="right">{{ f.points }}/{{ f.max }}</span><span class="d small muted">{{ f.detail }}{% if f.residual != f.points %} · residual {{ f.residual }}{% endif %}</span></div>{% endfor %}

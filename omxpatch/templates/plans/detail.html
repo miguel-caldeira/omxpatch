@@ -13,6 +13,12 @@
 {% if it.check_list %}<table class="small">{% for c in it.check_list %}<tr><td>{{ chk(c.status) }}</td><td>{{ c.label }}</td><td class="wrap">{{ c.detail }}</td></tr>{% endfor %}</table>{% endif %}
 {{ actions_view(it.action_list) }}{% if it.output %}<pre>{{ it.output }}</pre>{% endif %}</details>
 {% if not e[0] and it.status in ('simulated', 'draft') %}<div class="small muted">Não aprovável: {{ e[1] }}</div>{% endif %}</td></tr>{% endfor %}</table></div>{% endfor %}
+<div class="panel"><h2>Governação ITSM</h2>
+{% if itsm_on %}{% if plan.change_ref %}<p>Change <b>{% if plan.change_url %}<a href="{{ plan.change_url }}" rel="noopener noreferrer">{{ plan.change_ref }}</a>{% else %}{{ plan.change_ref }}{% endif %}</b> — estado <span class="badge it-{{ 'approved' if plan.change_state in ('approved', 'implemented') else 'simulated' }}">{{ plan.change_state }}</span> <span class="small muted">{{ plan.change_detail }}</span></p>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('plans.plan_action', plan_id=plan.id, action='refresh_change') }}" class="inline">{{ csrf() }}<button class="btn sm sec">Atualizar estado</button></form>{% endif %}
+{% else %}<p class="small">A gestão de changes está <b>ativa</b>: a execução fica bloqueada até o ITSM aprovar a change. O OK na solução continua a ser exigido.</p>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('plans.plan_action', plan_id=plan.id, action='request_change') }}" class="inline">{{ csrf() }}<button class="btn">Pedir change no ITSM</button></form>{% endif %}{% endif %}
+{% else %}<p class="small muted">Gestão de changes no ITSM <b>desativada</b> (opção por omissão): o ciclo simular → OK → executar é feito diretamente nesta solução. Pode ativá-la em Integrações → ServiceNow/Jira/Freshservice (<code>change_management</code>).</p>{% endif %}</div>
 <div class="okbox"><h2>OK do utilizador</h2><p class="small">Reveja as ações e os resultados previstos acima. Só os itens com o seu <b>OK</b> podem ser executados; a aprovação caduca 24 h depois da simulação.</p>
 <label class="chk"><input type="checkbox" name="confirm_ok" value="1"> <b>OK</b> — revi as ações e resultados da simulação e autorizo a execução</label>
 <label class="chk"><input type="checkbox" name="accept_warnings" value="1"> Aceito os avisos dos itens «Pronto, com avisos»</label>

@@ -6,7 +6,6 @@ do utilizador (ver ``engine/plans``)."""
 from __future__ import annotations
 
 from datetime import timedelta
-from pathlib import Path
 
 from .. import licensing
 from ..extensions import db
@@ -47,23 +46,27 @@ def _priority(tenant: Tenant, limit: int = 8) -> tuple[list, list]:
     nopatch: dict[str, dict] = {}
     for e in exps:
         if e.patch_id and e.patch is not None:
-            g = by_patch.setdefault(e.patch_id, {"patch": e.patch, "assets": set(), "cves": set(), "risk": 0.0, "cat": "low", "kev": 0})
+            g = by_patch.setdefault(e.patch_id, {"patch": e.patch, "assets": set(), "cves": set(), "risk": 0.0, "cat": "low", "kev": 0, "loss": 0.0, "confirmed": 0, "unreachable": 0})
         else:
-            g = nopatch.setdefault(e.cve_id, {"cve": e.cve_id, "assets": set(), "risk": 0.0, "cat": "low", "kev": 0})
+            g = nopatch.setdefault(e.cve_id, {"cve": e.cve_id, "assets": set(), "risk": 0.0, "cat": "low", "kev": 0, "loss": 0.0, "confirmed": 0, "unreachable": 0})
         g["assets"].add(e.asset_id)
         if "cves" in g:
             g["cves"].add(e.cve_id)
         g["risk"] = max(g["risk"], e.risk_score or 0)
+        g["loss"] += e.expected_loss or 0.0
+        g["confirmed"] += 1 if e.exploitability == "confirmed" else 0
+        g["unreachable"] += 1 if e.exploitability == "unreachable" else 0
         if CAT_ORDER.get(e.risk_category, 0) > CAT_ORDER[g["cat"]]:
             g["cat"] = e.risk_category
         g["kev"] += 1 if e.cve_id in kev_ids else 0
     rows = []
-    for pid, g in sorted(by_patch.items(), key=lambda kv: (-kv[1]["risk"], kv[0]))[:limit]:
+    for pid, g in sorted(by_patch.items(), key=lambda kv: (-kv[1]["loss"], -kv[1]["risk"], kv[0]))[:limit]:
         p: Patch = g["patch"]
         rows.append({"id": pid, "uid": p.patch_uid, "title": p.title or p.product or p.patch_uid, "status": p.status, "assets": len(g["assets"]), "cves": len(g["cves"]),
-                     "risk": round(g["risk"]), "cat": g["cat"], "kev": g["kev"], "plan_state": active.get(pid, {})})
-    nrows = [{"cve": g["cve"], "assets": len(g["assets"]), "risk": round(g["risk"]), "cat": g["cat"], "kev": g["kev"]}
-             for g in sorted(nopatch.values(), key=lambda g: (-g["risk"], g["cve"]))[:5]]
+                     "risk": round(g["risk"]), "cat": g["cat"], "kev": g["kev"], "loss": round(g["loss"]), "confirmed": g["confirmed"], "unreachable": g["unreachable"],
+                     "plan_state": active.get(pid, {})})
+    nrows = [{"cve": g["cve"], "assets": len(g["assets"]), "risk": round(g["risk"]), "cat": g["cat"], "kev": g["kev"], "loss": round(g["loss"]), "confirmed": g["confirmed"]}
+             for g in sorted(nopatch.values(), key=lambda g: (-g["loss"], -g["risk"], g["cve"]))[:5]]
     return rows, nrows
 
 
@@ -175,7 +178,10 @@ def _actions(tenant: Tenant, k: dict, fleet: dict, pl: dict, prio: list, practic
     sec = up["security"] and up["downloaded"]
     if sec:
         a.append({"level": "info", "text": f"{up['security']} atualização(ões) de segurança descoberta(s), {up['downloaded']} já no servidor", "cta": "Ver e simular", "kind": "url", "url": "updates.updates_list"})
-    kev_patch = [r for r in prio if r["kev"] and not r["plan_state"]]
+    confirmed = [r for r in prio if r["confirmed"] and not r["plan_state"]]
+    if confirmed:
+        a.append({"level": "critical", "text": f"{len(confirmed)} patch(es) com exposição CONFIRMADA como explorável ({confirmed[0]['loss']:,} em risco no 1.º)".replace(",", " "), "cta": "Simular o de maior impacto", "kind": "patch", "id": confirmed[0]["id"]})
+    kev_patch = [r for r in prio if r["kev"] and not r["plan_state"] and not r["confirmed"]]
     if kev_patch:
         a.append({"level": "critical", "text": f"{len(kev_patch)} patch(es) com CVE explorados (KEV) ainda sem simulação", "cta": "Simular o mais urgente", "kind": "patch", "id": kev_patch[0]["id"]})
     elif prio and not prio[0]["plan_state"]:
@@ -207,8 +213,12 @@ def overview(app, tenant: Tenant, user) -> dict:
     pl = _plans(tenant)
     prac = _practices(tenant, assets)
     up = updates_mod.summary(tenant)
+    open_ex = Exposure.query.filter(Exposure.tenant_id == tenant.id, Exposure.status.in_(OPEN)).all()
+    sim = {c: sum(1 for e in open_ex if e.exploitability == c) for c in ("confirmed", "likely", "unlikely", "unreachable", "unknown")}
+    loss = {"total": round(sum(e.expected_loss or 0 for e in open_ex)), "confirmed": round(sum(e.expected_loss or 0 for e in open_ex if e.exploitability == "confirmed")),
+            "avoidable": round(sum(e.expected_loss or 0 for e in open_ex if e.patch_available))}
     recent = AuditLog.query.filter_by(tenant_id=tenant.id).order_by(AuditLog.id.desc()).limit(8).all()
     return {"k": k, "fleet": fleet, "priority": prio, "nopatch": nopatch, "plans": pl, "practices": prac, "campaigns": _campaigns(tenant),
-            "funnel": _funnel(tenant, k, pl["by_status"], up), "updates": up, "compliance": _compliance(tenant), "health": _health(app, tenant, user),
+            "funnel": _funnel(tenant, k, pl["by_status"], up), "updates": up, "sim": sim, "loss": loss, "compliance": _compliance(tenant), "health": _health(app, tenant, user),
             "actions": _actions(tenant, k, fleet, pl, prio, prac, up),
             "activity": [{"at": r.created_at, "action": r.action, "detail": (r.detail or "")[:90], "who": r.user.email if r.user else ""} for r in recent]}

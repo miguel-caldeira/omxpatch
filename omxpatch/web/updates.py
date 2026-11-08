@@ -1,12 +1,12 @@
 """Atualizações descobertas nos ativos: lista, descoberta a pedido, descarga para o servidor, simulação e remediação."""
 from __future__ import annotations
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from ..engine import plans as plans_mod, updates as updates_mod
 from ..extensions import db
-from ..models import UPDATE_STATUSES, Asset, AvailableUpdate, Patch, UpdateScan
+from ..models import UPDATE_STATUSES, Asset, AvailableUpdate, UpdateScan
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
 from .common import tenant_or_select
 
@@ -81,7 +81,7 @@ def download_now():
 @roles_required("admin", "user")
 def approve_patches():
     """Aprova no repositório os patches das atualizações selecionadas (só os que têm ficheiro no servidor ou usam o gestor do SO)."""
-    tenant = require_tenant()
+    require_tenant()
     ids = [int(i) for i in request.form.getlist("ids") if i.isdigit()]
     done = 0
     for au in scoped(AvailableUpdate).filter(AvailableUpdate.id.in_(ids or [0])):

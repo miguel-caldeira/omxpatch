@@ -37,6 +37,10 @@ def _asset(a: Asset) -> dict:
 
 
 def _exposure(e: Exposure) -> dict:
+    return {**_exposure_base(e), "exploitability": e.exploitability, "expected_loss": e.expected_loss, "simulation": e.sim_data}
+
+
+def _exposure_base(e: Exposure) -> dict:
     return {"id": e.id, "cve": e.cve_id, "asset_id": e.asset_id, "asset": e.asset.name, "software": e.software_name,
             "installed_version": e.installed_version, "fixed_version": e.fixed_version, "status": e.status,
             "risk": {"score": e.risk_score, "category": e.risk_category, "residual": e.residual_score, "factors": e.factor_list},
@@ -531,3 +535,56 @@ def updates_download():
     audit("updates_download", f"API {res}", user=g.api_user)
     db.session.commit()
     return jsonify(res)
+
+
+# --------------------------------------------------------------------------- prioridade, postura, linha de base e changes
+
+
+@bp.get("/priority")
+def priority_get():
+    """Exposições abertas por perda esperada (probabilidade × impacto), com a simulação de exposição."""
+    q = scoped(Exposure).filter(Exposure.status.in_(("open", "mitigated", "patching"))).order_by(Exposure.expected_loss.desc(), Exposure.id)
+    return jsonify([{"id": e.id, "cve": e.cve_id, "asset": e.asset.name, "risk": e.risk_score, "exploitability": e.exploitability, "expected_loss": e.expected_loss,
+                     "patch_id": e.patch_id, "verdict": e.sim_data.get("label", "")} for e in q.limit(min(request.args.get("limit", 100, type=int), 500))])
+
+
+@bp.get("/assets/<int:asset_id>/posture")
+def asset_posture(asset_id: int):
+    from ..engine import exposure_sim
+    a = get_scoped_or_404(Asset, asset_id)
+    ctx = a.hw.get("context") or {}
+    return jsonify({"asset": a.name, "context_collected": bool(ctx), "misconfigurations": exposure_sim.misconfigurations(a), "lateral_paths": exposure_sim.lateral_paths(a),
+                    "listeners": ctx.get("listeners", []), "firewall": ctx.get("firewall", {})})
+
+
+@bp.get("/baseline")
+def baseline_get():
+    from ..engine import baseline as bl
+    t = require_tenant()
+    return jsonify({"items": [{"scope": b.scope, "kind": b.kind, "name": b.name, "installer": b.installer, "min_version": b.min_version, "params": b.params_data, "cves": b.cve_list}
+                              for b in bl.items(t, request.args.get("scope"))],
+                    "drift": [{"asset": d["asset"].name, "gaps": d["gaps"]} for d in bl.drift(t)]})
+
+
+@bp.post("/plans/<int:plan_id>/change")
+@roles_required("admin", "user")
+def plan_change(plan_id: int):
+    """Pede a *change* no ITSM (só se a gestão de changes estiver ativada; por omissão está desativada)."""
+    from ..engine import itsm
+    p = get_scoped_or_404(OperationPlan, plan_id)
+    try:
+        res = itsm.request_change_for_plan(p, require_tenant(), g.api_user)
+    except itsm.ChangeError as exc:
+        return jsonify({"error": str(exc)}), 409
+    audit("plan_change_requested", f"API #{p.id}: {res['ref']}", user=g.api_user)
+    db.session.commit()
+    return jsonify(res), 201
+
+
+@bp.get("/plans/<int:plan_id>/change")
+def plan_change_state(plan_id: int):
+    from ..engine import itsm
+    p = get_scoped_or_404(OperationPlan, plan_id)
+    state = itsm.refresh_plan(p, require_tenant())
+    db.session.commit()
+    return jsonify({"itsm_enabled": itsm.enabled(require_tenant()), "ref": p.change_ref, "state": state, "detail": p.change_detail})

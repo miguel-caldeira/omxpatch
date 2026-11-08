@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 
 from ..runner import powershell, run
 

@@ -142,6 +142,33 @@ def set_software(asset: Asset, items: list[dict], source: str = "agent", replace
     return {"added": added, "removed": removed}
 
 
+def _clip(v, n=200):
+    return str(v)[:n] if v is not None else ""
+
+
+def sanitize_context(c: dict) -> dict:
+    """O contexto vem de um agente (dados não confiáveis): limita tamanhos e tipos antes de o guardar."""
+    def lst(key, n, fields):
+        out = []
+        for it in (c.get(key) or [])[:n]:
+            if isinstance(it, dict):
+                out.append({k: (it[k] if isinstance(it.get(k), (int, bool)) else _clip(it.get(k))) for k in fields if k in it})
+        return out
+    fw = c.get("firewall") if isinstance(c.get("firewall"), dict) else {}
+    acc = c.get("access") if isinstance(c.get("access"), dict) else {}
+    sec = c.get("security") if isinstance(c.get("security"), dict) else {}
+    ssh = acc.get("ssh") if isinstance(acc.get("ssh"), dict) else {}
+    return {"collected_at": int(c.get("collected_at") or 0), "collect_ms": int(c.get("collect_ms") or 0), "platform": _clip(c.get("platform"), 16),
+            "processes": lst("processes", 300, ("pid", "name", "uid", "exe")), "services": lst("services", 300, ("name", "state")),
+            "listeners": [{**l, "port": int(l["port"])} for l in lst("listeners", 200, ("port", "address", "scope", "proto", "process", "pid", "exe")) if str(l.get("port", "")).isdigit()],
+            "firewall": {"engine": _clip(fw.get("engine"), 24), "enabled": bool(fw.get("enabled")), "default_in": _clip(fw.get("default_in"), 12), "default_out": _clip(fw.get("default_out"), 12),
+                         "allow_in_ports": [int(p) for p in (fw.get("allow_in_ports") or [])[:200] if str(p).isdigit()]},
+            "access": {"admins": [_clip(a, 120) for a in (acc.get("admins") or [])[:100]], "ssh": {k: (ssh[k] if isinstance(ssh.get(k), int) else _clip(ssh.get(k), 40)) for k in ssh if k in ("permit_root_login", "password_auth", "port", "pubkey_auth", "permit_empty")},
+                       **{k: bool(acc[k]) for k in ("rdp_enabled", "rdp_nla", "uac", "smb1") if k in acc}},
+            "security": {k: (bool(v) if isinstance(v, bool) else _clip(v, 40)) for k, v in sec.items() if k in ("selinux", "apparmor", "defender_realtime", "defender_av", "sip")},
+            "errors": [_clip(e) for e in (c.get("errors") or [])[:10]]}
+
+
 def ingest_inventory(tenant: Tenant, asset: Asset, report: dict) -> dict:
     """Aplica um relatório de inventário do agente ao ativo."""
     data = {k: report.get(k) for k in ("fqdn", "ip", "mac", "os_name", "os_version", "os_family", "primary_user",
@@ -157,6 +184,8 @@ def ingest_inventory(tenant: Tenant, asset: Asset, report: dict) -> dict:
         rt = report["runtime"]
         hw["agent_runtime"] = {k: (v if isinstance(v, (bool, list)) else str(v)[:200]) for k, v in rt.items()
                                if k in ("python", "implementation", "openssl", "tls13", "tls_max", "level", "degraded", "platform", "machine")}
+    if isinstance(report.get("context"), dict):                  # contexto do ativo (processos, escutas, firewall, acessos)
+        hw["context"] = sanitize_context(report["context"])
     if report.get("webservers") is not None:
         hw["webservers"] = report["webservers"]               # nginx / Apache / IIS detetados (boas práticas)
     if report.get("capabilities"):

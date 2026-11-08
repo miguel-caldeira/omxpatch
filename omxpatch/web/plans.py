@@ -91,7 +91,7 @@ def plan_detail(plan_id: int):
     ordered = [{"title": (k[0] if by == "asset" else k[1]), "items": v} for k, v in sorted(groups.items(), key=lambda kv: str(kv[0]))]
     eligible = {it.id: plans_mod.eligible(it) for it in items}
     return render_template("plans/detail.html", plan=plan, groups=ordered, by=by, summary=plans_mod.summary(plan), eligible=eligible,
-                           catalog=pr.PRACTICES, n_items=len(items))
+                           catalog=pr.PRACTICES, n_items=len(items), itsm_on=__import__("omxpatch.engine.itsm", fromlist=["x"]).enabled(require_tenant()))
 
 
 @bp.route("/plans/<int:plan_id>/<action>", methods=["POST"])
@@ -125,10 +125,25 @@ def plan_action(plan_id: int, action: str):
     elif action == "execute":
         res = plans_mod.execute(plan, tenant, current_user)
         audit("plan_executed", f"#{plan.id}: {res['queued']} item(ns)")
-        flash(f"{res['queued']} item(ns) aprovados enviados para execução." if res["queued"] else "Nenhum item aprovado para executar.",
-              "success" if res["queued"] else "warning")
+        if res.get("blocked_by_itsm"):
+            flash("Execução bloqueada pela governação ITSM: " + res["blocked_by_itsm"], "warning")
+        else:
+            flash(f"{res['queued']} item(ns) aprovados enviados para execução." if res["queued"] else "Nenhum item aprovado para executar.",
+                  "success" if res["queued"] else "warning")
         for it, why in res["skipped"][:8]:
             flash(f"{it.asset.name} / {it.label}: {why}", "warning")
+    elif action == "request_change":
+        from ..engine import itsm
+        try:
+            res = itsm.request_change_for_plan(plan, tenant, current_user)
+            audit("plan_change_requested", f"#{plan.id}: {res['ref']}")
+            flash(f"Change {res['ref']} pedida no ITSM. A execução fica bloqueada até ser aprovada.", "success")
+        except itsm.ChangeError as exc:
+            flash(str(exc), "danger")
+    elif action == "refresh_change":
+        from ..engine import itsm
+        state = itsm.refresh_plan(plan, tenant)
+        flash(f"Change {plan.change_ref}: {plan.change_detail or state}", "info")
     elif action == "cancel":
         n = plans_mod.cancel(plan)
         audit("plan_cancelled", f"#{plan.id}: {n}")

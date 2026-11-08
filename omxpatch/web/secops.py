@@ -38,7 +38,8 @@ def controls_list():
 @bp.route("/controls/<int:control_id>")
 @login_required
 def control_detail(control_id: int):
-    return render_template("controls/detail.html", c=get_scoped_or_404(ControlAction, control_id))
+    from ..engine import itsm
+    return render_template("controls/detail.html", c=get_scoped_or_404(ControlAction, control_id), itsm_on=itsm.enabled(require_tenant()))
 
 
 @bp.route("/exposures/<int:exposure_id>/controls/propose", methods=["POST"])
@@ -94,6 +95,16 @@ def control_action(control_id: int, action: str):
             controls.mark_applied(c, verified=bool(request.form.get("verified")))
         elif action == "revert":
             c.status = "reverted"
+        elif action == "release":
+            controls.release_isolation(c, tenant)
+            flash("Libertação do isolamento pedida ao agente.", "info")
+        elif action == "request_change":
+            from ..engine import itsm
+            try:
+                res = itsm.request_change_for_control(c, tenant)
+            except itsm.ChangeError as exc:
+                raise ValueError(str(exc))
+            flash(f"Change {res.get('ref', '')} pedida no ITSM.", "success")
         else:
             abort(400)
     except ValueError as exc:

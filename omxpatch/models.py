@@ -76,6 +76,7 @@ CONTROL_ACTIONS = {
     "siem_rule": ("siem", "Nova regra"), "siem_correlation": ("siem", "Nova correlação"),
     "disable_account": ("iam", "Desativar conta"), "force_mfa": ("iam", "Forçar MFA"),
     "virtual_patch": ("waf", "Virtual patch"),
+    "isolate_host": ("isolation", "Isolar o ativo da rede (mantém a consola)"),
 }
 CONTROL_STATUSES = {"proposed": "Proposto", "approved": "Aprovado", "applied": "Aplicado", "verified": "Verificado",
                     "failed": "Falhou", "reverted": "Revertido", "rejected": "Rejeitado"}
@@ -285,6 +286,7 @@ class Asset(TimestampMixin, db.Model):
     department = db.Column(db.String(120), default="")
     criticality = db.Column(db.String(16), default="medium")
     business_value = db.Column(db.Integer, default=50)          # 0-100
+    cost_per_hour = db.Column(db.Float, nullable=True)          # custo de indisponibilidade por hora (moeda); vazio = por criticidade
     internet_exposed = db.Column(db.String(8), default="auto")  # auto | yes | no
     country = db.Column(db.String(2), default="")
     city = db.Column(db.String(120), default="")
@@ -450,6 +452,10 @@ class Exposure(TimestampMixin, db.Model):
     omxvuln_finding_id = db.Column(db.Integer, nullable=True)
     patch_id = db.Column(db.Integer, db.ForeignKey("patches.id"), nullable=True)
     patch_available = db.Column(db.Boolean, default=False, nullable=False)
+    exploitability = db.Column(db.String(12), default="unknown", nullable=False)   # confirmed | likely | unlikely | unreachable | unknown
+    exposure_sim = db.Column(db.Text, default="{}")                 # simulação de exposição (passos do caminho de ataque)
+    sim_at = db.Column(db.DateTime, nullable=True)
+    expected_loss = db.Column(db.Float, default=0.0, nullable=False)  # perda esperada (moeda) = P(exploração) × impacto
     risk_score = db.Column(db.Integer, default=0, nullable=False, index=True)
     risk_category = db.Column(db.String(12), default="low", nullable=False)
     residual_score = db.Column(db.Integer, default=0, nullable=False)     # após controlos compensatórios
@@ -462,6 +468,10 @@ class Exposure(TimestampMixin, db.Model):
     due_date = db.Column(db.DateTime, nullable=True)
     asset = db.relationship("Asset", backref=db.backref("exposures", lazy="dynamic"))
     patch = db.relationship("Patch")
+
+    @property
+    def sim_data(self) -> dict:
+        return jloads(self.exposure_sim, {})
 
     @property
     def factor_list(self) -> list[dict]:
@@ -690,6 +700,13 @@ class OperationPlan(TimestampMixin, db.Model):
     start_at = db.Column(db.DateTime, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     executed_at = db.Column(db.DateTime, nullable=True)
+    # governação ITSM: pedido de mudança (change) associado
+    change_ref = db.Column(db.String(64), default="")               # p.ex. CHG0030012
+    change_id = db.Column(db.String(64), default="")                # sys_id / chave no ITSM
+    change_url = db.Column(db.String(500), default="")
+    change_state = db.Column(db.String(24), default="")             # none | requested | approved | rejected | implemented | closed | cancelled
+    change_detail = db.Column(db.String(300), default="")
+    change_checked_at = db.Column(db.DateTime, nullable=True)
     items = db.relationship("PlanItem", backref="plan", cascade="all, delete-orphan", lazy="dynamic")
 
     # atributos usados por deploy.patch_payload (compatível com Campaign)
@@ -789,6 +806,10 @@ class ControlAction(TimestampMixin, db.Model):
     status = db.Column(db.String(10), default="proposed", nullable=False)
     via = db.Column(db.String(32), default="")                   # ansible | connector:<kind> | manual
     detail = db.Column(db.Text, default="")
+    change_ref = db.Column(db.String(64), default="")            # governação ITSM (só se a gestão de changes estiver ativa)
+    change_id = db.Column(db.String(64), default="")
+    change_url = db.Column(db.String(500), default="")
+    change_state = db.Column(db.String(24), default="")
     expires_when_patched = db.Column(db.Boolean, default=True, nullable=False)
     applied_at = db.Column(db.DateTime, nullable=True)
     verified_at = db.Column(db.DateTime, nullable=True)
@@ -991,3 +1012,33 @@ class UpdateScan(db.Model):
     @property
     def source_data(self) -> dict:
         return jloads(self.sources, {})
+
+
+# --------------------------------------------------------------------------- linhas de base (gold images)
+
+
+class BaselineItem(TimestampMixin, db.Model):
+    """Requisito da linha de base de um grupo de ativos (SO/etiqueta): patch mínimo ou boa prática. Alimentado automaticamente pelas
+    remediações bem-sucedidas e exportável para as imagens padrão (Ansible, shell, Packer, JSON)."""
+    __tablename__ = "baseline_items"
+    __table_args__ = (db.UniqueConstraint("tenant_id", "scope", "kind", "name", name="uq_baseline_item"),)
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    scope = db.Column(db.String(120), default="linux", nullable=False)       # os_family (linux|windows|macos) ou «os_family:etiqueta»
+    kind = db.Column(db.String(10), nullable=False)                          # patch | practice
+    name = db.Column(db.String(255), nullable=False)                         # pacote / KB / id da boa prática
+    installer = db.Column(db.String(16), default="")
+    min_version = db.Column(db.String(120), default="")
+    params = db.Column(db.Text, default="{}")
+    source_plan_id = db.Column(db.Integer, nullable=True)
+    cves = db.Column(db.Text, default="[]")
+    note = db.Column(db.String(300), default="")
+    active = db.Column(db.Boolean, default=True, nullable=False)
+
+    @property
+    def params_data(self) -> dict:
+        return jloads(self.params, {})
+
+    @property
+    def cve_list(self) -> list[str]:
+        return jloads(self.cves, [])

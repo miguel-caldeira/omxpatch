@@ -8,7 +8,8 @@ from __future__ import annotations
 from ..config import platform_family
 from . import common
 
-PRACTICES = ("tls_protocols", "hsts", "hide_version", "security_headers")
+PRACTICES = ("tls_protocols", "hsts", "hide_version", "security_headers", "ssh_hardening", "windows_hardening")
+OS_PRACTICES = ("ssh_hardening", "windows_hardening")
 
 
 def _servers(params: dict):
@@ -55,6 +56,9 @@ def _plan(server, practice: str, params: dict) -> dict:
 def simulate(practice: str, params: dict | None = None) -> dict:
     """Plano sem alterar nada: {checks[], actions[], predicted{}}."""
     params = params or {}
+    if practice in OS_PRACTICES:
+        from . import oshardening
+        return oshardening.simulate(practice, params)
     if practice not in PRACTICES:
         return {"checks": [{"id": "practice", "label": "Boa prática conhecida", "status": "block", "detail": practice}], "actions": [], "predicted": {}}
     checks, actions, servers = [], [], []
@@ -78,6 +82,9 @@ def simulate(practice: str, params: dict | None = None) -> dict:
 def apply(practice: str, params: dict | None, item: str) -> dict:
     """Aplica a boa prática (com teste, verificação e reversão automática em caso de falha)."""
     params = params or {}
+    if practice in OS_PRACTICES:
+        from . import oshardening
+        return oshardening.apply(practice, params, item)
     results, ok, rolled, reboot = [], True, False, False
     for s in _servers(params):
         if s == "iis":
@@ -103,6 +110,10 @@ def apply(practice: str, params: dict | None, item: str) -> dict:
 
 
 def rollback(item: str, params: dict | None = None) -> dict:
+    p = params or {}
+    if p.get("practice") in OS_PRACTICES:
+        from . import oshardening
+        return oshardening.rollback(p["practice"], item)
     done = []
     for s in _servers(params or {}):
         try:

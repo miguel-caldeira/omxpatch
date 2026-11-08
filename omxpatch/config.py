@@ -32,6 +32,10 @@ DEFAULTS: dict[str, object] = {
     "AGENT_SERVER_IP": "",             # IP do servidor: os scripts de instalação acrescentam-no ao ficheiro hosts dos postos
     "AGENT_BASE_URL": "",
     "AGENT_ADDRESS_MODE": "name",      # name = os agentes usam o nome (DNS/hosts); ip = só o IP do servidor + thumbprint do certificado
+    # Impacto (prioridade por perda esperada, em vez de só CVSS)
+    "IMPACT_CURRENCY": "EUR", "IMPACT_OUTAGE_HOURS": 24,
+    "IMPACT_COST_LOW": 100, "IMPACT_COST_MEDIUM": 1000, "IMPACT_COST_HIGH": 5000, "IMPACT_COST_CRITICAL": 20000,   # custo/hora por criticidade (quando o ativo não tem valor próprio)
+    "CONTEXT_EVERY_HOURS": 24,         # os agentes enviam o contexto do ativo (processos, escutas, firewall, acessos) com o inventário
     "UPDATES_SCAN_HOURS": 6,           # periodicidade da descoberta de atualizações nos agentes
     "UPDATES_AUTO_DOWNLOAD": True,     # descarregar proativamente para o repositório do servidor
     "UPDATES_DOWNLOAD_PER_TICK": 3, "UPDATES_MAX_DOWNLOAD_MB": 1024,

@@ -162,7 +162,9 @@ def asset_detail(asset_id: int):
     open_exps = [e for e in exps if e.status in ("open", "mitigated", "patching")]
     from ..models import AvailableUpdate
     update_count = asset.updates.filter(AvailableUpdate.status.notin_(("installed", "superseded"))).count()
-    return render_template("assets/detail.html", update_count=update_count, asset=asset, exps=exps, risk_total=risk.asset_risk([e.risk_score for e in open_exps]),
+    from ..engine import exposure_sim
+    posture = {"misconfigurations": exposure_sim.misconfigurations(asset), "lateral": exposure_sim.lateral_paths(asset), "context": asset.hw.get("context") or {}}
+    return render_template("assets/detail.html", posture=posture, update_count=update_count, asset=asset, exps=exps, risk_total=risk.asset_risk([e.risk_score for e in open_exps]),
                            software=asset.software.order_by(AssetSoftware.name).all(),
                            tasks=Task.query.filter_by(asset_id=asset.id).order_by(Task.id.desc()).limit(20).all(),
                            history=CmdbChange.query.filter_by(asset_id=asset.id).order_by(CmdbChange.id.desc()).limit(30).all(),
@@ -277,6 +279,10 @@ def _exposures_query():
         q = q.join(CveIntel, CveIntel.cve_id == Exposure.cve_id).filter(CveIntel.kev.is_(True))
     if a.get("overdue"):
         q = q.filter(Exposure.due_date < utcnow(), Exposure.status.in_(("open", "mitigated", "patching")))
+    if a.get("exploitability"):
+        q = q.filter(Exposure.exploitability == a["exploitability"])
+    if a.get("sort") == "loss":
+        return q.order_by(Exposure.expected_loss.desc(), Exposure.risk_score.desc(), Exposure.id)
     return q.order_by(Exposure.risk_score.desc(), Exposure.id)
 
 
@@ -296,7 +302,9 @@ def exposure_detail(exposure_id: int):
     ex = get_scoped_or_404(Exposure, exposure_id)
     cve = CveIntel.query.filter_by(cve_id=ex.cve_id).first()
     intelligence = patches.intelligence(ex.patch) if ex.patch else None
-    return render_template("exposures/detail.html", ex=ex, cve=cve, intelligence=intelligence,
+    from ..engine import priority
+    loss = priority.score(ex, cve, ex.asset, [c for c in ControlAction.query.filter_by(tenant_id=ex.tenant_id, cve_id=ex.cve_id, asset_id=ex.asset_id)])
+    return render_template("exposures/detail.html", ex=ex, cve=cve, intelligence=intelligence, loss=loss, loss_text=priority.money(ex.expected_loss),
                            ctrls=ControlAction.query.filter_by(tenant_id=ex.tenant_id, cve_id=ex.cve_id, asset_id=ex.asset_id).all(),
                            vals=Validation.query.filter_by(exposure_id=ex.id).order_by(Validation.id.desc()).all(),
                            sims=Simulation.query.filter_by(exposure_id=ex.id).order_by(Simulation.id.desc()).all(),
@@ -473,3 +481,24 @@ def signals_import():
 
 
 __all__ = ["advisor", "controls", "simulation", "ASSET_KINDS", "CRITICALITIES", "OPEN_EXPOSURE", "Patch", "write_required"]
+
+
+@bp.route("/assets/<int:asset_id>/isolate", methods=["POST"])
+@login_required
+@roles_required("admin", "user")
+def asset_isolate(asset_id: int):
+    """Propõe o isolamento preventivo do ativo (fica «proposto»: aprovar e aplicar no controlo; exige agente)."""
+    asset = get_scoped_or_404(Asset, asset_id)
+    if asset.agent is None:
+        flash("O isolamento exige um agente instalado no ativo.", "danger")
+        return redirect(url_for("main.asset_detail", asset_id=asset.id))
+    keep = [x.strip() for x in request.form.get("keep_ssh_from", "").replace(";", ",").split(",") if x.strip()]
+    try:
+        c = controls.propose_isolation(require_tenant(), asset, request.form.get("ttl", type=int) or 120, keep, user=current_user)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("main.asset_detail", asset_id=asset.id))
+    audit("asset_isolation_proposed", f"{asset.name}: controlo #{c.id}")
+    db.session.commit()
+    flash("Isolamento proposto: reveja, aprove e aplique no controlo. O agente mantém só a ligação à consola e liberta-se sozinho no prazo.", "info")
+    return redirect(url_for("secops.control_detail", control_id=c.id))

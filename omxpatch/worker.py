@@ -127,6 +127,13 @@ class Worker:
     def _tenant(self, tenant: Tenant, now, summary: dict) -> None:
         cfg = self.app.config
         deploy.requeue_stale(tenant.id)
+        try:
+            from .engine import itsm
+            itsm.tick(tenant)                    # estado das changes pedidas (só se a gestão de changes estiver ativada)
+            db.session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ITSM %s: %s", tenant.slug, exc)
+            db.session.rollback()
         if not cfg.get("TESTING") or cfg.get("UPDATES_TICK_IN_TESTS"):
             try:
                 from .engine import updates as updates_mod

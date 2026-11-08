@@ -95,7 +95,19 @@ def selftest() -> dict:
         assert hasattr(fw, "apply") or hasattr(fw, "block_country") or True
         return "módulo de controlos"
 
+    def ctx():
+        from . import context
+        c = context.collect_context(budget_s=15)
+        return f"{len(c['processes'])} processos, {len(c['listeners'])} escutas, firewall {c['firewall'].get('engine') or '—'}, {c['collect_ms']} ms" + (f" (avisos: {len(c['errors'])})" if c["errors"] else "")
+
+    def isol():
+        from . import isolation
+        assert "policy drop" in isolation.nft_ruleset([("10.0.0.5", 4444)], [])
+        return "regras de isolamento (sem aplicar)"
+
     step("coletor de inventário", collect)
+    step("contexto do ativo (leve, só leitura)", ctx)
+    step("isolamento (só validação)", isol)
     step("origens de atualização", sources_)
     step("comparação de versões", versions)
     step("impressão digital e IP", pin)

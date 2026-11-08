@@ -11,5 +11,8 @@
 <form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='reject') }}" class="inline">{{ csrf() }}<button class="btn sec">Rejeitar</button></form>{% endif %}
 {% if c.status in ('approved', 'failed') %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='apply') }}" class="inline" data-confirm="Aplicar o controlo? Poderá afetar o tráfego do ativo.">{{ csrf() }}<button class="btn">Aplicar</button></form>
 <form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='mark_applied') }}" class="inline">{{ csrf() }}<label class="chk"><input type="checkbox" name="verified" value="1"> verificado</label><button class="btn sec">Marcar como aplicado manualmente</button></form>{% endif %}
+{% if c.action == 'isolate_host' and c.status in ('applied', 'verified') %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='release') }}" class="inline" data-confirm="Libertar o isolamento do ativo?">{{ csrf() }}<button class="btn">Libertar isolamento</button></form>{% endif %}
+{% if itsm_on and c.status in ('proposed', 'approved') and not c.change_ref %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='request_change') }}" class="inline">{{ csrf() }}<button class="btn sec">Pedir change no ITSM</button></form>{% endif %}
+{% if c.change_ref %}<span class="badge">Change {{ c.change_ref }} · {{ c.change_state }}</span>{% endif %}
 {% if c.status in ('applied', 'verified') %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='revert') }}" class="inline">{{ csrf() }}<button class="btn sec">Marcar como revertido</button></form>{% endif %}</div>{% endif %}
 {% endblock %}

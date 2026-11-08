@@ -100,6 +100,9 @@ def refresh(ex: Exposure, tenant: Tenant | None = None, cve: CveIntel | None = N
     controls = ControlAction.query.filter(ControlAction.tenant_id == ex.tenant_id, ControlAction.cve_id == ex.cve_id,
                                           db.or_(ControlAction.asset_id == asset.id, ControlAction.asset_id.is_(None))).all()
     verdict = risk.exposure_verdict(ex, cve, asset, signals, controls)
+    from . import exposure_sim, priority
+    exposure_sim.apply(ex, cve, asset, controls, verdict)            # simulação de exposição (contexto do agente + inteligência), sem tocar no ativo
+    priority.apply(ex, cve, asset, controls)                          # perda esperada (probabilidade × impacto)
     observed = verdict["active_exploitation_observed"]
     res = risk.score_exposure(cve, asset, observed, controls, floor=verdict["floor"])
     ex.verdict = json.dumps(verdict, ensure_ascii=False)
