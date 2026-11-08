@@ -363,8 +363,13 @@ def agent_script():
     audit("agent_script_generated", f"{os_kind}, anel {ring}, token {tok.prefix}…")
     db.session.commit()
     from flask import Response
-    return Response(body, mimetype="text/plain; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{name}"',
-                                                                         "Cache-Control": "no-store"})
+    return Response(_with_bom(name, body), mimetype="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+
+def _with_bom(name: str, body: str) -> bytes:
+    """Os .ps1 levam BOM UTF-8: sem ele o Windows PowerShell 5.1 lê o ficheiro como ANSI e estraga os acentos."""
+    return (b"\xef\xbb\xbf" if name.endswith(".ps1") else b"") + body.encode("utf-8")
 
 
 @bp.route("/agents/uninstall/<os_kind>")
@@ -376,7 +381,7 @@ def agent_uninstall_script(os_kind: str):
     except ValueError:
         abort(404)
     from flask import Response
-    return Response(body, mimetype="text/plain; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+    return Response(_with_bom(name, body), mimetype="text/plain; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @bp.route("/agents/<int:agent_id>/delete", methods=["POST"])

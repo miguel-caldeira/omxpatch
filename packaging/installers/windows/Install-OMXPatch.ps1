@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
   OMXPatch — instalação em Windows Server 2019/2022/2025 (ou Windows 10/11): centro de comando.
   Instala Python (se faltar), o ambiente virtual em C:\OMXPatch, a configuração e os dados em C:\ProgramData\OMXPatch,
@@ -23,11 +23,37 @@ if (-not (Get-ChildItem (Join-Path $Here 'wheels') -Filter 'omxpatch-*.whl' -Err
 Start-Transcript -Path (Join-Path $env:TEMP 'omxpatch-install.log') -Append | Out-Null
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 function Find-Python {
-  foreach ($p in @('C:\Python312\python.exe', 'C:\Program Files\Python312\python.exe', 'C:\Program Files\Python313\python.exe', 'C:\Program Files\Python311\python.exe')) { if (Test-Path $p) { return $p } }
-  $c = Get-Command python.exe -ErrorAction SilentlyContinue
-  if ($c -and $c.Source -notlike '*WindowsApps*') { return $c.Source }
+  $c = @('C:\Python312\python.exe', 'C:\Program Files\Python312\python.exe', 'C:\Program Files\Python313\python.exe', 'C:\Program Files\Python311\python.exe',
+         "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
+  foreach ($k in 'HKLM:\SOFTWARE\Python\PythonCore', 'HKLM:\SOFTWARE\WOW6432Node\Python\PythonCore', 'HKCU:\SOFTWARE\Python\PythonCore') {
+    Get-ChildItem $k -ErrorAction SilentlyContinue | ForEach-Object { $ip = (Get-ItemProperty "$($_.PSPath)\InstallPath" -ErrorAction SilentlyContinue).'(default)'; if ($ip) { $c += (Join-Path $ip 'python.exe') } }
+  }
+  foreach ($p in $c) { if ($p -and (Test-Path $p)) { try { if ((& $p -c 'import sys;print(sys.version_info>=(3,8))' 2>$null) -eq 'True') { return $p } } catch {} } }
+  $g = Get-Command python.exe -ErrorAction SilentlyContinue
+  if ($g -and $g.Source -notlike '*WindowsApps*') { return $g.Source }
   return $null
+}
+function Install-Python([string]$Installer) {
+  # 1.º todos os utilizadores; 2.º só o utilizador atual; 3.º winget. Mostra o registo se falhar.
+  $log = Join-Path $env:TEMP 'omxpatch-python-install.log'
+  foreach ($mode in @('InstallAllUsers=1', 'InstallAllUsers=0')) {
+    $a = @('/quiet', $mode, 'PrependPath=0', 'Include_test=0', 'Include_pip=1', 'Include_launcher=0', "/log `"$log`"")
+    if ($mode -eq 'InstallAllUsers=1') { $a += 'TargetDir=C:\Python312' }
+    $p = Start-Process -FilePath $Installer -ArgumentList $a -Wait -PassThru
+    Write-Host "Instalador do Python ($mode): código de saída $($p.ExitCode)"
+    $py = Find-Python
+    if ($py) { return $py }
+  }
+  if (Get-Command winget.exe -ErrorAction SilentlyContinue) {
+    Write-Host 'A tentar com o winget...'
+    & winget.exe install --id Python.Python.3.12 -e --scope machine --silent --accept-package-agreements --accept-source-agreements | Out-Host
+    $py = Find-Python
+    if ($py) { return $py }
+  }
+  if (Test-Path $log) { Write-Host '--- fim do registo do instalador do Python ---'; Get-Content $log -Tail 15 | Out-Host }
+  throw "Não foi possível instalar o Python 3 (registo: $log). Instale o Python 3.12 manualmente (python.org, «Add to PATH» opcional) e execute de novo."
 }
 Step 'Python'
 $Py = Find-Python
@@ -43,9 +69,7 @@ if (-not $Py) {
     Invoke-WebRequest -Uri $PythonUrl -OutFile $inst -UseBasicParsing
   }
   if ($PythonSha256 -and ((Get-FileHash $inst -Algorithm SHA256).Hash -ne $PythonSha256.ToUpper())) { throw 'SHA-256 do instalador do Python não confere' }
-  Start-Process -FilePath $inst -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=0', 'TargetDir=C:\Python312', 'Include_test=0', 'Include_pip=1', 'Include_launcher=0' -Wait
-  $Py = Find-Python
-  if (-not $Py) { throw 'Não foi possível instalar o Python 3.' }
+  $Py = Install-Python $inst
 }
 Write-Host "Python: $Py"
 

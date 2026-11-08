@@ -252,3 +252,17 @@ def test_branding_oramix_logo_colors_and_tenant_theme(app, tenant):
     assert c.c.post("/branding/settings", data={"_csrf": c.csrf(), "logo": (io.BytesIO(b"<svg/>"), "x.svg")},
                     content_type="multipart/form-data").status_code == 302 and "Formato não suportado" in c.get("/settings").get_data(as_text=True)
     assert "Identidade visual" in c.get("/settings").get_data(as_text=True)
+
+
+def test_windows_script_has_utf8_bom_and_robust_python_install(app, tenant):
+    c = login_as(app, "admin@alpha.example")
+    raw = c.post("/agents/script", {"os": "windows", "ring": "1", "days": "3"}).data
+    assert raw.startswith(b"\xef\xbb\xbf")                                   # PowerShell 5.1 lê como UTF-8
+    text = raw.decode("utf-8-sig")
+    assert "Não foi possível instalar o Python 3" in text and "function Install-Python" in text
+    assert "Tls12" in text and "InstallAllUsers=0" in text and "winget.exe" in text and "HKLM:\\SOFTWARE\\Python\\PythonCore" in text
+    assert c.get("/agents/uninstall/windows").data.startswith(b"\xef\xbb\xbf")
+    assert not c.post("/agents/script", {"os": "linux"}).data.startswith(b"\xef\xbb\xbf")
+    import pathlib
+    for f in pathlib.Path("packaging/installers/windows").glob("*.ps1"):
+        assert f.read_bytes().startswith(b"\xef\xbb\xbf"), f.name

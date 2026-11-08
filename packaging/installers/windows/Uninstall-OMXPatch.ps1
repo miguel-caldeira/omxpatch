@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 # Remove o OMXPatch (tarefas e aplicação). Mantém C:\ProgramData\OMXPatch salvo -Purge.
 param([switch]$Purge)
 foreach ($t in 'OMXPatch', 'OMXPatch-Worker') { schtasks /End /TN $t 2>$null | Out-Null; schtasks /Delete /F /TN $t 2>$null | Out-Null }
