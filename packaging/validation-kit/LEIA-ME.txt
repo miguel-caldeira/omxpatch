@@ -1,0 +1,35 @@
+OMXPatch — kit de validação em Windows e macOS
+==============================================
+Objetivo: confirmar, em sistemas REAIS, o que só foi testado com saídas simuladas: descoberta de atualizações (WUA, winget, Chocolatey,
+softwareupdate, brew), contexto do ativo (processos, escutas, firewall, acessos), firewall local, endurecimento do SO, isolamento e a
+ligação à consola só por IP + impressão digital.
+
+1) Conteúdo
+   omxpatch_agent/        o agente (só biblioteca padrão; precisa de Python 3.8+ instalado)
+   validate-windows.ps1   validação em Windows (PowerShell; «Executar como Administrador» para o nível lab)
+   validate-macos.sh      validação em macOS (sudo para o nível lab)
+   CHECKLIST-LAB.md       casos manuais para o laboratório (isolamento, TLS no IIS, Windows Update/WSUS, rollback…) com resultado esperado
+
+2) Níveis (escolha com cuidado)
+   read  (omissão)  SÓ LEITURA. Seguro em qualquer equipamento. Não instala nada, não altera nada.
+   lab              + alterações REVERSÍVEIS: regra de firewall de teste (aplica, verifica, remove) e endurecimento do SO (aplica, verifica,
+                    reverte). USE SÓ EM VM/EQUIPAMENTO DE LABORATÓRIO. Exige -YesLab / --lab.
+   --with-isolation (só com lab + servidor) isola a máquina 5 min (só a consola fica acessível) e liberta. Corte de rede: tenha acesso por consola
+                    da VM (hipervisor) como plano B. O agente liberta sozinho no fim do prazo e desfaz se perder a consola.
+
+3) Como correr
+   Windows (PowerShell):  .\validate-windows.ps1
+                          .\validate-windows.ps1 -Level lab -YesLab                       (como Administrador, VM de laboratório)
+                          .\validate-windows.ps1 -Server https://10.0.0.5:4444 -Pin <SHA-256 ou thumbprint>
+   macOS (Terminal):      sh ./validate-macos.sh
+                          sudo sh ./validate-macos.sh --lab
+                          sh ./validate-macos.sh --server https://10.0.0.5:4444 --pin <SHA-256>
+   A impressão digital está em Agentes → «Impressão digital (SHA-256)» / «Thumbprint (SHA-1)» na consola.
+
+4) O que enviar
+   report-<data>.md e report-<data>.json. Por omissão o nome do equipamento e os dois últimos octetos dos IP vêm ocultados (--no-redact desliga).
+   Não contêm palavras-passe nem chaves; contêm versões de software e nomes de processos: reveja antes de partilhar.
+
+5) Interpretar
+   ✅ passou · ⚠️ aviso (funciona mas há algo a ver) · ⏭️ saltado (falta privilégio/componente) · ❌ falha (a corrigir). Código de saída 1 se houver falhas.
+   Uma falha numa origem de atualização (p.ex. winget) mostra a mensagem de erro real: é exatamente a informação de que precisamos.

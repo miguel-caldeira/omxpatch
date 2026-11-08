@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import logging
 import random
 import sys
@@ -186,6 +187,28 @@ def cmd_selftest(args) -> int:
     return 0 if res["ok"] else 1
 
 
+def cmd_validate(args) -> int:
+    """Validação no sistema real (ver ``omxpatch_agent/validate.py``). Código de saída 1 se alguma verificação falhar."""
+    from . import validate as v
+    if args.level == "lab" and not args.yes_lab:
+        print("O nível «lab» faz alterações reversíveis (firewall de teste, endurecimento aplicado e revertido). Use só em VM/equipamento de laboratório e confirme com --yes-lab.", file=sys.stderr)
+        return 2
+    if args.with_isolation and not (args.level == "lab" and args.server):
+        print("--with-isolation exige --level lab e --server (o isolamento corta a rede exceto a consola).", file=sys.stderr)
+        return 2
+    rep = v.validate(args.level, args.server or "", args.pin or "", args.with_isolation, redact=not args.no_redact)
+    md = v.to_markdown(rep)
+    if args.json:
+        open(args.json, "w", encoding="utf-8").write(json.dumps(rep, indent=1, ensure_ascii=False))
+    if args.report:
+        open(args.report, "w", encoding="utf-8").write(md)
+    print(md if not args.quiet else f"Resultado: {rep['summary']['counts']}")
+    summ = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summ:
+        open(summ, "a", encoding="utf-8").write(md)
+    return 0 if rep["summary"]["ok"] else 1
+
+
 def cmd_status(args) -> int:
     cfg = config.load()
     print(f"Agente {__version__} — organização: {cfg.get('tenant_name', '(não registado)')} — servidor: {cfg.get('server_url', '-')} — configuração: {config.config_path()}")
@@ -199,6 +222,9 @@ def main(argv=None) -> int:
     e.add_argument("--pin-sha256"); e.add_argument("--ca-file"); e.add_argument("--install-service", action="store_true"); e.add_argument("--force", action="store_true"); e.set_defaults(fn=cmd_enroll)
     for name, fn in (("run", cmd_run), ("once", cmd_once), ("inventory", cmd_inventory), ("status", cmd_status)):
         sub.add_parser(name).set_defaults(fn=fn)
+    va = sub.add_parser("validate"); va.add_argument("--level", choices=["read", "lab"], default="read"); va.add_argument("--yes-lab", action="store_true")
+    va.add_argument("--with-isolation", action="store_true"); va.add_argument("--server"); va.add_argument("--pin"); va.add_argument("--json"); va.add_argument("--report")
+    va.add_argument("--no-redact", action="store_true"); va.add_argument("--quiet", action="store_true"); va.set_defaults(fn=cmd_validate)
     st = sub.add_parser("selftest"); st.add_argument("--json", action="store_true"); st.set_defaults(fn=cmd_selftest)
     sub.add_parser("install-service").set_defaults(fn=lambda a: print(service.install()) or 0)
     sub.add_parser("uninstall-service").set_defaults(fn=lambda a: print(service.uninstall()) or 0)

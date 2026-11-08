@@ -85,6 +85,12 @@ else echo "AVISO: pacote 2012 R2 sem python-installer.exe (defina PYTHON_WIN2012
 for f in "$W2"/*.ps1; do head -c3 "$f" | grep -q $'\xef\xbb\xbf' || { printf '\xef\xbb\xbf' | cat - "$f" > "$f.n" && mv "$f.n" "$f"; }; done
 (cd "$STAGE" && mkzip "$DIST/omxpatch-windows2012r2-$VER.zip" "omxpatch-windows2012r2-$VER")
 
+echo "==> Kit de validação (Windows/macOS)"
+K="$STAGE/omxpatch-validation-kit-$VER"; mkdir -p "$K"
+cp -r omxpatch_agent "$K/"; find "$K" -name __pycache__ -prune -exec rm -rf {} +
+cp packaging/validation-kit/* "$K/"; chmod +x "$K/validate-macos.sh"; echo "$VER" > "$K/VERSION"
+(cd "$STAGE" && mkzip "$DIST/omxpatch-validation-kit-$VER.zip" "omxpatch-validation-kit-$VER")
+
 echo "==> Agente"
 A="$STAGE/omxpatch-agent-$VER"; mkdir -p "$A"
 cp -r omxpatch_agent "$A/"; find "$A" -name __pycache__ -prune -exec rm -rf {} +

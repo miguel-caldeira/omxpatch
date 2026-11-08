@@ -187,7 +187,7 @@ def _mac_release() -> None:
 def isolate(op: dict) -> dict:
     ttl = max(5, min(int(op.get("ttl_minutes") or 120), MAX_TTL))
     keep = _ips(op.get("keep_ssh_from"))
-    endpoints = console_endpoints()
+    endpoints = [(str(ip), int(port)) for ip, port in (op.get("endpoints") or [])] or console_endpoints()      # «endpoints» só é usado pela validação em laboratório
     if not endpoints:
         raise IsolationError("Não foi possível determinar os endereços da consola: recusado (o agente cortar-se-ia a si próprio)")
     if state().get("active"):

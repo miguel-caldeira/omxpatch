@@ -246,6 +246,17 @@ A aplicação de boas práticas faz cópia de segurança, `nginx -t`/`apachectl 
 
 API: `GET /api/v1/practices`, `GET|POST /api/v1/plans`, `POST /api/v1/plans/<id>/simulate|approve|execute`.
 
+## Cenário de teste em Windows e macOS
+
+O que só foi testado com saídas simuladas (WUA, winget, Chocolatey, `softwareupdate`, brew, contexto, firewall, endurecimento, isolamento) valida-se em sistemas reais com `python -m omxpatch_agent validate`:
+
+- **`--level read` (omissão): só leitura** — autoteste, inventário, origens utilizáveis, descoberta de atualizações (sem instalar), contexto do ativo, servidores web, planos de boas práticas e ferramentas de firewall;
+- **`--level lab --yes-lab`: + alterações reversíveis** (regra de firewall de teste e endurecimento do SO aplicados e revertidos) — só em VM de laboratório;
+- **`--with-isolation --server https://IP:4444 --pin …`**: testa o isolamento real (5 min, só a consola acessível) e a ligação **por IP + impressão digital**.
+Gera `report-*.md/json` (nome do equipamento e IP ocultados por omissão).
+
+**Três vias:** (1) **CI** (`.github/workflows/ci.yml`): o job `real-os-validation` corre o nível `lab` em *runners* Windows e macOS **reais e descartáveis** do GitHub e publica o relatório como artefacto; o `agent-compat` corre o `selftest` de Python 3.8 a 3.13 nesses sistemas; (2) **kit** `omxpatch-validation-kit-<versão>.zip` (agente + `validate-windows.ps1` + `validate-macos.sh` + `CHECKLIST-LAB.md` com os casos manuais: registo por IP, descarga proativa, simulação/instalação, IIS TLS, SMBv1/NLA, isolamento com plano B, rotação do certificado, tarefas assinadas, atualização do agente); (3) comando diretamente num equipamento.
+
 ## Fluxo Descoberta → Simulação → Remediação (agente leve, inteligência no servidor)
 
 **Agente leve:** recolhe telemetria só de leitura (inventário, atualizações instaláveis e o *contexto* do ativo: processos, quem escuta em que porta e a partir de onde, serviços, estado da firewall, administradores, SSH/RDP/SMB/UAC, SELinux/Defender) com prioridade baixa e orçamento de tempo (medido: ~25 ms em Linux), e executa as ordens aprovadas. **Todo o processamento pesado** — correlação, simulação, prioridade — corre na consola. Tudo viaja por TLS com o certificado fixado (impressão digital).
