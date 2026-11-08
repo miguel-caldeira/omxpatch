@@ -267,6 +267,32 @@ def integration_edit(kind: str):
     return render_template("admin/integration_form.html", kind=kind, spec=spec, c=c)
 
 
+@bp.route("/integrations/omxvuln/import", methods=["GET", "POST"])
+@login_required
+@roles_required("admin")
+def omxvuln_import():
+    """Importação do OMXVuln em dois passos: simular (nada é gravado) → confirmar."""
+    tenant = require_tenant()
+    report, error = None, None
+    if request.method == "POST":
+        what = request.form.get("what", "both")
+        apply_ = request.form.get("mode") == "apply"
+        if apply_ and not request.form.get("confirm_ok"):
+            flash("Confirme a caixa «OK» para importar.", "danger")
+        else:
+            try:
+                report = omxvuln.sync(tenant, what, dry_run=not apply_)
+                audit("omxvuln_import" if apply_ else "omxvuln_import_simulated", f"{what}: {report.get('new_assets', 0)} ativos novos, {report.get('new_exposures', 0)} exposições novas")
+                db.session.commit()
+                if apply_:
+                    flash("Importação concluída.", "success")
+            except Exception as exc:  # noqa: BLE001 - mostra o erro ao administrador
+                db.session.rollback()
+                error = str(exc)
+    return render_template("admin/omxvuln_import.html", report=report, error=error, what=request.form.get("what", "both"),
+                           configured=cstore.effective(tenant.id, "omxvuln") is not None)
+
+
 @bp.route("/integrations/<kind>/<action>", methods=["POST"])
 @login_required
 @roles_required("admin")

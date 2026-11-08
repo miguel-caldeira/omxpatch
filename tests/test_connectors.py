@@ -284,3 +284,96 @@ def test_connector_key_never_in_db_and_wrong_key_fails_cleanly(app, tenant, monk
     monkeypatch.setenv("OMXPATCH_CONNECTORS_KEY", Fernet.generate_key().decode())
     with pytest.raises(ConnectorError):
         store.get_secrets(c)
+
+
+# ------------------------------------------------------------------ OMXVuln: ativos + simulação da importação
+
+ASSETS = [
+    {"id": "a1", "hostname": "db01.corp", "ip_address": "10.0.1.10", "os": "Ubuntu 22.04", "criticality": "very_high", "tags": ["prod", {"name": "db"}],
+     "owner": "dba@corp", "software": [{"name": "PostgreSQL", "version": "14.2"}]},
+    {"name": "10.0.1.11", "type": "vm", "os_name": "Windows Server 2019", "os_family": "windows"},
+    {"id": "x", "tags": ["sem-nome"]},
+]
+
+
+def _omxvuln_setup(tenant, http, assets=ASSETS, findings=FINDINGS, **opts):
+    store.save(tenant.id, "omxvuln", "https://omxvuln.example", "", {"token": "TK"}, opts, True)
+    db.session.commit()
+    http.routes[("GET", "/api/v1/assets")] = Resp({"items": assets})
+    http.routes[("GET", "/api/v1/findings")] = Resp(findings)
+
+
+def test_omxvuln_asset_record_normalizes_aliases():
+    r = omxvuln.asset_record(ASSETS[0])
+    assert r["uid"] == "db01.corp" and r["ip"] == "10.0.1.10" and r["fqdn"] == "db01.corp" and r["criticality"] == "critical"
+    assert r["tags"] == "prod,db" and r["_software"][0]["name"] == "PostgreSQL" and r["managed"] is False
+    r2 = omxvuln.asset_record(ASSETS[1])
+    assert r2["ip"] == "10.0.1.11" and r2["fqdn"] == "" and r2["os_family"] == "windows" and r2["kind"] == "server"
+    assert omxvuln.asset_record(ASSETS[2]) is None
+
+
+def test_omxvuln_sync_assets_and_findings_and_idempotency(app, tenant, http):
+    _omxvuln_setup(tenant, http)
+    res = omxvuln.sync(tenant, "both")
+    assert res["new_assets"] >= 2 and res["skipped_assets"] == 1 and res["new_exposures"] == 2 and res["software_added"] == 1
+    a = Asset.query.filter_by(uid="db01.corp").one()
+    assert a.criticality == "critical" and a.owner == "dba@corp" and not a.managed and a.cmdb_ref == "omxvuln:a1"
+    assert [s.name for s in a.software] == ["PostgreSQL"]
+    again = omxvuln.sync(tenant, "both")
+    assert again["new_assets"] == 0 and again["new_exposures"] == 0 and again["software_added"] == 0
+
+
+def test_omxvuln_dry_run_writes_nothing(app, tenant, http):
+    _omxvuln_setup(tenant, http)
+    before = (Asset.query.count(), Exposure.query.count(), CveIntel.query.count())
+    res = omxvuln.sync(tenant, "both", dry_run=True)
+    assert res["dry_run"] and res["new_assets"] >= 2 and res["new_exposures"] == 2 and "db01.corp" in res["samples"]["assets"]
+    assert (Asset.query.count(), Exposure.query.count(), CveIntel.query.count()) == before
+    real = omxvuln.sync(tenant, "both")
+    assert real["new_assets"] == res["new_assets"] and real["new_exposures"] == res["new_exposures"]       # a simulação é fiel
+
+
+def test_omxvuln_managed_assets_are_only_completed_not_overwritten(app, tenant, http):
+    a = make_asset(tenant, "db01.corp", software=(), ip="10.9.9.9", os_name="Debian 12", criticality="low")
+    a.managed, a.source = True, "agent"
+    db.session.commit()
+    _omxvuln_setup(tenant, http, findings=[])
+    omxvuln.sync(tenant, "assets")
+    db.session.refresh(a)
+    assert a.ip == "10.9.9.9" and a.os_name == "Debian 12" and a.criticality == "low" and a.managed        # nada sobrescrito
+    assert a.owner == "dba@corp" and "prod" in a.tags                                                       # campos vazios completados
+
+
+def test_omxvuln_assets_fallback_to_targets_and_min_severity(app, tenant, http):
+    _omxvuln_setup(tenant, http, min_severity="critical")
+    http.routes[("GET", "/api/v1/assets")] = Resp({}, 404)
+    http.routes[("GET", "/api/v1/targets")] = Resp([{"id": 1, "value": ["web.corp"]}])
+    res = omxvuln.sync(tenant, "both")
+    assert Asset.query.filter_by(uid="web.corp").count() == 1
+    assert res["new_exposures"] == 1 and Exposure.query.one().cve_id == "CVE-2026-0003"                      # só a crítica
+    http.routes[("GET", "/api/v1/targets")] = Resp({}, 404)
+    with pytest.raises(ConnectorError):
+        omxvuln.sync(tenant, "assets")
+    with pytest.raises(ConnectorError):
+        omxvuln.sync(tenant, "tudo")
+
+
+def test_omxvuln_import_page_and_api(app, tenant, http):
+    from tests.conftest import login_as
+    from tests.test_web import _api_token
+    _omxvuln_setup(tenant, http)
+    admin = login_as(app, "admin@alpha.example")
+    assert admin.get("/integrations/omxvuln/import").status_code == 200
+    r = admin.post("/integrations/omxvuln/import", {"what": "both", "mode": "simulate"})
+    assert r.status_code == 200 and b"nada foi gravado" in r.data and Asset.query.count() == 0
+    admin.post("/integrations/omxvuln/import", {"what": "both", "mode": "apply"})                      # sem OK
+    assert Asset.query.count() == 0
+    admin.post("/integrations/omxvuln/import", {"what": "both", "mode": "apply", "confirm_ok": "1"})
+    assert Asset.query.filter_by(uid="db01.corp").count() == 1 and Exposure.query.count() == 2
+    h = {"Authorization": f"Bearer {_api_token(admin)}"}
+    c = app.test_client()
+    r = c.post("/api/v1/sync/omxvuln", headers=h, json={"what": "assets", "dry_run": True})
+    assert r.status_code == 200 and r.get_json()["dry_run"] and "findings" not in r.get_json()
+    assert c.post("/api/v1/sync/omxvuln", headers=h, json={"what": "x"}).status_code == 409
+    aud = login_as(app, "auditor@alpha.example")
+    assert aud.get("/integrations/omxvuln/import").status_code == 403

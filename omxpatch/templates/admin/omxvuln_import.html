@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Importar do OMXVuln{% endblock %}
+{% block content %}<h1>Importar do OMXVuln</h1>
+{% if not configured %}<div class="panel"><p>O OMXVuln ainda não está configurado.</p><a class="btn" href="{{ url_for('admin.integration_edit', kind='omxvuln') }}">Configurar</a></div>{% else %}
+<form method="post" class="panel">{{ csrf() }}
+<p class="small muted">Recolhe do OMXVuln os <strong>ativos</strong> (nome, IP, SO, criticidade, etiquetas, responsável, software) e as <strong>vulnerabilidades</strong> (CVE, componente, versão instalada e corrigida, KEV/EPSS). Os ativos já geridos por agente só são completados, nunca sobrescritos. Primeiro simule: nada é gravado.</p>
+<div class="row"><div><label for="what">O que importar</label><select id="what" name="what">
+<option value="both" {{ 'selected' if what == 'both' }}>Ativos e vulnerabilidades</option><option value="assets" {{ 'selected' if what == 'assets' }}>Só ativos</option><option value="findings" {{ 'selected' if what == 'findings' }}>Só vulnerabilidades</option></select></div></div>
+{% if report %}<div class="okbox"><strong>{{ 'Simulação (nada foi gravado)' if report.dry_run else 'Importado' }}</strong>
+<table class="table"><tr><th>Item</th><th>Total</th><th>Novos</th><th>Atualizados / outros</th></tr>
+{% if 'assets' in report %}<tr><td>Ativos</td><td>{{ report.assets }}</td><td>{{ report.new_assets }}</td><td>{{ report.updated_assets }} atualizados · {{ report.skipped_assets }} ignorados · {{ report.software_added }} software</td></tr>{% endif %}
+{% if 'findings' in report %}<tr><td>Vulnerabilidades (exposições)</td><td>{{ report.findings }}</td><td>{{ report.new_exposures }}</td><td>{{ report.skipped }} ignoradas · {{ report.closed_upstream }} fechadas no OMXVuln (a validar)</td></tr>{% endif %}</table>
+{% for key, label in (('assets', 'Ativos novos'), ('exposures', 'Exposições novas'), ('closed', 'Fechadas no OMXVuln')) if report.samples.get(key) %}<p class="small"><strong>{{ label }}:</strong> {{ report.samples[key]|join(', ') }}{{ ' …' if report.samples[key]|length >= 12 }}</p>{% endfor %}</div>{% endif %}
+{% if error %}<div class="flash danger">{{ error }}</div>{% endif %}
+<p class="actions"><button class="btn sec" name="mode" value="simulate">Simular importação</button></p>
+{% if report and report.dry_run %}<label class="chk"><input type="checkbox" name="confirm_ok" value="1"> OK — importar agora o que foi simulado</label>
+<p class="actions"><button class="btn" name="mode" value="apply">Importar</button></p>{% endif %}
+</form>{% endif %}{% endblock %}

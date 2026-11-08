@@ -186,8 +186,13 @@ scripts gerados só com valores validados (sem injeção) e entregues com `Cache
 
 **OMXVuln** (API `/api/v1`, token Bearer; `X-Tenant-ID` para super-administradores) — em *Integrações → OMXVuln* ou `[omxvuln]`:
 
-- **entrada:** `GET /findings` → ativos + exposições (CVE, software, versão instalada, versão corrigida, KEV/EPSS); o OMXVuln é a
-  fonte de verdade da deteção. Uma deteção que desaparece do OMXVuln passa a *remediada* e é validada.
+- **entrada — ativos:** `GET /assets` (ou `/targets`; opção `assets_path`) → CMDB do OMXPatch (nome, IP, FQDN, SO, criticidade,
+  etiquetas, responsável, software). Os ativos já geridos por agente só são completados (campos vazios), nunca sobrescritos.
+- **entrada — vulnerabilidades:** `GET /findings` → exposições (CVE, software, versão instalada, versão corrigida, KEV/EPSS; opção
+  `min_severity`); o OMXVuln é a fonte de verdade da deteção.
+- **simular antes de importar:** *Integrações → OMXVuln → Importar ativos e vulnerabilidades* mostra o que seria criado (nada é
+  gravado) e só importa após «OK». API: `POST /api/v1/sync/omxvuln {"what":"assets|findings|both","dry_run":true}`. O worker repete
+  a importação de `OMXVULN_SYNC_MINUTES` em `OMXVULN_SYNC_MINUTES` minutos (ativos incluídos, salvo `sync_assets=false`). Uma deteção que desaparece do OMXVuln passa a *remediada* e é validada.
 - **saída:** após a validação em ciclo fechado, `POST /findings/<id>/status` (*remediada*) e `POST /scans` ao alvo do ativo, para o
   OMXVuln fechar a deteção com verificação independente.
 
@@ -197,6 +202,8 @@ scripts gerados só com valores validados (sem injeção) e entregues com `Cache
 - **pull:** `GET /api/v1/grc/controls` e `GET /api/v1/grc/evidence` neste servidor.
 
 > Os caminhos do OMXGRC são configuráveis porque o contrato exato da API do OMXGRC não foi consultado; ajuste-os se diferirem.
+> O mesmo vale para o OMXVuln: o código do OMXVuln não estava acessível, por isso os nomes dos campos de `/assets` e `/findings` seguem um
+> mapeamento tolerante (vários *aliases*) testado só com respostas simuladas; valide com *Simular importação* numa instância real.
 
 ## API REST
 

@@ -124,7 +124,8 @@ class Worker:
             self._monitor(tenant)
         if effective(tenant.id, "omxvuln") is not None and due(f"job:omxvuln:{tenant.id}", float(cfg["OMXVULN_SYNC_MINUTES"]), now):
             try:
-                omxvuln.pull_findings(tenant)
+                oc = effective(tenant.id, "omxvuln")
+                omxvuln.sync(tenant, "both" if str(oc.opts.get("sync_assets", "true")).lower() in ("1", "true", "yes", "sim") else "findings")
             except (ConnectorError, Exception) as exc:  # noqa: BLE001
                 log.warning("OMXVuln %s: %s", tenant.slug, exc)
                 db.session.rollback()

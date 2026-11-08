@@ -342,10 +342,17 @@ def executive_get():
 @bp.post("/sync/omxvuln")
 @roles_required("admin")
 def sync_omxvuln():
+    """``{"what": "findings"|"assets"|"both", "dry_run": bool}`` — por omissão importa as vulnerabilidades.
+    Com ``dry_run`` devolve o que seria importado sem gravar nada."""
+    d = request.get_json(silent=True) or {}
+    what = d.get("what") or "findings"
     try:
-        return jsonify(omxvuln.pull_findings(require_tenant()))
+        res = omxvuln.sync(require_tenant(), what, bool(d.get("dry_run")))
     except ConnectorError as exc:
         abort(409, description=str(exc))
+    audit("omxvuln_sync", f"API {what}{' (simulação)' if res['dry_run'] else ''}", user=g.api_user)
+    db.session.commit()
+    return jsonify(res)
 
 
 @bp.post("/sync/omxgrc")

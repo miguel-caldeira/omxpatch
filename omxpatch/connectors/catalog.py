@@ -13,7 +13,7 @@ KINDS: dict[str, dict] = {
     # Ferramentas irmãs
     "omxvuln": {"label": "OMXVuln (vulnerabilidades)", "group": "vuln", "auth": "bearer", "url": "https://omxvuln.oramix.local",
                 "secrets": {"token": "Token de API do OMXVuln"},
-                "options": {"tenant_id": "", "push_status": "true", "rescan": "true", "min_status": "open"}},
+                "options": {"tenant_id": "", "push_status": "true", "rescan": "true", "min_status": "open", "sync_assets": "true", "min_severity": "", "assets_path": ""}},
     "omxgrc": {"label": "OMXGRC (governação, risco e conformidade)", "group": "grc", "auth": "bearer", "url": "https://omxgrc.oramix.local",
                "secrets": {"token": "Token de API do OMXGRC"},
                "options": {"evidence_path": "/api/v1/evidence", "metrics_path": "/api/v1/metrics"}},
