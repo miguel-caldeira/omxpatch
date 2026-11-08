@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from "_macros.html" import csrf, st, level, bar with context %}{% block title %}{{ p.patch_uid }}{% endblock %}
+{% extends "base.html" %}{% from "_macros.html" import csrf, st, level, bar, pfbadge with context %}{% block title %}{{ p.patch_uid }}{% endblock %}
 {% block content %}
 <div class="actions"><h1>{{ p.patch_uid }}</h1><span class="spacer"></span>{{ st(p.status, PATCH_STATUSES[p.status]) }} {{ level(intel.level) }}
 {% if current_user.can_write and p.status == 'approved' %}<a class="btn" href="{{ url_for('patching.campaign_new', patch_id=p.id) }}">Criar campanha</a>{% endif %}</div>
@@ -25,4 +25,13 @@
 <div><label for="issues">Incidentes conhecidos (um por linha: título|gravidade)</label><textarea id="issues" name="issues">{% for i in p.known_issues %}{{ i.title }}|{{ i.severity }}
 {% endfor %}</textarea></div><div><label>&nbsp;</label><button class="btn sm">Guardar</button></div></form></details>{% endif %}</div></div>
 <div class="panel"><h2>Campanhas</h2><table>{% for c in camps %}<tr><td><a href="{{ url_for('patching.campaign_detail', campaign_id=c.id) }}">{{ c.name }}</a></td><td>{{ st(c.status, CAMPAIGN_STATUSES[c.status]) }}</td><td>{{ c.created_at|dt }}</td></tr>{% else %}<tr><td class="muted">Sem campanhas.</td></tr>{% endfor %}</table></div>
+<div class="panel" id="simulacao"><div class="actions"><h2>Simulação prévia (sem instalar)</h2><span class="spacer"></span><a class="btn sm sec" href="{{ url_for('patching.preflights') }}">Todas</a></div>
+<p class="small muted">Verifica, em cada ativo, o que aconteceria se este patch fosse instalado agora: aplicabilidade, versões, dependências, assinatura, espaço, reinício e aplicações em utilização. O instalador fica em <i>staging</i> no ativo (SHA-256 verificado) para a instalação real não o descarregar outra vez.</p>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('patching.patch_simulate', patch_id=p.id) }}" class="row">{{ csrf() }}
+<div><label for="sim_cve">Ativos com o CVE em aberto</label><input type="text" id="sim_cve" name="cve_id" value="{{ p.cve_list[0] if p.cve_list else '' }}"></div>
+<div><label for="sim_assets">ou IDs de ativos</label><input type="text" id="sim_assets" name="asset_ids" placeholder="1,2,3"></div>
+<div><label for="sim_tags">ou etiquetas</label><input type="text" id="sim_tags" name="tags" placeholder="lab"></div><div><label>&nbsp;</label><button class="btn">Simular instalação</button></div></form>{% endif %}
+<table class="mt"><tr><th>#</th><th>Ativo</th><th>Resultado</th><th>Versão prevista</th><th>Data</th></tr>
+{% for r in preflights %}{% set pr = r.predicted_data %}<tr><td><a href="{{ url_for('patching.preflight_detail', pf_id=r.id) }}">{{ r.id }}</a></td><td>{{ r.asset.name }}</td><td>{{ pfbadge(r.outcome) }}</td><td class="small">{{ pr.version_before or '?' }} → {{ pr.version_after or '?' }}{{ ' · reinício' if pr.reboot }}</td><td>{{ r.created_at|dt }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">Ainda sem simulações deste patch.</td></tr>{% endfor %}</table></div>
 {% endblock %}

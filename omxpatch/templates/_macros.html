@@ -12,3 +12,5 @@
 {% endmacro %}
 {% macro level(l) %}<span class="badge lvl-{{ l }}">{{ {'go': 'Aplicar', 'caution': 'Cautela', 'hold': 'Não aplicar'}[l] }}</span>{% endmacro %}
 {% macro bar(value, max=100, cls='') %}<progress class="{{ cls }}" value="{{ value or 0 }}" max="{{ max }}"></progress>{% endmacro %}
+{% macro pfbadge(o) %}<span class="badge pf-{{ o }}">{{ PREFLIGHT_OUTCOMES.get(o, o) }}</span>{% endmacro %}
+{% macro chk(s) %}{% if s == 'ok' %}<span class="ok">✔</span>{% elif s == 'block' %}<span class="bad">✘</span>{% elif s == 'warn' %}<span class="warnc">▲</span>{% else %}<span class="muted">ℹ</span>{% endif %}{% endmacro %}

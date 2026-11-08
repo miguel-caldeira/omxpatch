@@ -56,6 +56,9 @@ class FakeAgent:
             elif t["type"] == "validate":
                 self.result(t["id"], {"status": "succeeded", "software": self.software, "full_inventory": True,
                                       "checks": {"patch_installed": validate_ok, "service_restarted": True}, "ports_open": []})
+            elif t["type"] == "simulate":
+                self.result(t["id"], {"status": "succeeded", "checks": [{"id": "applicability", "label": "ok", "status": "ok", "detail": ""}],
+                                      "predicted": {"version_after": "1.1.1w"}})
             elif t["type"] == "control":
                 self.result(t["id"], {"status": "succeeded", "verified": True})
             else:

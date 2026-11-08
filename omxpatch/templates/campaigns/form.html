@@ -12,6 +12,7 @@
 <label class="chk"><input type="checkbox" name="use_rings" value="1" {{ 'checked' if form.get('use_rings') }}> Usar anéis de teste (Ring 0 → Ring 4) com promoção automática</label>
 <label class="chk"><input type="checkbox" name="auto_promote" value="1" {{ 'checked' if form.get('auto_promote') }}> Promover automaticamente quando os critérios do anel forem cumpridos</label>
 <label class="chk"><input type="checkbox" name="respect_windows" value="1" {{ 'checked' if form.get('respect_windows') }}> Respeitar janelas de manutenção</label>
+<label class="chk"><input type="checkbox" name="require_preflight" value="1" {{ 'checked' if form.get('require_preflight') }}> Exigir simulação prévia: só instala nos ativos em que a simulação não bloqueia (bloqueados e já atualizados ficam ignorados com o motivo)</label>
 <label class="chk"><input type="checkbox" name="use_wol" value="1" {{ 'checked' if form.get('use_wol') }}> Wake-on-LAN para ativos desligados</label>
 <label class="chk"><input type="checkbox" name="emergency" value="1"> Emergência (ignora janelas permitidas e o período de observação dos anéis)</label>
 {% if intel.level == 'hold' %}<label class="chk"><input type="checkbox" name="force" value="1"> Aplicar mesmo assim (a Patch Intelligence recomenda não aplicar; decisão registada)</label>{% endif %}

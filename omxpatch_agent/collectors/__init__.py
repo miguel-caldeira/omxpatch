@@ -79,4 +79,9 @@ def collect() -> dict:
     info.update(mod.details())
     info["hardware"] = {**hardware(), **info.get("hardware", {})}
     info["software"] = mod.software()
+    try:
+        from .. import sources
+        info["capabilities"] = sources.capabilities()
+    except Exception:  # noqa: BLE001 - a sonda nunca impede o inventário
+        info["capabilities"] = {}
     return info

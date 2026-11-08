@@ -41,3 +41,40 @@ def apply(p: dict, download) -> dict:
         run(["shutdown", "-r", "+2"], 30)
         out += "\nReinício agendado para daqui a 2 minutos.\n"
     return {"status": "succeeded" if ok else "failed", "output": out, "reboot_pending": reboot}
+
+
+# --------------------------------------------------------------------------- simulação (sem instalar)
+
+
+def simulate(p: dict, stage) -> dict:
+    installer = p.get("installer", "softwareupdate")
+    checks, pred = [], {"installer": installer}
+
+    def add(cid, label, status, detail=""):
+        checks.append({"id": cid, "label": label, "status": status, "detail": detail})
+
+    if installer == "pkg":
+        path = stage(".pkg")
+        add("package", "Pacote no staging (SHA-256 verificado)", "ok", path)
+        r = run(["pkgutil", "--check-signature", path], 60)
+        add("signature", "Assinatura do pacote", "ok" if "signed by a developer certificate" in r.out.lower() or "status: signed" in r.out.lower()
+            else "warn", r.out.strip().splitlines()[0][:120] if r.out.strip() else "")
+    elif installer in ("brew", "ansible") and p.get("package"):
+        pkg = check_pkg(p.get("package") or "")
+        user = _console_user()
+        r = run(["sudo", "-u", user, _brew(), "outdated", "--quiet", pkg], 120)
+        if r.out.strip():
+            add("applicability", "Simulação (brew outdated)", "ok", r.out.strip().splitlines()[0])
+        else:
+            pred["noop"] = True
+            add("applicability", "Simulação (brew outdated)", "info", "Sem atualização disponível")
+    else:
+        label = check_pkg(p.get("package") or p.get("uid") or "")
+        r = run(["softwareupdate", "-l"], 300)
+        if label.lower() in r.out.lower():
+            add("applicability", "Simulação (softwareupdate -l)", "ok", f"{label} disponível")
+            pred["reboot"] = "restart" in r.out.lower()
+        else:
+            pred["noop"] = True
+            add("applicability", "Simulação (softwareupdate -l)", "info", f"{label} não é oferecida a este equipamento")
+    return {"checks": checks, "predicted": pred}

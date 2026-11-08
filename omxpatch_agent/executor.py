@@ -8,7 +8,7 @@ import tempfile
 import time
 from datetime import datetime
 
-from . import bas, collectors, firewall, health
+from . import bas, collectors, firewall, health, preflight, staging
 from .client import Client
 from .config import platform_family
 from .patchers import PatchError, apply as apply_patch
@@ -26,6 +26,9 @@ def _patch(client: Client, task: dict) -> dict:
     def download(suffix: str) -> str:
         if not p.get("has_file"):
             raise PatchError("O patch não tem ficheiro no repositório do servidor")
+        staged = staging.valid_staged(p, suffix)          # já verificado na simulação prévia: não volta a descarregar
+        if staged:
+            return str(staged)
         fd, path = tempfile.mkstemp(prefix="omxpatch-", suffix=suffix)
         os.close(fd)
         tmp.append(path)
@@ -132,11 +135,15 @@ def _wake(client: Client, task: dict) -> dict:
 
 def _inventory(client: Client, task: dict) -> dict:
     info = collectors.collect()
-    return {"status": "succeeded", **{k: info[k] for k in ("software", "hardware", "open_ports", "reboot_pending", "os_name", "os_version", "primary_user", "ip", "mac", "fqdn") if k in info},
+    return {"status": "succeeded", **{k: info[k] for k in ("software", "hardware", "open_ports", "reboot_pending", "os_name", "os_version", "primary_user", "ip", "mac", "fqdn", "capabilities") if k in info},
             "hotfixes": info.get("hotfixes"), "output": f"{len(info['software'])} itens"}
 
 
-HANDLERS = {"patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
+def _simulate(client: Client, task: dict) -> dict:
+    return preflight.run_simulation(client, task["payload"])
+
+
+HANDLERS = {"simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
             "rollback": lambda c, t: {"status": "failed", "output": "Reversão automática não suportada neste agente"}}
 
 

@@ -30,3 +30,15 @@ def apply(payload: dict, download) -> dict:
     else:
         from . import linux as mod
     return mod.apply(payload, download)
+
+
+def simulate(payload: dict, stage) -> dict:
+    """Dry-run por sistema operativo: {checks[], predicted{}} sem alterar o equipamento."""
+    fam = platform_family()
+    if fam == "windows":
+        from . import windows as mod
+    elif fam == "macos":
+        from . import macos as mod
+    else:
+        from . import linux as mod
+    return mod.simulate(payload, stage)

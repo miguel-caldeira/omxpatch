@@ -49,13 +49,14 @@ MATURITY_RANK = {"none": 0, "poc": 1, "functional": 2, "weaponized": 3}
 
 PATCH_STATUSES = {"identified": "Identificado", "downloaded": "Em repositório", "approved": "Aprovado",
                   "rejected": "Rejeitado", "superseded": "Substituído"}
-INSTALLER_TYPES = {"wua": "Windows Update (KB)", "msi": "MSI", "exe": "EXE (silencioso)", "winget": "winget",
+INSTALLER_TYPES = {"wua": "Windows Update / WSUS (KB)", "msi": "MSI", "msp": "Patch MSI (.msp)", "exe": "EXE (silencioso)",
+                   "msu": "MSU (wusa)", "cab": "CAB (DISM)", "choco": "Chocolatey", "office_c2r": "Office Click-to-Run", "winget": "winget",
                    "apt": "apt", "dnf": "dnf/yum", "zypper": "zypper", "brew": "Homebrew", "pkg": "macOS .pkg",
                    "softwareupdate": "macOS softwareupdate", "ansible": "Playbook Ansible"}
 
 CAMPAIGN_STATUSES = {"draft": "Rascunho", "scheduled": "Agendada", "running": "Em execução", "paused": "Em pausa",
                      "completed": "Concluída", "cancelled": "Cancelada", "failed": "Falhou"}
-TASK_TYPES = {"inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
+TASK_TYPES = {"simulate": "Simulação prévia", "inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
               "control": "Controlo compensatório", "rollback": "Reverter patch", "wake": "Wake-on-LAN"}
 TASK_STATUSES = {"pending": "Pendente", "waiting_window": "À espera da janela", "waking": "Wake-on-LAN",
                  "queued": "Em fila", "sent": "Enviada ao agente", "running": "Em execução",
@@ -588,6 +589,7 @@ class Campaign(TimestampMixin, db.Model):
     bandwidth_kbps = db.Column(db.Integer, default=0)
     reboot_policy = db.Column(db.String(10), default="if_needed")  # none | if_needed | force
     emergency = db.Column(db.Boolean, default=False, nullable=False)
+    require_preflight = db.Column(db.Boolean, default=False, nullable=False)   # só instala após simulação prévia sem bloqueios
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     started_at = db.Column(db.DateTime, nullable=True)
     finished_at = db.Column(db.DateTime, nullable=True)
@@ -634,6 +636,36 @@ class Task(TimestampMixin, db.Model):
     @property
     def result_data(self) -> dict:
         return jloads(self.result, {})
+
+
+PREFLIGHT_OUTCOMES = {"pending": "A simular", "ready": "Pronto", "warning": "Pronto, com avisos", "blocked": "Bloqueado",
+                      "noop": "Nada a instalar", "error": "Erro na simulação"}
+
+
+class Preflight(TimestampMixin, db.Model):
+    """Simulação prévia de um patch num ativo: o que aconteceria se fosse instalado agora (sem instalar)."""
+    __tablename__ = "preflights"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    patch_id = db.Column(db.Integer, db.ForeignKey("patches.id"), nullable=False, index=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("assets.id"), nullable=False, index=True)
+    campaign_id = db.Column(db.Integer, nullable=True, index=True)
+    task_id = db.Column(db.Integer, nullable=True)
+    outcome = db.Column(db.String(10), default="pending", nullable=False, index=True)
+    checks = db.Column(db.Text, default="[]")
+    predicted = db.Column(db.Text, default="{}")
+    finished_at = db.Column(db.DateTime, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    patch = db.relationship("Patch")
+    asset = db.relationship("Asset")
+
+    @property
+    def check_list(self) -> list[dict]:
+        return jloads(self.checks, [])
+
+    @property
+    def predicted_data(self) -> dict:
+        return jloads(self.predicted, {})
 
 
 class RingPolicy(db.Model):

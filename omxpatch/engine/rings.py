@@ -97,7 +97,14 @@ def evaluate(campaign: Campaign, tenant: Tenant, ring: int, now=None, final: boo
     if m["ux"] is not None and m["ux"] < pol.min_ux:
         reasons.append(f"Experiência do utilizador {m['ux']} < {pol.min_ux}.")
     if m["done"] == 0:
-        reasons.append("Nenhuma tarefa concluída (todas ignoradas ou canceladas).")
+        blocked = Task.query.filter(Task.campaign_id == campaign.id, Task.type == "patch", Task.ring == ring, Task.status == "skipped",
+                                    Task.output.like("Bloqueado%")).count()
+        if blocked:
+            reasons.append(f"{blocked} ativo(s) bloqueados pela simulação prévia e nenhum instalado: nada foi testado neste anel.")
+        elif m["skipped"] == m["devices"]:
+            return {"decision": "promote", "reasons": ["Todos os ativos já estavam atualizados (nada a instalar)."], "metrics": m, "policy": pol}
+        else:
+            reasons.append("Nenhuma tarefa concluída (todas ignoradas ou canceladas).")
     if reasons:
         return {"decision": "hold", "reasons": reasons, "metrics": m, "policy": pol}
     soak = 0 if (campaign.emergency or final) else pol.soak_hours      # o último anel não tem para onde promover

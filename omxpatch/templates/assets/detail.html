@@ -9,7 +9,8 @@
 <dt>IP / FQDN</dt><dd>{{ asset.ip or '—' }} {{ asset.fqdn }}</dd><dt>MAC</dt><dd>{{ asset.mac or '—' }}</dd>
 <dt>Tipo / origem</dt><dd>{{ ASSET_KINDS.get(asset.kind) }} · {{ ASSET_SOURCES.get(asset.source) }}{% if asset.cloud_provider %} · {{ asset.cloud_provider }} {{ asset.cloud_id }}{% endif %}</dd>
 <dt>Sistema operativo</dt><dd>{{ asset.os_name or OS_FAMILIES.get(asset.os_family, '—') }} {{ asset.os_version }}{% if asset.reboot_pending %} <span class="badge st-waiting_window">reinício pendente</span>{% endif %}</dd>
-<dt>Hardware</dt><dd>{% for k, v in asset.hw.items() if k not in ('hotfixes', 'services') %}<span class="chip">{{ k }}: {{ v }}</span> {% else %}—{% endfor %}</dd>
+<dt>Hardware</dt><dd>{% for k, v in asset.hw.items() if k not in ('hotfixes', 'services', 'capabilities') %}<span class="chip">{{ k }}: {{ v }}</span> {% else %}—{% endfor %}</dd>
+{% set caps = asset.hw.get('capabilities') %}{% if caps and caps.sources %}<dt>Origens de atualização</dt><dd>{% for k, v in caps.sources.items() %}<span class="chip" title="{{ v.detail }}">{{ '✔' if v.available else '✘' }} {{ k }}</span> {% endfor %}</dd>{% endif %}
 <dt>Utilizador / owner</dt><dd>{{ asset.primary_user or '—' }} / {{ asset.owner or '—' }}{% if asset.department %} ({{ asset.department }}){% endif %}</dd>
 <dt>Criticidade / valor</dt><dd>{{ CRITICALITIES.get(asset.criticality) }} · {{ asset.business_value }}/100</dd>
 <dt>Geolocalização</dt><dd>{{ asset.country or '—' }} {{ asset.city }} {% if asset.latitude is not none %}({{ asset.latitude }}, {{ asset.longitude }}){% endif %}</dd>

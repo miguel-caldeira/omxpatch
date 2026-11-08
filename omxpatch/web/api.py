@@ -10,9 +10,9 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from ..connectors import omxgrc, omxvuln, signals as signals_mod, sync
 from ..connectors.store import ConnectorError
-from ..engine import advisor, autonomous, compliance, controls, correlate, deploy, executive, intel, inventory, patches
+from ..engine import advisor, autonomous, compliance, controls, correlate, deploy, executive, intel, inventory, patches, preflight, sources
 from ..extensions import db
-from ..models import (Asset, AutonomousRun, Campaign, ControlAction, CveIntel, EnrollmentToken, Exposure, Patch, Tenant,
+from ..models import (Preflight, Asset, AutonomousRun, Campaign, ControlAction, CveIntel, EnrollmentToken, Exposure, Patch, Tenant,
                       Validation, utcnow)
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
 
@@ -32,7 +32,7 @@ def _asset(a: Asset) -> dict:
             "user": a.primary_user, "owner": a.owner, "criticality": a.criticality, "business_value": a.business_value,
             "geo": {"country": a.country, "city": a.city, "lat": a.latitude, "lon": a.longitude}, "ring": a.ring,
             "tags": a.tag_list, "ports": a.ports, "cloud": {"provider": a.cloud_provider, "id": a.cloud_id},
-            "hardware": a.hw if "hotfixes" not in a.hw else {k: v for k, v in a.hw.items() if k not in ("hotfixes", "services")},
+            "hardware": a.hw if "hotfixes" not in a.hw else {k: v for k, v in a.hw.items() if k not in ("hotfixes", "services", "capabilities")},
             "last_seen": a.last_seen.isoformat(), "cmdb_ref": a.cmdb_ref}
 
 
@@ -210,6 +210,35 @@ def patches_community():
     return jsonify({"updated": patches.import_community(require_tenant().id, items)})
 
 
+@bp.post("/patches/<int:patch_id>/simulate")
+@roles_required("admin", "user")
+def patch_simulate(patch_id: int):
+    """Simulação prévia (sem instalar) nos ativos do âmbito: ``{"scope": {"cve_id"|"asset_ids"|"tags"}}``."""
+    p = get_scoped_or_404(Patch, patch_id)
+    data = request.get_json(silent=True) or {}
+    scope = data.get("scope") or ({"cve_id": p.cve_list[0]} if p.cve_list else {})
+    rows = preflight.simulate_scope(require_tenant(), p, scope, g.api_user)
+    audit("preflight_started", f"API {p.patch_uid}: {len(rows)}", user=g.api_user)
+    db.session.commit()
+    return jsonify([{"id": r.id, "asset_id": r.asset_id, "outcome": r.outcome} for r in rows]), 202
+
+
+@bp.get("/preflights")
+def preflights_list():
+    q = scoped(Preflight)
+    if request.args.get("patch_id", type=int):
+        q = q.filter(Preflight.patch_id == request.args.get("patch_id", type=int))
+    return jsonify([{"id": r.id, "patch": r.patch.patch_uid, "asset_id": r.asset_id, "asset": r.asset.name, "outcome": r.outcome,
+                     "checks": r.check_list, "predicted": r.predicted_data, "finished_at": r.finished_at.isoformat() if r.finished_at else None}
+                    for r in q.order_by(Preflight.id.desc()).limit(500)])
+
+
+@bp.get("/sources")
+def update_sources():
+    wins = scoped(Asset).filter(Asset.os_family == "windows").all()
+    return jsonify({"windows": sources.matrix(wins), "catalog": sources.APP_CATALOG})
+
+
 @bp.post("/campaigns")
 @roles_required("admin", "user")
 def campaign_create():
@@ -220,7 +249,8 @@ def campaign_create():
         c = deploy.create_campaign(tenant, p, data.get("name") or p.patch_uid, data.get("scope") or {}, g.api_user,
                                    use_rings=data.get("use_rings", True), use_wol=bool(data.get("wol")),
                                    bandwidth_kbps=int(data.get("bandwidth_kbps") or 0), emergency=bool(data.get("emergency")),
-                                   reboot_policy=data.get("reboot_policy", "if_needed"), force=bool(data.get("force")))
+                                   reboot_policy=data.get("reboot_policy", "if_needed"), force=bool(data.get("force")),
+                                   require_preflight=bool(data.get("require_preflight")))
     except deploy.PatchBlocked as exc:
         abort(409, description=str(exc))
     audit("campaign_created", f"API #{c.id}", user=g.api_user)

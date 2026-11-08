@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% from "_macros.html" import chk with context %}{% block title %}Origens de atualização{% endblock %}
+{% block content %}<div class="actions"><h1>Origens de atualização (Windows)</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('patching.preflights') }}">Simulações prévias</a></div>
+<p class="muted small">O agente sonda o que realmente funciona em cada equipamento (normalmente como SYSTEM) e só recebe patches cujo instalador seja suportado. A coluna «Disponível» conta os ativos cuja sonda confirmou a origem.</p>
+<div class="panel"><table><tr><th>Origem</th><th>Instaladores</th><th>Disponível</th><th>Notas</th></tr>
+{% for s in matrix %}<tr><td><b>{{ s.label }}</b></td><td>{% for i in s.installers %}<code>{{ i }}</code> {% endfor %}{{ '(ficheiro no repositório)' if s.file }}</td><td class="nowrap">{{ s.available }} / {{ s.known }}{% if s.assets > s.known %} <span class="muted small">({{ s.assets - s.known }} por sondar)</span>{% endif %}</td><td class="small">{{ s.notes }}</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Por equipamento</h2><table><tr><th>Ativo</th><th>Contexto</th>{% for s in matrix %}<th>{{ s.id }}</th>{% endfor %}</tr>
+{% for a in assets %}{% set c = caps[a.id] %}<tr><td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.name }}</a></td><td class="small">{% if c.context %}{{ 'SYSTEM' if c.context.system else ('admin' if c.context.admin else 'utilizador') }}{{ ' · WSUS' if c.context.wsus }}{% else %}<span class="muted">por sondar</span>{% endif %}</td>
+{% for s in matrix %}{% set i = c.sources.get(s.id) if c.sources else None %}<td title="{{ i.detail if i }}">{% if i %}{{ chk('ok' if i.available else 'block') }}{% else %}<span class="muted">?</span>{% endif %}</td>{% endfor %}</tr>
+{% else %}<tr><td colspan="{{ 2 + matrix|length }}" class="muted">Sem ativos Windows.</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Catálogo de aplicações (ponto de partida)</h2><table><tr><th>Aplicação</th><th>winget</th><th>Chocolatey</th><th>Nota</th></tr>
+{% for a in catalog %}<tr><td>{{ a.app }}</td><td><code>{{ a.winget or '—' }}</code></td><td><code>{{ a.choco or '—' }}</code></td><td class="small">{{ a.note }}</td></tr>{% endfor %}</table>
+<p class="small muted">Confirme os identificadores no seu ambiente (<code>winget search</code>, <code>choco search</code>). Registe o patch em Patches com o instalador e o pacote correspondentes.</p></div>{% endblock %}

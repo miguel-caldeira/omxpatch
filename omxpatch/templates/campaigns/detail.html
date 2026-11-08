@@ -9,6 +9,7 @@
 <div class="grid2"><div class="panel"><dl class="kv"><dt>Patch</dt><dd><a href="{{ url_for('patching.patch_detail', patch_id=c.patch_id) }}">{{ c.patch.patch_uid }}</a> {{ level(intel.level) }}</dd>
 <dt>Origem</dt><dd>{{ 'Autónomo (fluxo #' ~ c.run_id ~ ')' if c.origin == 'autonomous' else 'Manual' }}</dd><dt>Âmbito</dt><dd><code class="small">{{ c.scope }}</code></dd>
 <dt>Opções</dt><dd>{{ 'anéis · ' if c.use_rings }}{{ 'janelas · ' if c.respect_windows }}{{ 'Wake-on-LAN · ' if c.use_wol }}{{ 'emergência · ' if c.emergency }}{{ 'banda ' ~ c.bandwidth_kbps ~ ' kbit/s · ' if c.bandwidth_kbps }}reinício: {{ c.reboot_policy }}</dd>
+<dt>Simulação prévia</dt><dd>{% if c.require_preflight %}exigida — {% for k, n in pf.items() if n %}<span class="chip">{{ PREFLIGHT_OUTCOMES[k] }}: {{ n }}</span> {% else %}ainda sem resultados{% endfor %}<a class="small" href="{{ url_for('patching.preflights') }}">ver</a>{% else %}não exigida{% endif %}</dd>
 <dt>Início / fim</dt><dd>{{ c.started_at|dt }} / {{ c.finished_at|dt }}</dd></dl></div>
 <div class="panel"><h2>Progresso</h2>{{ bar(summary.progress) }} {{ summary.progress }} %<p class="small muted">{% for k, n in summary.by_status.items() %}<span class="chip">{{ TASK_STATUSES.get(k, k) }}: {{ n }}</span> {% endfor %}</p></div></div>
 <div class="panel"><h2>Anéis de teste</h2>

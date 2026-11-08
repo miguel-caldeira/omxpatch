@@ -233,7 +233,7 @@ def _test(run, tenant, now):
             try:
                 c = deploy.create_campaign(tenant, p, f"[Autónomo] {run.cve_id} — {p.patch_uid}",
                                            {"cve_id": run.cve_id}, origin="autonomous", run_id=run.id,
-                                           emergency=emergency, force=bool(d.get("approved")))
+                                           emergency=emergency, force=bool(d.get("approved")), require_preflight=True)
                 cids.append(c.id)
             except deploy.PatchBlocked as exc:
                 _log(run, f"Campanha não criada para {p.patch_uid}: {exc}")

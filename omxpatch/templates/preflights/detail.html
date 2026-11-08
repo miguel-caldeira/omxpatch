@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, pfbadge, chk with context %}{% block title %}Simulação #{{ pf.id }}{% endblock %}
+{% block content %}{% set pr = pf.predicted_data %}
+<div class="actions"><h1>Simulação #{{ pf.id }} — {{ pf.patch.patch_uid }} em {{ pf.asset.name }}</h1><span class="spacer"></span>{{ pfbadge(pf.outcome) }}
+{% if current_user.can_write %}<form method="post" action="{{ url_for('patching.preflight_rerun', pf_id=pf.id) }}" class="inline">{{ csrf() }}<button class="btn sec">Simular de novo</button></form>{% endif %}</div>
+<div class="grid2"><div class="panel"><h2>Verificações</h2><table><tr><th></th><th>Verificação</th><th>Detalhe</th></tr>
+{% for c in pf.check_list %}<tr><td>{{ chk(c.status) }}</td><td>{{ c.label }}</td><td class="small wrap">{{ c.detail }}</td></tr>{% else %}<tr><td colspan="3" class="muted">{{ 'A aguardar o agente…' if pf.outcome == 'pending' else 'Sem verificações.' }}</td></tr>{% endfor %}</table>
+<p class="small muted">✔ ok · ℹ informação · ▲ aviso (pode avançar) · ✘ bloqueio (a campanha não instala neste ativo).</p></div>
+<div class="panel"><h2>O que seria feito</h2><dl class="kv"><dt>Instalador</dt><dd>{{ INSTALLER_TYPES.get(pr.installer, pr.installer or '—') }}</dd>
+<dt>Versão</dt><dd>{{ pr.version_before or '?' }} → {{ pr.version_after or '?' }}</dd><dt>Transferência</dt><dd>{{ (pr.download_mb ~ ' MB') if pr.download_mb else '—' }}{{ ' (já descarregado)' if pr.already_downloaded }}</dd>
+<dt>Reinício</dt><dd>{{ 'previsto' if pr.reboot else 'não previsto' }}</dd><dt>Outros pacotes</dt><dd>{{ pr.changes|join(', ') if pr.changes else '—' }}</dd>
+<dt>Nada a instalar</dt><dd>{{ 'sim — já aplicado ou não aplicável' if pr.noop else 'não' }}</dd><dt>Concluída</dt><dd>{{ pf.finished_at|dt }}</dd></dl>
+{% if pf.campaign_id %}<p><a href="{{ url_for('patching.campaign_detail', campaign_id=pf.campaign_id) }}">Campanha #{{ pf.campaign_id }}</a></p>{% endif %}</div></div>{% endblock %}

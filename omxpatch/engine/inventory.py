@@ -153,6 +153,8 @@ def ingest_inventory(tenant: Tenant, asset: Asset, report: dict) -> dict:
         hw["hotfixes"] = report["hotfixes"][:2000]        # KB instalados (Windows)
     if report.get("services"):
         hw["services"] = report["services"][:500]
+    if report.get("capabilities"):
+        hw["capabilities"] = report["capabilities"]          # origens de atualização utilizáveis (agente)
     if hw:
         data["hardware"] = hw
     data["uid"] = asset.uid

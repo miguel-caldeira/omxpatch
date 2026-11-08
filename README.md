@@ -41,6 +41,32 @@ agente, mitigação, descoberta).
 | 14 | **Threat Exposure Simulation (BAS)** — ransomware, movimento lateral, roubo de credenciais, cadeias de exploração, antes/depois da correção | `engine/simulation.py`, agente `bas.py` |
 | 15 | **Autonomous Remediation** — novo CVE → … → fecho, CMDB e reporte executivo (modos *aconselhar* e *autónomo*) | `engine/autonomous.py` |
 
+### Atualizações no Windows: origens suportadas e simulação prévia
+
+O agente **sonda** o que realmente funciona em cada equipamento (normalmente como SYSTEM) e envia-o no inventário; o servidor só encaminha
+um patch para um ativo cujo instalador seja suportado (página **Origens e simulações**).
+
+| Origem | Instalador | Notas |
+|---|---|---|
+| Windows Update / WSUS / Microsoft Update | `wua` (por KB) | API WUA; respeita a política WSUS do equipamento |
+| winget | `winget` | no contexto SYSTEM o agente localiza o `winget.exe` em *WindowsApps*; alguns pacotes só instalam por utilizador |
+| Chocolatey | `choco` | só se estiver instalado |
+| MSI / patch MSI | `msi`, `msp` | ficheiro do repositório (SHA-256); códigos 0 / 3010 / 1641 / 1638 tratados |
+| EXE silencioso | `exe` | exige os argumentos do fabricante (`silent_args`, validados) |
+| MSU / CAB | `msu` (wusa), `cab` (DISM) | pacotes do Microsoft Update Catalog |
+| Office / Microsoft 365 | `office_c2r` | `OfficeC2RClient.exe /update` |
+
+Linux (apt, dnf/yum, zypper) e macOS (softwareupdate, brew, pkg) seguem o mesmo modelo. O catálogo de aplicações habituais (Chrome, Edge, Firefox,
+Java, Zoom, Teams, Acrobat, OpenSSL, Office, SAP GUI) é um ponto de partida: confirme os identificadores no seu ambiente.
+
+**Simulação prévia (pré-voo)** — em *Patches → Simulação prévia* (ou `POST /api/v1/patches/<id>/simulate`) o agente verifica, **sem instalar**, o que
+aconteceria: aplicabilidade (WUA: pesquisa sem descarregar; `winget list --upgrade-available`; `choco outdated`; `apt-get -s`; `dnf check-update`;
+`zypper --dry-run`; `softwareupdate -l`), versões antes/depois, outros pacotes afetados e remoções, assinatura Authenticode/pkg, propriedades do MSI,
+privilégios, espaço em disco, reinício pendente e previsto, aplicação em utilização e saúde do sistema. O instalador fica em *staging* (SHA-256
+verificado) e a instalação real reutiliza-o. Resultado por ativo: **pronto**, **com avisos**, **bloqueado**, **nada a instalar** ou **erro**.
+Uma campanha com *Exigir simulação prévia* (sempre ativa no modo autónomo) só instala nos ativos aprovados; os bloqueados e os já atualizados ficam
+ignorados com o motivo, e um anel em que todos ficam bloqueados fica em pausa.
+
 ### Risco dinâmico (Módulo 4)
 
 | Fator | Máx. | Regra |
@@ -212,6 +238,7 @@ e os playbooks (`--syntax-check` de todos e execução real de inventário/valid
 
 - **Testado:** servidor, motores, API, interface, agente em **Linux** (inventário real, firewall com comandos simulados), e os 17
   playbooks Ansible (sintaxe; inventário e validação executados de verdade).
+- **Windows:** a sonda de origens, os comandos de cada instalador, os códigos de saída e a simulação foram testados com saídas simuladas (formatos de winget, choco, WUA e apt escritos de memória); nunca correram num Windows real. No Linux a simulação correu de verdade (`apt-get -s`).
 - **Não testado em sistemas reais:** os caminhos Windows e macOS do agente (registo, WUA/winget/MSI, softwareupdate/brew/pkg, netsh/pf,
   tarefa agendada/LaunchDaemon) e os playbooks Windows/macOS foram escritos e verificados quanto à sintaxe, mas nunca executados
   nesses sistemas; teste-os num anel de laboratório antes de os usar.

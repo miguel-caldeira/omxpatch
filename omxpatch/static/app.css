@@ -200,3 +200,5 @@ svg.trend-chart text.axis{font-size:6px}svg.trend-chart{max-height:240px}
 header.top .logo .mark{color:var(--header-fg,#fff)}header.top .logo .mark b{color:var(--logo-accent,var(--accent,#ff8000));font-weight:700}
 .login .logo{background:var(--header-bg,#172c6c);color:#fff;border-radius:8px;padding:14px 10px;font-size:30px;font-weight:700;text-align:center;margin-bottom:20px}
 .login .logo b{color:#ff8000}
+.pf-ready,.pf-noop{background:var(--ok)}.pf-warning{background:var(--warn)}.pf-blocked,.pf-error{background:var(--err)}.pf-pending{background:#868e96}
+.noop{background:#6b7a90}.warnc{color:var(--warn);font-weight:700}

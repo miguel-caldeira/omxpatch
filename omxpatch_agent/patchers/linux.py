@@ -54,3 +54,75 @@ def apply(p: dict, download) -> dict:
         out += "\nReinício agendado para daqui a 2 minutos.\n"
     return {"status": "succeeded" if ok else "failed", "output": out, "installed_version": after, "previous_version": before,
             "reboot_pending": reboot}
+
+
+# --------------------------------------------------------------------------- simulação (sem instalar)
+REBOOT_HINT = ("linux-image", "kernel", "glibc", "libc6", "systemd", "openssl", "libssl", "dbus", "linux-firmware")
+
+
+def parse_apt_sim(text: str, pkg: str) -> dict:
+    """Saída de ``apt-get -s install --only-upgrade``: linhas ``Inst nome [antiga] (nova origem…)`` e ``Remv``."""
+    import re
+    out = {"target": None, "others": [], "removed": []}
+    for line in text.splitlines():
+        m = re.match(r"^Inst (\S+)(?: \[([^\]]+)\])? \(([^ )]+)", line)
+        if m:
+            name, old, new = m.groups()
+            if name == pkg:
+                out["target"] = {"old": old, "new": new}
+            else:
+                out["others"].append(name)
+        elif line.startswith("Remv "):
+            out["removed"].append(line.split()[1])
+    return out
+
+
+def simulate(p: dict, stage) -> dict:
+    pkg = check_pkg(p.get("package") or "")
+    mgr = _manager()
+    checks, pred = [], {"installer": p.get("installer"), "version_before": installed_version(pkg) or None}
+
+    def add(cid, label, status, detail=""):
+        checks.append({"id": cid, "label": label, "status": status, "detail": detail})
+
+    if not pred["version_before"]:
+        pred["noop"] = True
+        add("applicability", "Pacote instalado", "info", f"{pkg} não está instalado neste equipamento")
+    elif mgr == "apt-get":
+        r = run(["apt-get", "-s", "install", "--only-upgrade", pkg], 300, env=APT_ENV)
+        d = parse_apt_sim(r.out, pkg)
+        if not r.ok:
+            add("applicability", "Simulação (apt-get -s)", "block", r.out.strip()[-200:])
+        elif d["target"] is None:
+            pred["noop"] = True
+            add("applicability", "Simulação (apt-get -s)", "info", "Já está na versão mais recente disponível nos repositórios configurados")
+        else:
+            pred["version_after"] = d["target"]["new"]
+            pred["changes"] = d["others"]
+            add("applicability", "Simulação (apt-get -s)", "ok", f"{d['target']['old']} → {d['target']['new']}")
+            if d["others"]:
+                add("dependencies", "Outros pacotes afetados", "info", f"{len(d['others'])}: " + ", ".join(d["others"][:8]))
+            if d["removed"]:
+                add("removals", "Remoção de pacotes", "block", "A atualização removeria: " + ", ".join(d["removed"][:8]))
+    elif mgr in ("dnf", "yum"):
+        r = run([mgr, "-q", "check-update", pkg], 300)
+        if r.rc == 100:
+            line = next((l.split() for l in r.out.splitlines() if l.split() and l.split()[0].split(".")[0] == pkg), [])
+            pred["version_after"] = line[1] if len(line) > 1 else None
+            add("applicability", f"Simulação ({mgr} check-update)", "ok", f"{pred['version_before']} → {pred['version_after'] or '?'}")
+        elif r.rc == 0:
+            pred["noop"] = True
+            add("applicability", f"Simulação ({mgr} check-update)", "info", "Já está na versão mais recente")
+        else:
+            add("applicability", f"Simulação ({mgr} check-update)", "block", r.out.strip()[-200:])
+    else:
+        r = run(["zypper", "--non-interactive", "--quiet", "update", "--dry-run", pkg], 300)
+        if not r.ok:
+            add("applicability", "Simulação (zypper --dry-run)", "block", r.out.strip()[-200:])
+        elif "nothing to do" in r.out.lower() or not r.out.strip():
+            pred["noop"] = True
+            add("applicability", "Simulação (zypper --dry-run)", "info", "Nada a atualizar")
+        else:
+            add("applicability", "Simulação (zypper --dry-run)", "ok", r.out.strip().splitlines()[-1][:160])
+    pred["reboot"] = any(h in pkg.lower() for h in REBOOT_HINT)
+    return {"checks": checks, "predicted": pred}

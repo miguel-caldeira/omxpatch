@@ -6,9 +6,10 @@ import json
 from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import login_required
 
-from ..engine import deploy, patches, rings
+from ..engine import deploy, patches, preflight, rings, sources
 from ..extensions import db
-from ..models import (RINGS, Asset, Campaign, CveIntel, Exposure, MaintenanceWindow, Patch, RingPolicy, Task, utcnow)
+from ..models import (PREFLIGHT_OUTCOMES, RINGS, Asset, Campaign, CveIntel, Exposure, MaintenanceWindow, Patch, Preflight, RingPolicy, Task,
+                      utcnow)
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
 from .common import parse_date, tenant_or_select
 
@@ -70,7 +71,8 @@ def patch_detail(patch_id: int):
     affected = (Exposure.query.filter_by(tenant_id=p.tenant_id, patch_id=p.id)
                 .filter(Exposure.status.in_(("open", "mitigated", "patching", "remediated"))).count())
     camps = Campaign.query.filter_by(tenant_id=p.tenant_id, patch_id=p.id).order_by(Campaign.id.desc()).all()
-    return render_template("patches/detail.html", p=p, intel=patches.intelligence(p), affected=affected, camps=camps)
+    pfs = (Preflight.query.filter_by(tenant_id=p.tenant_id, patch_id=p.id).order_by(Preflight.id.desc()).limit(30).all())
+    return render_template("patches/detail.html", p=p, intel=patches.intelligence(p), affected=affected, camps=camps, preflights=pfs)
 
 
 @bp.route("/patches/identify", methods=["POST"])
@@ -206,14 +208,14 @@ def campaign_new():
                 use_rings=bool(f.get("use_rings")), start_at=parse_date(f.get("start_at", "")), use_wol=bool(f.get("use_wol")),
                 bandwidth_kbps=int(f.get("bandwidth_kbps") or 0), reboot_policy=f.get("reboot_policy", "if_needed"),
                 emergency=bool(f.get("emergency")), force=bool(f.get("force")), auto_promote=bool(f.get("auto_promote")),
-                respect_windows=bool(f.get("respect_windows")))
+                respect_windows=bool(f.get("respect_windows")), require_preflight=bool(f.get("require_preflight")))
         except deploy.PatchBlocked as exc:
             flash(str(exc), "danger")
             return render_template("campaigns/form.html", patch=patch, form=f, intel=patches.intelligence(patch)), 400
         audit("campaign_created", f"#{c.id} {patch.patch_uid}")
         db.session.commit()
         return redirect(url_for("patching.campaign_detail", campaign_id=c.id))
-    form = {"use_rings": "1", "auto_promote": "1", "respect_windows": "1", "reboot_policy": "if_needed",
+    form = {"use_rings": "1", "auto_promote": "1", "respect_windows": "1", "require_preflight": "1", "reboot_policy": "if_needed",
             "cve_id": (patch.cve_list or [""])[0]}
     return render_template("campaigns/form.html", patch=patch, form=form, intel=patches.intelligence(patch))
 
@@ -233,7 +235,7 @@ def campaign_detail(campaign_id: int):
     for r in sorted({t.ring for t in tasks} | {int(k) for k in c.rings_state}):
         ring_info.append({"ring": r, "state": c.rings_state.get(str(r), {}), "metrics": rings.metrics(c, r), "policy": rings.policy(tenant, r)})
     return render_template("campaigns/detail.html", c=c, tasks=tasks, ring_info=ring_info, summary=deploy.campaign_summary(c),
-                           intel=patches.intelligence(c.patch))
+                           intel=patches.intelligence(c.patch), pf=preflight.summary(c.id))
 
 
 @bp.route("/campaigns/<int:campaign_id>/<action>", methods=["POST"])
@@ -370,3 +372,72 @@ def asset_ring(asset_id: int):
         audit("asset_ring", f"{a.name} → {ring}")
         db.session.commit()
     return redirect(url_for("main.asset_detail", asset_id=a.id))
+
+
+# --------------------------------------------------------------------------- simulação prévia e origens de atualização
+
+
+@bp.route("/patches/<int:patch_id>/simulate", methods=["POST"])
+@login_required
+@roles_required("admin", "user")
+def patch_simulate(patch_id: int):
+    """Simula a instalação (sem instalar) nos ativos do âmbito: por CVE, etiquetas, SO ou IDs de ativos."""
+    p = get_scoped_or_404(Patch, patch_id)
+    tenant = require_tenant()
+    f = request.form
+    scope: dict = {}
+    if f.get("cve_id"):
+        scope["cve_id"] = f["cve_id"].strip().upper()
+    if f.get("asset_ids"):
+        scope["asset_ids"] = [int(i) for i in f["asset_ids"].replace(" ", "").split(",") if i.isdigit()]
+    if f.get("tags"):
+        scope["tags"] = [t.strip() for t in f["tags"].split(",") if t.strip()]
+    if not scope and p.cve_list:
+        scope["cve_id"] = p.cve_list[0]
+    rows = preflight.simulate_scope(tenant, p, scope, _user())
+    if not rows:
+        flash("Nenhum ativo em âmbito para simular.", "warning")
+    else:
+        audit("preflight_started", f"{p.patch_uid}: {len(rows)} ativo(s)")
+        flash(f"Simulação prévia pedida para {len(rows)} ativo(s): o agente responde no próximo contacto.", "info")
+    db.session.commit()
+    return redirect(url_for("patching.patch_detail", patch_id=p.id) + "#simulacao")
+
+
+@bp.route("/preflights")
+@login_required
+def preflights():
+    if (r := tenant_or_select()) is not None:
+        return r
+    q = scoped(Preflight)
+    if request.args.get("outcome"):
+        q = q.filter(Preflight.outcome == request.args["outcome"])
+    pag = q.order_by(Preflight.id.desc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False)
+    return render_template("preflights/list.html", pag=pag)
+
+
+@bp.route("/preflights/<int:pf_id>")
+@login_required
+def preflight_detail(pf_id: int):
+    return render_template("preflights/detail.html", pf=get_scoped_or_404(Preflight, pf_id))
+
+
+@bp.route("/preflights/<int:pf_id>/rerun", methods=["POST"])
+@login_required
+@roles_required("admin", "user")
+def preflight_rerun(pf_id: int):
+    old = get_scoped_or_404(Preflight, pf_id)
+    new = preflight.start(require_tenant(), old.patch, old.asset, _user())
+    audit("preflight_rerun", f"{old.patch.patch_uid} em {old.asset.name}")
+    db.session.commit()
+    return redirect(url_for("patching.preflight_detail", pf_id=new.id))
+
+
+@bp.route("/sources")
+@login_required
+def update_sources():
+    if (r := tenant_or_select()) is not None:
+        return r
+    assets = scoped(Asset).filter(Asset.os_family == "windows").order_by(Asset.name).all()
+    return render_template("sources/index.html", matrix=sources.matrix(assets), catalog=sources.APP_CATALOG, assets=assets,
+                           caps={a.id: sources.capabilities_of(a) for a in assets})
