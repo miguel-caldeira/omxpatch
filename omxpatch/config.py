@@ -32,6 +32,11 @@ DEFAULTS: dict[str, object] = {
     "AGENT_SERVER_IP": "",             # IP do servidor: os scripts de instalação acrescentam-no ao ficheiro hosts dos postos
     "AGENT_BASE_URL": "",
     "AGENT_ADDRESS_MODE": "name",      # name = os agentes usam o nome (DNS/hosts); ip = só o IP do servidor + thumbprint do certificado
+    "UPDATES_SCAN_HOURS": 6,           # periodicidade da descoberta de atualizações nos agentes
+    "UPDATES_AUTO_DOWNLOAD": True,     # descarregar proativamente para o repositório do servidor
+    "UPDATES_DOWNLOAD_PER_TICK": 3, "UPDATES_MAX_DOWNLOAD_MB": 1024,
+    "UPDATES_ALLOW_UNHASHED": False,   # só descarrega com SHA-256 anunciado pela origem (assinada)
+    "UPDATES_ALLOW_HTTP_WITH_HASH": True,   # repositórios apt usam http: o SHA-256 do índice assinado garante a integridade
     "BACKUP_ENABLED": True, "BACKUP_HOURS": 24, "BACKUP_KEEP": 7, "BACKUP_DIR": "",   # cópia diária; 0 cópias a manter = não apagar
     "AUDIT_RETENTION_DAYS": 0, "TASK_RETENTION_DAYS": 0,                     # retenção (0 = guardar sempre)
     "RATE_ENROLL_PER_MIN": 120,       # registos/transferências do pacote por IP e minuto (0 = sem limite)

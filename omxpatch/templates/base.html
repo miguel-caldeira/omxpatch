@@ -22,6 +22,7 @@
     <a href="{{ url_for('main.signals_page') }}" class="{{ 'active' if 'signal' in ep }}">Sinais</a>
     <a href="{{ url_for('patching.patches_list') }}" class="{{ 'active' if ep.startswith('patching.patch') }}">Patches</a>
     <a href="{{ url_for('patching.update_sources') }}" class="{{ 'active' if ep in ('patching.update_sources',) or 'preflight' in ep }}">Origens e simulações</a>
+    <a href="{{ url_for('updates.updates_list') }}" class="{{ 'active' if ep.startswith('updates.') }}">Atualizações</a>
     <a href="{{ url_for('plans.plans_list') }}" class="{{ 'active' if ep.startswith('plans.') }}">Operações e boas práticas</a>
     <a href="{{ url_for('patching.campaigns') }}" class="{{ 'active' if 'campaign' in ep or 'task' in ep }}">Campanhas</a>
     <a href="{{ url_for('patching.rings_page') }}" class="{{ 'active' if ep in ('patching.rings_page','patching.windows') }}">Anéis e janelas</a>

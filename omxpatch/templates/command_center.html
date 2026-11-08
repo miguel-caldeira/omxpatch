@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% from "_macros.html" import risk, csrf with context %}{% from "_charts.html" import donut, gauge, funnel, stack, pbar %}
 {% block title %}Centro de comando{% endblock %}
 {% macro quick(kind, id, label, nxt='back', cls='sm') %}{% if current_user.can_write %}<form method="post" action="{{ url_for('main.command_quick') }}" class="inline">{{ csrf() }}<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="id" value="{{ id }}"><input type="hidden" name="next" value="{{ nxt }}"><button class="btn {{ cls }}">{{ label }}</button></form>{% endif %}{% endmacro %}
+{% macro quick_scan() %}{% if current_user.can_write %}<form method="post" action="{{ url_for('updates.scan_now') }}" class="inline">{{ csrf() }}<button class="btn sm sec">Descobrir agora</button></form>{% endif %}{% endmacro %}
 {% block content %}{% set k = o.k %}
 <div class="actions"><h1>Centro de comando — {{ tenant.name }}</h1><span class="spacer"></span>
 <a class="btn sec" href="{{ url_for('main.executive_page') }}">Painel executivo</a>
@@ -11,7 +12,7 @@
 <p class="muted small">Ativo → Exposição → Risco → <strong>Simular</strong> → <strong>OK</strong> → Remediar → Validar. As ações rápidas só criam o plano e pedem a simulação: nada é aplicado sem o seu OK.</p>
 
 {% if o.actions %}<div class="panel actions-q"><h2>Ações recomendadas</h2><ul class="aq">{% for a in o.actions %}<li class="aq-{{ a.level }}"><span class="aq-t">{{ a.text }}</span>
-{% if a.kind == 'patch' %}{{ quick('patch', a.id, a.cta, 'plan') }}{% elif a.kind == 'tls' %}{{ quick('tls', 0, a.cta, 'plan') }}
+{% if a.kind == 'patch' %}{{ quick('patch', a.id, a.cta, 'plan') }}{% elif a.kind == 'scan' %}{% if current_user.can_write %}<form method="post" action="{{ url_for('updates.scan_now') }}" class="inline">{{ csrf() }}<button class="btn sm">{{ a.cta }}</button></form>{% endif %}{% elif a.kind == 'tls' %}{{ quick('tls', 0, a.cta, 'plan') }}
 {% elif a.kind == 'link' and a.plan_id %}<a class="btn sm" href="{{ url_for('plans.plan_detail', plan_id=a.plan_id) }}">{{ a.cta }}</a>
 {% elif a.kind == 'url' %}<a class="btn sm sec" href="{{ url_for(a.url) }}">{{ a.cta }}</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
 
@@ -51,6 +52,12 @@
 {% for r in o.practices.rows %}<div class="row-line"><span class="small rl-name" title="{{ r.label }}">{{ r.label.split(" (")[0] }}</span><span class="small muted rl-n">{{ r.done }}/{{ r.total }}</span>{{ pbar(r.done, r.total, 'pb-ok') }}</div>{% endfor %}
 {{ quick('tls', 0, 'Simular TLS 1.2/1.3 nos servidores em falta', 'plan') }}{% else %}<p class="muted small">Nenhum servidor web detetado nos inventários dos agentes.</p>{% endif %}</div>
 </div>
+
+<div class="panel mt"><h2>Atualizações descobertas nos ativos</h2>{% set up = o.updates %}
+<div class="chips"><span class="chip"><b>{{ up.pending }}</b> pendentes em {{ up.assets }} ativo(s)</span><span class="chip"><b>{{ up.security }}</b> de segurança</span><span class="chip up-downloaded"><b>{{ up.downloaded }}</b> já no servidor ({{ '%.0f'|format(up.repo_bytes / 1048576) }} MB)</span>
+<span class="chip"><b>{{ up.by_status.get('not_downloadable', 0) }}</b> usam a origem do SO</span><span class="chip {{ 'up-failed' if up.by_status.get('failed') }}"><b>{{ up.by_status.get('failed', 0) }}</b> falhadas</span><span class="chip"><b>{{ up.scanned }}/{{ up.agents }}</b> agentes com descoberta{% if up.last_received %} · última {{ up.last_received|dt }}{% endif %}</span></div>
+<p class="actions"><a class="btn sm" href="{{ url_for('updates.updates_list') }}">Ver e simular</a> <a class="btn sm sec" href="{{ url_for('updates.scans_list') }}">Histórico de descobertas</a>
+{{ quick_scan() }}</p></div>
 
 <div class="grid3 mt">
 <div class="panel"><h2>Frota</h2>{% for os, row in o.fleet.by_os.items() %}<div class="row-line"><span class="small rl-name">{{ os|capitalize }} <b>{{ row.agent + row.ansible + row.none }}</b></span>{{ stack(row, 200) }}</div>{% endfor %}

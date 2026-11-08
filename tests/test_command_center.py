@@ -40,7 +40,7 @@ def test_overview_consolidates_every_area(app, tenant, world):
     assert o["practices"]["webservers"] == 1 and o["practices"]["servers"] == {"nginx": 1}
     assert any(a["kind"] == "patch" and a["level"] == "critical" for a in o["actions"])                    # KEV sem simulação
     assert any(a["kind"] == "tls" for a in o["actions"])
-    assert [n for n, _ in o["funnel"]][0] == "Exposições abertas" and len(o["funnel"]) == 7
+    assert [n for n, _ in o["funnel"]][0] == "Atualizações descobertas" and len(o["funnel"]) == 9
     assert {c["key"] for c in o["compliance"]} >= {"nis2", "iso27001", "dora"} and all(0 <= c["pct"] <= 100 for c in o["compliance"])
     assert o["health"]["connectors"][0]["label"] == "OMXVuln" and "system" not in o["health"]                # sistema: só super-administrador
     su = User.query.filter_by(email="root@omx.example").one()

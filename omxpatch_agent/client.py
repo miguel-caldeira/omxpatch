@@ -190,6 +190,12 @@ class Client:
             raise ServerError(f"HTTP {r.status_code}")
         return r.body, r.headers.get("x-content-sha256", "")
 
+    def updates(self, report: dict) -> dict:
+        """Envia a descoberta de atualizações; devolve a confirmação da consola (``ok``, ``received``)."""
+        r = self._req("POST", "/agent/v1/updates", json=report, timeout=300)
+        r.raise_for_status()
+        return r.json()
+
     def inventory(self, report: dict) -> dict:
         r = self._req("POST", "/agent/v1/inventory", json=report, timeout=300)
         r.raise_for_status()

@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block title %}{{ u.kb or u.name }}{% endblock %}
+{% block content %}<h1>{{ u.kb or u.name }} <span class="small muted">{{ u.title }}</span></h1><p class="actions"><a class="btn sec" href="{{ url_for('updates.updates_list') }}">Atualizações</a>{% if u.patch_id %} <a class="btn sec" href="{{ url_for('patching.patch_detail', patch_id=u.patch_id) }}">Patch no repositório</a>{% endif %}</p>
+<div class="grid2"><div class="panel"><h2>Atualização</h2><dl class="kv"><dt>Ativo</dt><dd><a href="{{ url_for('main.asset_detail', asset_id=u.asset_id) }}">{{ u.asset.name }}</a></dd>
+<dt>Origem / instalador</dt><dd>{{ u.source }} / {{ u.installer or '—' }}</dd><dt>Pacote</dt><dd>{{ u.package or u.name }}</dd><dt>Versões</dt><dd>{{ u.current_version or '—' }} → {{ u.new_version or '—' }}</dd>
+<dt>Severidade / categoria</dt><dd>{{ u.severity }} / {{ u.category }}</dd><dt>CVE</dt><dd>{{ u.cve_list|join(', ') or '—' }}</dd><dt>Reinício</dt><dd>{{ 'possível' if u.reboot else 'não' }}</dd>
+<dt>Descoberta</dt><dd>{{ u.first_seen|dt }} (vista {{ u.last_seen|dt }})</dd></dl></div>
+<div class="panel"><h2>Transferência para o servidor</h2><dl class="kv"><dt>Estado</dt><dd>{{ statuses.get(u.status, u.status) }}</dd><dt>Detalhe</dt><dd>{{ u.detail or '—' }}</dd>
+<dt>URL da origem</dt><dd class="small wrap">{{ u.download_url or '—' }}</dd><dt>SHA-256 anunciado</dt><dd class="small wrap">{{ u.sha256 or '—' }}</dd><dt>Tamanho</dt><dd>{{ '%.1f'|format(u.size_bytes / 1048576) if u.size_bytes else '—' }} MB</dd>
+<dt>Ficheiro no repositório</dt><dd>{{ u.patch.local_file if u.patch and u.patch.local_file else '—' }}</dd></dl></div></div>
+<div class="panel"><h2>Ativos com esta mesma atualização ({{ same|length }})</h2><table><tr><th>Ativo</th><th>Versão atual</th><th>Estado</th></tr>{% for x in same %}<tr><td><a href="{{ url_for('main.asset_detail', asset_id=x.asset_id) }}">{{ x.asset.name }}</a></td><td>{{ x.current_version }}</td><td>{{ statuses.get(x.status, x.status) }}</td></tr>{% endfor %}</table></div>{% endblock %}

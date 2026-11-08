@@ -83,8 +83,8 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
     if app.config["URL_PREFIX"]:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, app.config["URL_PREFIX"])
 
-    from .web import admin, agent_api, api, auth, branding, main, patching, plans, secops
-    for bp in (auth.bp, main.bp, patching.bp, secops.bp, admin.bp, api.bp, agent_api.bp, branding.bp, plans.bp):
+    from .web import admin, agent_api, api, auth, branding, main, patching, plans, secops, updates
+    for bp in (auth.bp, main.bp, patching.bp, secops.bp, admin.bp, api.bp, agent_api.bp, branding.bp, plans.bp, updates.bp):
         app.register_blueprint(bp)
 
     @login_manager.user_loader

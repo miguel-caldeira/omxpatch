@@ -37,7 +37,15 @@ def apply(p: dict, download) -> dict:
     mgr = _manager()
     before = installed_version(pkg)
     out = ""
-    if mgr == "apt-get":
+    local = None
+    if p.get("has_file") and mgr in ("apt-get", "dnf", "yum"):
+        local = download(".deb" if mgr == "apt-get" else ".rpm")       # ficheiro do repositório do servidor (SHA-256 verificado)
+    if local and mgr == "apt-get":
+        # a partir do servidor: dpkg não valida assinaturas, por isso o SHA-256 do índice assinado do repositório é a garantia
+        r = run(["apt-get", "install", "-y", "-q", "--no-install-recommends", "--allow-downgrades", local], 3600, env=APT_ENV)
+    elif local:
+        r = run([mgr, "install", "-y", local], 3600)                   # o rpm valida a assinatura GPG do pacote
+    elif mgr == "apt-get":
         run(["apt-get", "update", "-q"], 900, env=APT_ENV)
         r = run(["apt-get", "install", "-y", "-q", "--only-upgrade", pkg], 3600, env=APT_ENV)
     elif mgr in ("dnf", "yum"):
@@ -88,6 +96,21 @@ def simulate(p: dict, stage) -> dict:
     if not pred["version_before"]:
         pred["noop"] = True
         add("applicability", "Pacote instalado", "info", f"{pkg} não está instalado neste equipamento")
+    elif p.get("has_file") and mgr == "apt-get":
+        path = stage(".deb")                                                   # descarrega do servidor e confere o SHA-256
+        add("package", "Pacote do servidor (SHA-256 verificado)", "ok", path)
+        r = run(["apt-get", "-s", "install", "--no-install-recommends", "--allow-downgrades", path], 300, env=APT_ENV)
+        d = parse_apt_sim(r.out, pkg)
+        if not r.ok:
+            add("applicability", "Simulação (apt-get -s do ficheiro)", "block", r.out.strip()[-200:])
+        else:
+            pred["version_after"] = (d["target"] or {}).get("new") or p.get("version_fixed")
+            pred["changes"] = d["others"]
+            add("applicability", "Simulação (apt-get -s do ficheiro)", "ok", f"{pred['version_before']} → {pred['version_after']}")
+            if d["others"]:
+                add("dependencies", "Outros pacotes afetados", "info", f"{len(d['others'])}: " + ", ".join(d["others"][:8]))
+            if d["removed"]:
+                add("removals", "Remoção de pacotes", "block", "A atualização removeria: " + ", ".join(d["removed"][:8]))
     elif mgr == "apt-get":
         r = run(["apt-get", "-s", "install", "--only-upgrade", pkg], 300, env=APT_ENV)
         d = parse_apt_sim(r.out, pkg)

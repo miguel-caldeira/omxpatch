@@ -246,6 +246,17 @@ A aplicação de boas práticas faz cópia de segurança, `nginx -t`/`apachectl 
 
 API: `GET /api/v1/practices`, `GET|POST /api/v1/plans`, `POST /api/v1/plans/<id>/simulate|approve|execute`.
 
+## Descoberta de atualizações, descarga proativa e remediação
+
+*Atualizações* mostra, por ativo, **o que pode ser instalado**, com a garantia de que a informação chega à consola:
+
+1. **Descoberta (agente):** a cada `UPDATES_SCAN_HOURS` (6 h) e a pedido («Descobrir agora»), o agente varre as origens do SO sem instalar nada: **apt** (`apt-get -s dist-upgrade`, URL e SHA-256 do índice assinado), **dnf/yum** (`check-update` + `updateinfo`), **zypper**, **Windows Update/WSUS** (WUA: KB, severidade, CVE, tamanho, reinício), **winget** (URL e SHA-256 do manifesto), **Chocolatey**, **softwareupdate** e **brew**. O relatório fica em disco até a consola **confirmar a receção** (*store-and-forward*); a consola regista cada receção em «Histórico de descobertas» e é idempotente por `scan_id`.
+2. **Consola:** cada atualização fica em `AvailableUpdate`, ligada a um `Patch` do repositório (partilhado entre ativos) e às exposições do ativo (por CVE, ou por pacote + versão corrigida). Uma origem com varrimento completo que deixa de listar uma atualização marca-a como instalada.
+3. **Descarga proativa:** o worker descarrega para o repositório os ficheiros com URL e **SHA-256 anunciado** pela origem (SSRF validado em cada redirecionamento, limite de tamanho, hash verificado antes de gravar; adulterado = rejeitado). Sem hash ou sem URL (p.ex. dnf, Windows Update, macOS) a atualização usa o gestor/serviço do próprio equipamento («usam a origem do SO»). `http` só com SHA-256.
+4. **Simulação e remediação:** «Simular as selecionadas» cria um plano com os pares ativo × patch exatos e pede a simulação; o agente recebe o ficheiro **do servidor** (SHA-256 verificado) e simula com `apt-get -s` do ficheiro; instalar exige aprovar o patch e dar OK no plano.
+
+**Limites assumidos:** só apt (com `.deb` do servidor) e winget (MSI/EXE do manifesto) têm descarga fiável hoje; Windows Update só descarrega se o WUA expuser o URL, e dnf/zypper/macOS não trazem hash verificável. O `apt-get install ./ficheiro.deb` resolve dependências nos repositórios do SO: não é um espelho offline completo. Verificado: apt real (descoberta, envio, descarga de `archive.ubuntu.com` com SHA-256, simulação do `.deb`); os restantes analisadores com saídas representativas, não em sistemas reais.
+
 ## Centro de comando (dashboard)
 
 A página inicial consolida a solução num só ecrã, com gráficos SVG (sem scripts nem estilos inline, compatível com a CSP):

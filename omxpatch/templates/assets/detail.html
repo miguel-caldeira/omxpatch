@@ -22,6 +22,9 @@
 <dt>Anel</dt><dd>{{ RINGS[asset.ring] }}</dd><dt>Grupo de manutenção</dt><dd>{{ asset.maintenance_group or '—' }}</dd></dl>
 {% if current_user.can_write %}<form method="post" action="{{ url_for('patching.asset_ring', asset_id=asset.id) }}" class="row">{{ csrf() }}<div><select name="ring" aria-label="Anel">{% for k, v in RINGS.items() %}<option value="{{ k }}" {{ 'selected' if asset.ring == k }}>{{ v }}</option>{% endfor %}</select></div><div><button class="btn sm sec">Mudar de anel</button></div></form>{% endif %}
 <h3>Simulações recentes</h3><table>{% for s in sims %}<tr><td>{{ SIMULATIONS[s.scenario] }}</td><td>{{ st(s.outcome or s.status, s.outcome or s.status) }}</td><td>{{ s.created_at|dt }}</td></tr>{% else %}<tr><td class="muted">Sem simulações.</td></tr>{% endfor %}</table></div></div>
+<div class="panel"><h2>Atualizações disponíveis ({{ update_count }})</h2>
+{% set last_up = asset.hw.get('updates') %}<p class="small muted">{% if last_up %}Última descoberta recebida em {{ last_up.last_scan[:16].replace('T', ' ') }} UTC: {{ last_up.total }} atualização(ões).{% else %}Ainda não chegou nenhuma descoberta deste ativo.{% endif %}
+ <a href="{{ url_for('updates.updates_list', asset_id=asset.id) }}">Ver todas</a></p></div>
 <div class="panel"><h2>Exposições</h2><table><tr><th>Risco</th><th>CVE</th><th>Software</th><th>Versão → corrigida</th><th>Estado</th><th>Patch</th></tr>
 {% for e in exps %}<tr><td>{{ risk(e.risk_score, e.risk_category) }}</td><td><a href="{{ url_for('main.exposure_detail', exposure_id=e.id) }}">{{ e.cve_id }}</a></td><td>{{ e.software_name or '—' }}</td>
 <td>{{ e.installed_version or '?' }} → {{ e.fixed_version or '?' }}</td><td>{{ st(e.status, EXPOSURE_STATUSES[e.status]) }}</td><td>{{ e.patch.patch_uid if e.patch else '—' }}</td></tr>

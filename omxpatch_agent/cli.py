@@ -120,6 +120,11 @@ def cycle(client: Client, state: dict) -> int:
             state["last_inventory"] = time.time()
         except Exception as exc:  # noqa: BLE001
             log.warning("Inventário falhou: %s", exc)
+    try:                                              # descoberta periódica de atualizações (com reenvio garantido)
+        from .updates import sync
+        sync.run_and_upload(client, hours=float((resp.get("updates") or {}).get("scan_hours") or 6))
+    except Exception as exc:  # noqa: BLE001 - nunca impede o resto do ciclo
+        log.warning("Descoberta de atualizações: %s", exc)
     for task in resp.get("tasks", []):
         log.info("Tarefa %s (%s)", task["id"], task["type"])
         valid, why = trust.verify_task(cfg, task, cfg.get("agent_id"))

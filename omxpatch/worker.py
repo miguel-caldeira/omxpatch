@@ -127,6 +127,14 @@ class Worker:
     def _tenant(self, tenant: Tenant, now, summary: dict) -> None:
         cfg = self.app.config
         deploy.requeue_stale(tenant.id)
+        if not cfg.get("TESTING") or cfg.get("UPDATES_TICK_IN_TESTS"):
+            try:
+                from .engine import updates as updates_mod
+                updates_mod.tick(tenant, now)
+                db.session.commit()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Atualizações %s: %s", tenant.slug, exc)
+                db.session.rollback()
         for t in Task.query.filter(Task.tenant_id == tenant.id, Task.status == "pending", Task.campaign_id.is_(None),
                                    Task.not_before <= now):
             t.status = "queued"

@@ -56,7 +56,7 @@ INSTALLER_TYPES = {"wua": "Windows Update / WSUS (KB)", "msi": "MSI", "msp": "Pa
 
 CAMPAIGN_STATUSES = {"draft": "Rascunho", "scheduled": "Agendada", "running": "Em execução", "paused": "Em pausa",
                      "completed": "Concluída", "cancelled": "Cancelada", "failed": "Falhou"}
-TASK_TYPES = {"practice_sim": "Simulação de boa prática", "practice_apply": "Aplicar boa prática", "practice_rollback": "Reverter boa prática",
+TASK_TYPES = {"update_scan": "Descobrir atualizações", "practice_sim": "Simulação de boa prática", "practice_apply": "Aplicar boa prática", "practice_rollback": "Reverter boa prática",
               "simulate": "Simulação prévia", "inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
               "control": "Controlo compensatório", "rollback": "Reverter patch", "wake": "Wake-on-LAN"}
 TASK_STATUSES = {"pending": "Pendente", "waiting_window": "À espera da janela", "waking": "Wake-on-LAN",
@@ -917,3 +917,77 @@ class NotificationLog(db.Model):
     ok = db.Column(db.Boolean, default=True)
     detail = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+
+# --------------------------------------------------------------------------- descoberta de atualizações instaláveis
+
+UPDATE_STATUSES = {"discovered": "Descoberta", "queued": "Na fila de transferência", "downloading": "A transferir", "downloaded": "No repositório do servidor",
+                   "failed": "Transferência falhada", "not_downloadable": "Sem transferência (usa a origem do SO)", "installed": "Instalada", "superseded": "Substituída"}
+
+
+class AvailableUpdate(TimestampMixin, db.Model):
+    """Atualização **instalável** num ativo, descoberta pelo agente (apt, dnf, zypper, Windows Update, winget, Chocolatey, softwareupdate, brew)
+    e enviada à consola. Liga ao ``Patch`` do repositório (partilhado entre ativos) onde o ficheiro é descarregado proativamente."""
+    __tablename__ = "available_updates"
+    __table_args__ = (db.UniqueConstraint("tenant_id", "asset_id", "source", "uid", name="uq_available_update"),)
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("assets.id"), nullable=False, index=True)
+    source = db.Column(db.String(16), nullable=False)
+    uid = db.Column(db.String(190), nullable=False)
+    name = db.Column(db.String(255), default="")
+    title = db.Column(db.String(500), default="")
+    current_version = db.Column(db.String(120), default="")
+    new_version = db.Column(db.String(120), default="")
+    kb = db.Column(db.String(32), default="")
+    severity = db.Column(db.String(12), default="medium")
+    category = db.Column(db.String(16), default="update")          # security | update | application
+    cves = db.Column(db.Text, default="[]")
+    size_bytes = db.Column(db.BigInteger, default=0)
+    reboot = db.Column(db.Boolean, default=False, nullable=False)
+    installer = db.Column(db.String(16), default="")
+    package = db.Column(db.String(255), default="")
+    origin = db.Column(db.String(200), default="")
+    download_url = db.Column(db.String(1000), default="")
+    sha256 = db.Column(db.String(64), default="")
+    silent_args = db.Column(db.String(500), default="")
+    status = db.Column(db.String(16), default="discovered", nullable=False, index=True)
+    detail = db.Column(db.String(500), default="")                  # motivo (falha, sem transferência…)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    last_attempt_at = db.Column(db.DateTime, nullable=True)
+    patch_id = db.Column(db.Integer, db.ForeignKey("patches.id"), nullable=True, index=True)
+    first_seen = db.Column(db.DateTime, default=utcnow, nullable=False)
+    last_seen = db.Column(db.DateTime, default=utcnow, nullable=False)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    asset = db.relationship("Asset", backref=db.backref("updates", lazy="dynamic"))
+    patch = db.relationship("Patch")
+
+    @property
+    def cve_list(self) -> list[str]:
+        return jloads(self.cves, [])
+
+    @property
+    def pending(self) -> bool:
+        return self.status not in ("installed", "superseded")
+
+
+class UpdateScan(db.Model):
+    """Registo de cada descoberta recebida de um agente (prova de que a informação chegou à consola)."""
+    __tablename__ = "update_scans"
+    __table_args__ = (db.UniqueConstraint("asset_id", "scan_id", name="uq_update_scan"),)
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("assets.id"), nullable=False, index=True)
+    agent_id = db.Column(db.Integer, db.ForeignKey("agents.id"), nullable=True)
+    scan_id = db.Column(db.String(64), nullable=False)
+    scanned_at = db.Column(db.DateTime, nullable=True)               # no agente
+    received_at = db.Column(db.DateTime, default=utcnow, nullable=False, index=True)
+    total = db.Column(db.Integer, default=0)
+    new = db.Column(db.Integer, default=0)
+    resolved = db.Column(db.Integer, default=0)
+    sources = db.Column(db.Text, default="{}")
+    asset = db.relationship("Asset")
+
+    @property
+    def source_data(self) -> dict:
+        return jloads(self.sources, {})

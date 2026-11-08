@@ -40,7 +40,12 @@ def _blocked(item: PlanItem, why: str, cid: str = "applicability") -> None:
 
 
 def create(tenant: Tenant, name: str, mode: str, asset_ids: list[int], patch_ids: list[int], practice_specs: list[dict], user=None,
-           reboot_policy: str = "if_needed", respect_windows: bool = True, start_at: datetime | None = None) -> OperationPlan:
+           reboot_policy: str = "if_needed", respect_windows: bool = True, start_at: datetime | None = None,
+           pairs: list[tuple[int, int]] | None = None) -> OperationPlan:
+    """``pairs`` = [(ativo, patch)]: itens exatos (em vez do produto cartesiano ativos × patches), p.ex. as atualizações descobertas por ativo."""
+    if pairs:
+        patch_ids = sorted({p for _a, p in pairs} | set(patch_ids or []))
+        asset_ids = sorted({a for a, _p in pairs} | set(asset_ids or []))
     if not asset_ids or not (patch_ids or practice_specs):
         raise PlanError("Escolha pelo menos um ativo e uma operação (patch ou boa prática).")
     for spec in practice_specs:
@@ -55,8 +60,11 @@ def create(tenant: Tenant, name: str, mode: str, asset_ids: list[int], patch_ids
                          respect_windows=respect_windows, start_at=start_at, created_by_id=getattr(user, "id", None))
     db.session.add(plan)
     db.session.flush()
+    wanted = set(pairs) if pairs else None
     for a in assets:
         for p in patches_:
+            if wanted is not None and (a.id, p.id) not in wanted:
+                continue
             it = PlanItem(tenant_id=tenant.id, plan_id=plan.id, asset_id=a.id, kind="patch", patch_id=p.id)
             db.session.add(it)
             ok, why = sources.check(a, p.installer)

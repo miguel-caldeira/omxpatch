@@ -12,7 +12,7 @@ from .. import licensing
 from ..extensions import db
 from ..models import (Agent, Asset, AuditLog, Campaign, ControlAction, CveIntel, Exposure, OperationPlan, Patch, PlanItem, Task, Tenant,
                       Validation, utcnow)
-from . import compliance, executive, plans as plans_mod
+from . import compliance, executive, plans as plans_mod, updates as updates_mod
 
 ACTIVE_ITEM = ("draft", "simulating", "simulated", "approved", "queued", "running")
 OPEN = ("open", "mitigated", "patching")
@@ -114,9 +114,10 @@ def _campaigns(tenant: Tenant) -> list:
     return out
 
 
-def _funnel(tenant: Tenant, k: dict, plan_status: dict) -> list:
+def _funnel(tenant: Tenant, k: dict, plan_status: dict, up: dict) -> list:
     approved_patches = Patch.query.filter_by(tenant_id=tenant.id, status="approved").count()
-    return [("Exposições abertas", k["open_exposures"]), ("Com patch disponível", k["patchable_open"]), ("Patches aprovados", approved_patches),
+    return [("Atualizações descobertas", up["pending"]), ("No servidor", up["downloaded"]), ("Exposições abertas", k["open_exposures"]),
+            ("Com patch disponível", k["patchable_open"]), ("Patches aprovados", approved_patches),
             ("Simulados (prontos)", plan_status.get("simulated", 0)), ("Com OK", plan_status.get("approved", 0)),
             ("Em execução", plan_status.get("queued", 0) + plan_status.get("running", 0)), ("Concluídos", plan_status.get("succeeded", 0))]
 
@@ -162,11 +163,18 @@ def _health(app, tenant: Tenant, user) -> dict:
     return h
 
 
-def _actions(tenant: Tenant, k: dict, fleet: dict, pl: dict, prio: list, practices: dict) -> list:
+def _actions(tenant: Tenant, k: dict, fleet: dict, pl: dict, prio: list, practices: dict, up: dict) -> list:
     """Fila de ações recomendadas, por prioridade. Cada uma tem um destino (ver ``web/main.py::command_quick``)."""
     a = []
     if pl["awaiting"]:
         a.append({"level": "info", "text": f"{pl['awaiting']} item(ns) simulados a aguardar o seu OK", "cta": "Rever e aprovar", "kind": "link", "plan_id": pl["awaiting_plans"][0]["id"] if pl["awaiting_plans"] else None})
+    if up["never_scanned"] and fleet["agents"]:
+        a.append({"level": "warning", "text": f"{up['never_scanned']} agente(s) ainda não enviaram a descoberta de atualizações", "cta": "Descobrir agora", "kind": "scan"})
+    if up["by_status"].get("failed"):
+        a.append({"level": "warning", "text": f"{up['by_status']['failed']} transferência(s) de atualizações falhada(s)", "cta": "Ver", "kind": "url", "url": "updates.updates_list"})
+    sec = up["security"] and up["downloaded"]
+    if sec:
+        a.append({"level": "info", "text": f"{up['security']} atualização(ões) de segurança descoberta(s), {up['downloaded']} já no servidor", "cta": "Ver e simular", "kind": "url", "url": "updates.updates_list"})
     kev_patch = [r for r in prio if r["kev"] and not r["plan_state"]]
     if kev_patch:
         a.append({"level": "critical", "text": f"{len(kev_patch)} patch(es) com CVE explorados (KEV) ainda sem simulação", "cta": "Simular o mais urgente", "kind": "patch", "id": kev_patch[0]["id"]})
@@ -198,8 +206,9 @@ def overview(app, tenant: Tenant, user) -> dict:
     prio, nopatch = _priority(tenant)
     pl = _plans(tenant)
     prac = _practices(tenant, assets)
+    up = updates_mod.summary(tenant)
     recent = AuditLog.query.filter_by(tenant_id=tenant.id).order_by(AuditLog.id.desc()).limit(8).all()
     return {"k": k, "fleet": fleet, "priority": prio, "nopatch": nopatch, "plans": pl, "practices": prac, "campaigns": _campaigns(tenant),
-            "funnel": _funnel(tenant, k, pl["by_status"]), "compliance": _compliance(tenant), "health": _health(app, tenant, user),
-            "actions": _actions(tenant, k, fleet, pl, prio, prac),
+            "funnel": _funnel(tenant, k, pl["by_status"], up), "updates": up, "compliance": _compliance(tenant), "health": _health(app, tenant, user),
+            "actions": _actions(tenant, k, fleet, pl, prio, prac, up),
             "activity": [{"at": r.created_at, "action": r.action, "detail": (r.detail or "")[:90], "who": r.user.email if r.user else ""} for r in recent]}

@@ -162,7 +162,17 @@ def _practice_rollback(client: Client, task: dict) -> dict:
     return practices.rollback(f"item-{p['item_id']}", p.get("params") or {})
 
 
-HANDLERS = {"practice_sim": _practice_sim, "practice_apply": _practice_apply, "practice_rollback": _practice_rollback, "simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
+def _update_scan(client: Client, task: dict) -> dict:
+    """Descobre as atualizações instaláveis e envia-as à consola (a pedido do servidor)."""
+    from .updates import sync
+    res = sync.run_and_upload(client, force=True)
+    if not res.get("sent"):
+        return {"status": "failed", "output": f"Descoberta feita ({res.get('total', 0)}), mas a consola não confirmou a receção: {res.get('error', '')}"}
+    return {"status": "succeeded", "output": f"{res['total']} atualização(ões) enviada(s) e confirmadas pela consola", "total": res["total"],
+            "sources": {k: {kk: vv for kk, vv in v.items() if kk in ("ok", "count")} for k, v in res.get("sources", {}).items()}}
+
+
+HANDLERS = {"update_scan": _update_scan, "practice_sim": _practice_sim, "practice_apply": _practice_apply, "practice_rollback": _practice_rollback, "simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
             "rollback": lambda c, t: {"status": "failed", "output": "Reversão automática não suportada neste agente"}}
 
 

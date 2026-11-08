@@ -161,7 +161,7 @@ def poll():
     from .. import signing
     tasks = [signing.sign_task(current_app.config, agent.id, t) for t in deploy.poll(agent, limit=3)]
     db.session.commit()
-    return jsonify({"tasks": tasks, "trust": trust_block(agent), "poll_seconds": int(current_app.config["AGENT_HEARTBEAT_SECONDS"]),
+    return jsonify({"tasks": tasks, "trust": trust_block(agent), "updates": {"scan_hours": int(current_app.config["UPDATES_SCAN_HOURS"])}, "poll_seconds": int(current_app.config["AGENT_HEARTBEAT_SECONDS"]),
                     "inventory_requested": bool(need_inventory), "server_time": utcnow().isoformat(),
                     "server_urls": agent_urls(current_app.config)})
 
@@ -177,6 +177,24 @@ def post_inventory():
     corr = correlate.correlate_asset(g.tenant, agent.asset)
     db.session.commit()
     return jsonify({"software": res, "correlation": corr})
+
+
+@bp.post("/updates")
+def post_updates():
+    """Descoberta de atualizações instaláveis enviada pelo agente. A resposta confirma a receção (o agente guarda o relatório até a receber)."""
+    from ..engine import updates as updates_mod
+    agent: Agent = g.agent
+    if agent.asset is None:
+        abort(409, description="Agente sem ativo associado")
+    if (request.content_length or 0) > 16 * 1024 * 1024:
+        abort(413)
+    _touch(agent, request.get_json(silent=True) and {"version": agent.version})
+    try:
+        res = updates_mod.ingest(g.tenant, agent, agent.asset, request.get_json(silent=True) or {})
+    except updates_mod.ScanError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    db.session.commit()
+    return jsonify(res)
 
 
 @bp.post("/tasks/<int:task_id>/start")

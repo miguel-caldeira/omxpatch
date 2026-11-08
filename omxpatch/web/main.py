@@ -160,7 +160,9 @@ def asset_detail(asset_id: int):
     exps = (Exposure.query.filter_by(tenant_id=asset.tenant_id, asset_id=asset.id)
             .order_by(Exposure.risk_score.desc()).limit(200).all())
     open_exps = [e for e in exps if e.status in ("open", "mitigated", "patching")]
-    return render_template("assets/detail.html", asset=asset, exps=exps, risk_total=risk.asset_risk([e.risk_score for e in open_exps]),
+    from ..models import AvailableUpdate
+    update_count = asset.updates.filter(AvailableUpdate.status.notin_(("installed", "superseded"))).count()
+    return render_template("assets/detail.html", update_count=update_count, asset=asset, exps=exps, risk_total=risk.asset_risk([e.risk_score for e in open_exps]),
                            software=asset.software.order_by(AssetSoftware.name).all(),
                            tasks=Task.query.filter_by(asset_id=asset.id).order_by(Task.id.desc()).limit(20).all(),
                            history=CmdbChange.query.filter_by(asset_id=asset.id).order_by(CmdbChange.id.desc()).limit(30).all(),

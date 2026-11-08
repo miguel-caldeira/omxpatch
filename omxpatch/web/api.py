@@ -10,9 +10,9 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from ..connectors import omxgrc, omxvuln, signals as signals_mod, sync
 from ..connectors.store import ConnectorError
-from ..engine import advisor, autonomous, compliance, correlate, deploy, executive, intel, inventory, patches, plans as plans_mod, practices as practices_mod, preflight, sources
+from ..engine import advisor, autonomous, compliance, correlate, deploy, executive, intel, inventory, patches, plans as plans_mod, practices as practices_mod, updates as updates_mod, preflight, sources
 from ..extensions import db
-from ..models import (OperationPlan, Preflight, Asset, AutonomousRun, Campaign, ControlAction, CveIntel, EnrollmentToken, Exposure, Patch, Tenant,
+from ..models import (AvailableUpdate, UpdateScan, OperationPlan, Preflight, Asset, AutonomousRun, Campaign, ControlAction, CveIntel, EnrollmentToken, Exposure, Patch, Tenant,
                       Validation, utcnow)
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
 
@@ -478,3 +478,56 @@ def plan_execute(plan_id: int):
     audit("plan_executed", f"API #{p.id}: {res['queued']}", user=g.api_user)
     db.session.commit()
     return jsonify({"queued": res["queued"], "skipped": [{"item_id": i.id, "reason": w} for i, w in res["skipped"]]})
+
+
+# --------------------------------------------------------------------------- atualizações descobertas
+
+
+def _update(u: AvailableUpdate) -> dict:
+    return {"id": u.id, "asset_id": u.asset_id, "asset": u.asset.name if u.asset else "", "source": u.source, "uid": u.uid, "name": u.name, "title": u.title, "kb": u.kb,
+            "current_version": u.current_version, "new_version": u.new_version, "severity": u.severity, "category": u.category, "cves": u.cve_list, "size_bytes": u.size_bytes,
+            "reboot": u.reboot, "installer": u.installer, "status": u.status, "detail": u.detail, "download_url": u.download_url, "sha256": u.sha256, "patch_id": u.patch_id,
+            "in_repository": bool(u.patch and u.patch.local_file), "first_seen": u.first_seen.isoformat(), "last_seen": u.last_seen.isoformat()}
+
+
+@bp.get("/updates")
+def updates_get():
+    """Atualizações pendentes. Filtros: ``asset_id``, ``source``, ``status``, ``severity``, ``category``; ``limit`` (≤1000)."""
+    q = scoped(AvailableUpdate).filter(AvailableUpdate.status.notin_(("installed", "superseded")))
+    for k in ("asset_id", "source", "status", "severity", "category"):
+        if request.args.get(k):
+            q = q.filter(getattr(AvailableUpdate, k) == (int(request.args[k]) if k == "asset_id" and request.args[k].isdigit() else request.args[k]))
+    return jsonify([_update(u) for u in q.order_by(AvailableUpdate.id.desc()).limit(min(request.args.get("limit", 200, type=int), 1000))])
+
+
+@bp.get("/updates/summary")
+def updates_summary():
+    sm = updates_mod.summary(require_tenant())
+    sm["last_received"] = sm["last_received"].isoformat() if sm["last_received"] else None
+    return jsonify(sm)
+
+
+@bp.get("/updates/scans")
+def updates_scans():
+    return jsonify([{"id": s.id, "asset_id": s.asset_id, "asset": s.asset.name, "scan_id": s.scan_id, "received_at": s.received_at.isoformat(), "total": s.total, "new": s.new,
+                     "resolved": s.resolved, "sources": s.source_data} for s in scoped(UpdateScan).order_by(UpdateScan.id.desc()).limit(200)])
+
+
+@bp.post("/updates/scan")
+@roles_required("admin", "user")
+def updates_scan():
+    """Pede a descoberta aos agentes: ``{"asset_ids": [..]}`` (omitido = todos)."""
+    d = request.get_json(silent=True) or {}
+    n = updates_mod.request_scan(require_tenant(), [int(x) for x in d["asset_ids"]] if d.get("asset_ids") else None)
+    audit("updates_scan_requested", f"API {n}", user=g.api_user)
+    db.session.commit()
+    return jsonify({"requested": n}), 202
+
+
+@bp.post("/updates/download")
+@roles_required("admin", "user")
+def updates_download():
+    res = updates_mod.download_pending(require_tenant(), limit=min((request.get_json(silent=True) or {}).get("limit", 5), 20))
+    audit("updates_download", f"API {res}", user=g.api_user)
+    db.session.commit()
+    return jsonify(res)

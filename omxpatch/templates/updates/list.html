@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Atualizações disponíveis{% endblock %}
+{% macro sevb(s) %}<span class="badge risk-{{ {'critical':'critical','high':'high','medium':'medium','low':'low'}.get(s,'medium') }}">{{ {'critical':'Crítica','high':'Alta','medium':'Média','low':'Baixa'}.get(s, s) }}</span>{% endmacro %}
+{% macro size(n) %}{% if n %}{{ '%.1f'|format(n / 1048576) }} MB{% else %}—{% endif %}{% endmacro %}
+{% block content %}{% set sm = summary %}
+<div class="actions"><h1>Atualizações disponíveis nos ativos</h1><span class="spacer"></span>
+<a class="btn sec" href="{{ url_for('updates.scans_list') }}">Histórico de descobertas</a>
+{% if current_user.can_write %}<form method="post" action="{{ url_for('updates.scan_now') }}" class="inline">{{ csrf() }}<button class="btn sec">Descobrir agora</button></form>
+<form method="post" action="{{ url_for('updates.download_now') }}" class="inline">{{ csrf() }}<button class="btn sec">Descarregar agora</button></form>{% endif %}</div>
+<p class="muted small">Os agentes descobrem (a cada {{ sm.scan_hours }} h e a pedido) as atualizações instaláveis em cada ativo e enviam-nas para aqui; o servidor descarrega-as proativamente para o repositório (com SHA-256) e envia-as depois aos agentes, na <strong>simulação</strong> e na <strong>remediação</strong> (sempre com o seu OK).</p>
+<div class="grid grid4">
+<div class="kpi"><div class="l">Atualizações pendentes</div><div class="v">{{ sm.pending }}</div><div class="small muted">{{ sm.assets }} ativo(s) · {{ sm.security }} de segurança</div></div>
+<div class="kpi"><div class="l">No repositório do servidor</div><div class="v">{{ sm.downloaded }}</div><div class="small muted">{{ '%.0f'|format(sm.repo_bytes / 1048576) }} MB</div></div>
+<div class="kpi"><div class="l">Sem transferência / falhadas</div><div class="v">{{ sm.by_status.get('not_downloadable', 0) }} / {{ sm.by_status.get('failed', 0) }}</div><div class="small muted">usam a origem do SO · a repetir</div></div>
+<div class="kpi"><div class="l">Agentes que já descobriram</div><div class="v">{{ sm.scanned }}<span class="unit">/{{ sm.agents }}</span></div><div class="small muted">{{ sm.never_scanned }} nunca · {{ sm.stale }} desatualizados{% if sm.last_received %} · última {{ sm.last_received|dt }}{% endif %}</div></div></div>
+<form method="get" class="panel filters mt"><div class="row">
+<div><label for="q">Pesquisar</label><input id="q" name="q" value="{{ request.args.get('q', '') }}" placeholder="nome, título ou KB"></div>
+<div><label for="asset_id">Ativo</label><select id="asset_id" name="asset_id"><option value="">todos</option>{% for a in assets %}<option value="{{ a.id }}" {{ 'selected' if request.args.get('asset_id')|string == a.id|string }}>{{ a.name }}</option>{% endfor %}</select></div>
+<div><label for="source">Origem</label><select id="source" name="source"><option value="">todas</option>{% for s in sources %}<option {{ 'selected' if request.args.get('source') == s }}>{{ s }}</option>{% endfor %}</select></div>
+<div><label for="severity">Severidade</label><select id="severity" name="severity"><option value="">todas</option>{% for s in ('critical','high','medium','low') %}<option value="{{ s }}" {{ 'selected' if request.args.get('severity') == s }}>{{ s }}</option>{% endfor %}</select></div>
+<div><label for="status">Estado</label><select id="status" name="status"><option value="">todos</option>{% for k, v in statuses.items() %}<option value="{{ k }}" {{ 'selected' if request.args.get('status') == k }}>{{ v }}</option>{% endfor %}</select></div></div>
+<p class="actions"><button class="btn sm">Filtrar</button> <a class="btn sm sec" href="{{ url_for('updates.updates_list') }}">Limpar</a></p></form>
+<form method="post" class="panel">{{ csrf() }}
+<table><tr>{% if current_user.can_write %}<th><input type="checkbox" id="select-all" aria-label="selecionar todas"></th>{% endif %}<th>Ativo</th><th>Atualização</th><th>Versões</th><th>Severidade</th><th>Origem</th><th>Tamanho</th><th>No servidor</th></tr>
+{% for u in rows %}<tr>{% if current_user.can_write %}<td><input type="checkbox" name="ids" value="{{ u.id }}"></td>{% endif %}
+<td><a href="{{ url_for('main.asset_detail', asset_id=u.asset_id) }}">{{ u.asset.name }}</a></td>
+<td><a href="{{ url_for('updates.update_detail', update_id=u.id) }}">{{ u.kb or u.name }}</a>{% if u.title and u.title != u.name %}<div class="small muted">{{ u.title[:70] }}</div>{% endif %}{% if u.cve_list %}<div class="small">{{ u.cve_list[:3]|join(', ') }}{{ ' …' if u.cve_list|length > 3 }}</div>{% endif %}</td>
+<td class="small">{{ u.current_version or '—' }} → <b>{{ u.new_version or '—' }}</b>{% if u.reboot %} <span class="badge risk-medium" title="Pode exigir reinício">reinício</span>{% endif %}</td>
+<td>{{ sevb(u.severity) }}{% if u.category == 'security' %} <span class="badge risk-high">segurança</span>{% endif %}</td><td class="small">{{ u.source }}</td><td class="small">{{ size(u.size_bytes) }}</td>
+<td><span class="badge up-{{ u.status }}" title="{{ u.detail }}">{{ statuses.get(u.status, u.status) }}</span>{% if u.patch and u.patch.status == 'approved' %} <span class="badge it-approved">patch aprovado</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="8" class="muted">Sem atualizações pendentes{% if not sm.scanned %} — ainda não chegou nenhuma descoberta dos agentes (use «Descobrir agora»){% endif %}.</td></tr>{% endfor %}</table>
+{% if current_user.can_write and rows %}<p class="actions"><button class="btn" formaction="{{ url_for('updates.make_plan') }}">Simular as selecionadas (cria plano)</button>
+<button class="btn sec" formaction="{{ url_for('updates.approve_patches') }}">Aprovar patches selecionados</button></p>
+<p class="small muted">«Simular» cria um plano de operações e pede a simulação aos agentes; a instalação só acontece depois de aprovar no plano.</p>{% endif %}
+{% if page > 1 or rows|length == 100 %}<p>{% if page > 1 %}<a class="btn sm sec" href="{{ url_for('updates.updates_list', page=page - 1, **request.args.to_dict()) }}">« anterior</a>{% endif %} {% if rows|length == 100 %}<a class="btn sm sec" href="{{ url_for('updates.updates_list', page=page + 1, **request.args.to_dict()) }}">seguinte »</a>{% endif %}</p>{% endif %}</form>
+<div class="panel"><h2>Últimas descobertas recebidas</h2><table><tr><th>Recebida</th><th>Ativo</th><th>Atualizações</th><th>Novas</th><th>Resolvidas</th><th>Origens</th></tr>
+{% for s in scans %}<tr><td>{{ s.received_at|dt }}</td><td>{{ s.asset.name }}</td><td>{{ s.total }}</td><td>{{ s.new }}</td><td>{{ s.resolved }}</td><td class="small">{% for k, v in s.source_data.items() %}{{ k }} {{ v.count }}{{ ' ✗' if v.ok == false }}{{ ', ' if not loop.last }}{% endfor %}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">Nenhuma descoberta recebida ainda.</td></tr>{% endfor %}</table></div>{% endblock %}
