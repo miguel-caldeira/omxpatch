@@ -1,0 +1,78 @@
+{% extends "base.html" %}{% from "_macros.html" import risk, csrf with context %}{% from "_charts.html" import donut, gauge, funnel, stack, pbar %}
+{% block title %}Centro de comando{% endblock %}
+{% macro quick(kind, id, label, nxt='back', cls='sm') %}{% if current_user.can_write %}<form method="post" action="{{ url_for('main.command_quick') }}" class="inline">{{ csrf() }}<input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="id" value="{{ id }}"><input type="hidden" name="next" value="{{ nxt }}"><button class="btn {{ cls }}">{{ label }}</button></form>{% endif %}{% endmacro %}
+{% block content %}{% set k = o.k %}
+<div class="actions"><h1>Centro de comando — {{ tenant.name }}</h1><span class="spacer"></span>
+<a class="btn sec" href="{{ url_for('main.executive_page') }}">Painel executivo</a>
+<a class="btn sec" href="{{ url_for('plans.plans_list') }}">Planos</a>
+<a class="btn sec" href="{{ url_for('plans.practices_page') }}">Boas práticas</a>
+{% if current_user.can_write %}<a class="btn" href="{{ url_for('plans.plan_new') }}">Novo plano</a>
+<form method="post" action="{{ url_for('main.exposures_correlate') }}" class="inline">{{ csrf() }}<button class="btn sec">Correlacionar</button></form>{% endif %}</div>
+<p class="muted small">Ativo → Exposição → Risco → <strong>Simular</strong> → <strong>OK</strong> → Remediar → Validar. As ações rápidas só criam o plano e pedem a simulação: nada é aplicado sem o seu OK.</p>
+
+{% if o.actions %}<div class="panel actions-q"><h2>Ações recomendadas</h2><ul class="aq">{% for a in o.actions %}<li class="aq-{{ a.level }}"><span class="aq-t">{{ a.text }}</span>
+{% if a.kind == 'patch' %}{{ quick('patch', a.id, a.cta, 'plan') }}{% elif a.kind == 'tls' %}{{ quick('tls', 0, a.cta, 'plan') }}
+{% elif a.kind == 'link' and a.plan_id %}<a class="btn sm" href="{{ url_for('plans.plan_detail', plan_id=a.plan_id) }}">{{ a.cta }}</a>
+{% elif a.kind == 'url' %}<a class="btn sm sec" href="{{ url_for(a.url) }}">{{ a.cta }}</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
+
+<div class="grid grid4">
+  <a class="kpi" href="{{ url_for('main.exposures') }}"><div class="l">Exposições abertas</div><div class="v">{{ k.open_exposures }}</div><div class="small muted">{{ k.total_cves }} CVE · {{ k.kev_exposures }} KEV</div></a>
+  <a class="kpi" href="{{ url_for('main.assets') }}"><div class="l">Ativos</div><div class="v">{{ k.total_assets }}</div><div class="small muted">{{ k.exposed_assets }} expostos · {{ k.shadow_it }} Shadow IT</div></a>
+  <a class="kpi" href="{{ url_for('admin.agents') }}"><div class="l">Agentes online</div><div class="v">{{ o.fleet.online }}<span class="unit">/{{ o.fleet.agents }}</span></div><div class="small muted">{{ o.fleet.offline }} offline · {{ o.fleet.outdated }} desatualizados</div></a>
+  <a class="kpi" href="{{ url_for('plans.plans_list') }}"><div class="l">A aguardar o seu OK</div><div class="v">{{ o.plans.awaiting }}</div><div class="small muted">{{ o.plans.blocked }} bloqueados · {{ o.plans.stale }} caducados</div></a>
+  <div class="kpi"><div class="l">Compliance de patching</div><div class="v">{{ k.patch_compliance }}<span class="unit">%</span></div><div class="small muted">{{ k.sla_breaches }} fora do SLA</div></div>
+  <div class="kpi"><div class="l">MTTP / MTTR</div><div class="v">{{ k.mttp_days if k.mttp_days is not none else '—' }}<span class="unit"> / {{ k.mttr_days if k.mttr_days is not none else '—' }} d</span></div><div class="small muted">{{ k.closed_period }} fechadas em 30 d</div></div>
+  <a class="kpi" href="{{ url_for('patching.campaigns') }}"><div class="l">Campanhas ativas</div><div class="v">{{ k.campaigns_active }}</div><div class="small muted">{{ o.plans.executing }} plano(s) em execução</div></a>
+  <a class="kpi" href="{{ url_for('secops.validations', status='failed') }}"><div class="l">Validações falhadas</div><div class="v">{{ k.validation_failed }}</div><div class="small muted">{{ k.controls_active }} controlos ativos</div></a>
+</div>
+
+<div class="grid3 mt">
+<div class="panel"><h2>Exposição por risco</h2><div class="chart-wrap">{% set cats = [('Emergência', k.by_category.emergency, 'c-emergency'), ('Crítico', k.by_category.critical, 'c-critical'), ('Alto', k.by_category.high, 'c-high'), ('Médio', k.by_category.medium, 'c-medium'), ('Baixo', k.by_category.low, 'c-low')] %}
+{{ donut(cats, k.open_exposures, 'abertas') }}
+<ul class="legend">{% for n, v, c in cats %}<li><i class="key {{ c }}"></i><a href="{{ url_for('main.exposures', category=['emergency','critical','high','medium','low'][loop.index0]) }}">{{ n }}</a> <b>{{ v }}</b></li>{% endfor %}</ul></div></div>
+<div class="panel"><h2>Funil de remediação</h2>{{ funnel(o.funnel) }}</div>
+<div class="panel"><h2>Conformidade</h2><div class="gauges">{% for c in o.compliance %}<a href="{{ url_for('secops.compliance_page') }}" class="gauge-box">{{ gauge(c.pct, c.name) }}<div class="small">{{ c.name }}</div><div class="small muted">{{ c.ok }} ✓ · {{ c.partial }} ◐ · {{ c.gap }} ✗</div></a>{% endfor %}</div></div>
+</div>
+
+<div class="grid2 mt">
+<div class="panel"><h2>Remediação prioritária <span class="small muted">(patches disponíveis, por risco)</span></h2>
+<table><tr><th>Patch</th><th>Risco</th><th>Ativos</th><th>CVE</th><th>Estado</th><th></th></tr>
+{% for r in o.priority %}<tr><td><a href="{{ url_for('patching.patch_detail', patch_id=r.id) }}">{{ r.uid }}</a><div class="small muted">{{ r.title[:50] }}</div></td><td>{{ risk(r.risk, r.cat) }}{% if r.kev %} <span class="badge risk-emergency" title="Explorado ativamente">KEV</span>{% endif %}</td><td>{{ r.assets }}</td><td>{{ r.cves }}</td>
+<td class="small">{% if r.plan_state %}{% for s, n in r.plan_state.items() %}<span class="badge it-{{ s }}">{{ ITEM_STATUSES.get(s, s) }} {{ n }}</span> {% endfor %}{% else %}<span class="muted">sem plano</span>{% endif %}</td>
+<td class="nowrap">{{ quick('patch', r.id, 'Simular') }} {{ quick('patch', r.id, 'Remediar…', 'plan', 'sm sec') }}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">Sem exposições com patch disponível.</td></tr>{% endfor %}</table>
+{% if o.nopatch %}<h3 class="mt">Sem patch — mitigar</h3><table>{% for r in o.nopatch %}<tr><td><a href="{{ url_for('main.intel_detail', cve_id=r.cve) }}">{{ r.cve }}</a></td><td>{{ risk(r.risk, r.cat) }}</td><td>{{ r.assets }} ativo(s)</td><td class="right"><a class="btn sm sec" href="{{ url_for('main.exposures', nopatch=1, category=r.cat) }}">Propor controlo</a></td></tr>{% endfor %}</table>{% endif %}</div>
+
+<div class="panel"><h2>Operações a aguardar OK</h2>
+{% for p in o.plans.awaiting_plans %}<div class="row-line"><a href="{{ url_for('plans.plan_detail', plan_id=p.id) }}">#{{ p.id }} {{ p.name }}</a><span class="badge it-simulated">{{ p.awaiting }} pronto(s)</span>{% if p.warnings %}<span class="badge it-warning">{{ p.warnings }} com avisos</span>{% endif %}<a class="btn sm" href="{{ url_for('plans.plan_detail', plan_id=p.id) }}">Rever e aprovar</a></div>
+{% else %}<p class="muted">Nenhuma operação simulada à espera de aprovação.</p>{% endfor %}
+<h3 class="mt">Campanhas</h3>{% for c in o.campaigns %}<div class="row-line"><a href="{{ url_for('patching.campaign_detail', campaign_id=c.id) }}">{{ c.name }}</a><span class="small muted">anel {{ c.ring }} · {{ c.ok }}/{{ c.total }}</span>{{ pbar(c.done, c.total) }}</div>{% else %}<p class="muted small">Sem campanhas ativas.</p>{% endfor %}
+<h3 class="mt">Boas práticas dos servidores web</h3>{% if o.practices.webservers %}<p class="small muted">{{ o.practices.webservers }} ativo(s) com servidor web ({% for s, n in o.practices.servers.items() %}{{ s }} {{ n }}{{ ', ' if not loop.last }}{% endfor %})</p>
+{% for r in o.practices.rows %}<div class="row-line"><span class="small rl-name" title="{{ r.label }}">{{ r.label.split(" (")[0] }}</span><span class="small muted rl-n">{{ r.done }}/{{ r.total }}</span>{{ pbar(r.done, r.total, 'pb-ok') }}</div>{% endfor %}
+{{ quick('tls', 0, 'Simular TLS 1.2/1.3 nos servidores em falta', 'plan') }}{% else %}<p class="muted small">Nenhum servidor web detetado nos inventários dos agentes.</p>{% endif %}</div>
+</div>
+
+<div class="grid3 mt">
+<div class="panel"><h2>Frota</h2>{% for os, row in o.fleet.by_os.items() %}<div class="row-line"><span class="small rl-name">{{ os|capitalize }} <b>{{ row.agent + row.ansible + row.none }}</b></span>{{ stack(row, 200) }}</div>{% endfor %}
+<p class="small"><i class="key st-a"></i>agente <i class="key st-b"></i>Ansible <i class="key st-c"></i>sem gestão</p>
+<dl class="kv"><dt>Python antigo</dt><dd>{{ o.fleet.legacy_python }}</dd><dt>Agentes desatualizados</dt><dd>{{ o.fleet.outdated }}</dd><dt>Sem agente</dt><dd>{{ o.fleet.no_agent }}</dd></dl></div>
+<div class="panel"><h2>Saúde e integrações</h2><dl class="kv">
+<dt>Licença</dt><dd>{{ o.health.license.label }}{% if o.health.license.days_left is not none %} ({{ o.health.license.days_left }} d){% endif %}</dd>
+{% for c in o.health.connectors %}<dt>{{ c.label }}</dt><dd>{% if not c.configured %}<span class="muted">não configurado</span>{% else %}{{ 'OK' if c.ok != false else 'com falhas' }} <span class="small muted">{{ c.last|dt if c.last else '' }}</span>{% endif %}</dd>{% endfor %}
+{% if o.health.system %}{% set s = o.health.system %}<dt>Carga prevista</dt><dd><a href="{{ url_for('admin.capacity_page') }}">{{ '%.0f'|format(s.utilization * 100) }}% da capacidade</a> (~{{ s.max_agents }} agentes)</dd>
+{% for c in s.certs %}<dt>Certificado {{ 'consola' if c.profile == 'console' else 'agentes' }}</dt><dd>{{ c.days }} dias</dd>{% endfor %}<dt>Última cópia</dt><dd>{{ s.last_backup or 'nenhuma' }}</dd><dt>Base de dados</dt><dd>{{ s.db }}</dd>{% endif %}</dl></div>
+<div class="panel"><h2>Atividade recente</h2><ul class="feed">{% for a in o.activity %}<li><span class="small muted">{{ a.at|dt }}</span> <b>{{ a.action }}</b> <span class="small">{{ a.detail }}</span></li>{% else %}<li class="muted">Sem atividade.</li>{% endfor %}</ul></div>
+</div>
+
+<div class="panel viz-root"><h2>Tendência (12 semanas): exposições abertas vs fechadas</h2>
+{% set mx = (k.trend|map(attribute='opened')|list + k.trend|map(attribute='closed')|list + [1])|max %}
+<svg class="chart trend-chart" viewBox="0 0 600 140" role="img" aria-label="Exposições abertas e fechadas por semana">
+{% for w in k.trend %}{% set x = loop.index0 * 50 + 6 %}<rect x="{{ x }}" y="{{ 110 - (w.opened / mx * 100)|round }}" width="18" height="{{ (w.opened / mx * 100)|round }}" fill="var(--r-high)"><title>{{ w.week }}: {{ w.opened }} abertas</title></rect>
+<rect x="{{ x + 20 }}" y="{{ 110 - (w.closed / mx * 100)|round }}" width="18" height="{{ (w.closed / mx * 100)|round }}" fill="var(--ok)"><title>{{ w.week }}: {{ w.closed }} fechadas</title></rect><text class="axis" x="{{ x + 19 }}" y="126" text-anchor="middle">{{ w.week }}</text>{% endfor %}</svg>
+<p class="small muted"><span class="badge risk-high">abertas</span> <span class="badge risk-low">fechadas</span></p></div>
+
+<div class="panel"><h2>Ativos mais exploráveis</h2><table><tr><th>Ativo</th><th>Risco</th><th>Exposições</th><th>KEV</th><th>Internet</th><th>Owner</th><th></th></tr>
+{% for a in k.top_assets %}<tr><td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.name }}</a></td><td>{{ risk(a.risk, a.category) }}</td><td>{{ a.exposures }}</td><td>{{ a.kev or '' }}</td><td>{{ 'sim' if a.internet else '—' }}</td><td>{{ a.owner or '—' }}</td>
+<td class="nowrap">{{ quick('asset', a.id, 'Simular tudo') }} <a class="btn sm sec" href="{{ url_for('plans.plan_new', asset_id=a.id) }}">Plano…</a></td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem exposições em aberto.</td></tr>{% endfor %}</table></div>
+{% endblock %}

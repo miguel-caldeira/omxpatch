@@ -26,8 +26,69 @@ def dashboard():
     if (r := tenant_or_select()) is not None:
         return r
     tenant = require_tenant()
+    from flask import current_app
+    from ..engine import command_center
+    return render_template("command_center.html", tenant=tenant, o=command_center.overview(current_app, tenant, current_user))
+
+
+@bp.route("/executive")
+@login_required
+def executive_page():
+    """Painel executivo (CISO) — indicadores de gestão."""
+    if (r := tenant_or_select()) is not None:
+        return r
+    tenant = require_tenant()
     k = executive.kpis(tenant)
     return render_template("dashboard.html", k=k, tenant=tenant, max_cat=max(k["by_category"].values() or [1]) or 1)
+
+
+@bp.route("/command/quick", methods=["POST"])
+@login_required
+@roles_required("admin", "user")
+def command_quick():
+    """Ações rápidas do Centro de comando. **Nunca aplicam nada**: criam um plano de operações e pedem a simulação;
+    a aplicação continua a exigir o OK explícito na página do plano."""
+    from ..engine import plans as plans_mod
+    tenant = require_tenant()
+    kind, oid = request.form.get("kind", ""), request.form.get("id", type=int)
+    open_states = ("open", "mitigated", "patching")
+    patch_ids, practice, asset_ids, label, mode = [], [], [], "", "by_patch"
+    if kind == "patch":
+        p = get_scoped_or_404(Patch, oid or 0)
+        asset_ids = sorted({e.asset_id for e in Exposure.query.filter(Exposure.tenant_id == tenant.id, Exposure.patch_id == p.id, Exposure.status.in_(open_states))})
+        patch_ids, label = [p.id], p.patch_uid
+    elif kind == "asset":
+        a = get_scoped_or_404(Asset, oid or 0)
+        patch_ids = sorted({e.patch_id for e in Exposure.query.filter(Exposure.tenant_id == tenant.id, Exposure.asset_id == a.id, Exposure.status.in_(open_states),
+                                                                      Exposure.patch_id.isnot(None))})
+        asset_ids, label, mode = [a.id], a.name, "by_asset"
+    elif kind == "tls":
+        from ..models import PlanItem
+        done = {i.asset_id for i in PlanItem.query.filter_by(tenant_id=tenant.id, kind="practice", practice="tls_protocols", status="succeeded")}
+        asset_ids = [a.id for a in scoped(Asset).all() if a.hw.get("webservers") and a.id not in done]
+        practice, label, mode = [{"id": "tls_protocols", "params": {}}], "TLS 1.2/1.3", "by_asset"
+    else:
+        abort(400)
+    if not asset_ids or not (patch_ids or practice):
+        flash("Nada a simular: não há ativos/patches aplicáveis.", "warning")
+        return redirect(url_for("main.dashboard"))
+    from ..models import OperationPlan
+    name = f"Rápido: {label}"
+    plan = OperationPlan.query.filter(OperationPlan.tenant_id == tenant.id, OperationPlan.name == name,
+                                      OperationPlan.status.in_(("draft", "simulating", "simulated"))).order_by(OperationPlan.id.desc()).first()
+    if plan is None:
+        try:
+            plan = plans_mod.create(tenant, name, mode, asset_ids, patch_ids, practice, current_user)
+        except plans_mod.PlanError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("main.dashboard"))
+        n = plans_mod.simulate(plan, tenant, current_user)
+        audit("command_quick", f"{kind} {label}: plano #{plan.id}, {n} simulação(ões)")
+        flash(f"Plano #{plan.id} criado e simulação pedida a {n} item(ns). Nada será aplicado sem o seu OK.", "info")
+    else:
+        flash(f"Já existe o plano #{plan.id} para «{label}» — a abrir.", "info")
+    db.session.commit()
+    return redirect(url_for("plans.plan_detail", plan_id=plan.id) if request.form.get("next") == "plan" else url_for("main.dashboard"))
 
 
 # --------------------------------------------------------------------------- ativos

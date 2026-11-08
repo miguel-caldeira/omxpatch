@@ -28,7 +28,7 @@ def populated(app, tenant):
     return a
 
 
-PAGES = ["/", "/assets", "/assets/new", "/exposures", "/intel", "/signals", "/patches", "/patches/new", "/campaigns", "/windows",
+PAGES = ["/", "/executive", "/assets", "/assets/new", "/exposures", "/intel", "/signals", "/patches", "/patches/new", "/campaigns", "/windows",
          "/rings", "/controls", "/advisor", "/validations", "/simulations", "/autonomous", "/compliance", "/agents", "/integrations",
          "/users", "/users/new", "/settings", "/audit", "/profile", "/executive.json", "/compliance/export.csv", "/compliance/export.json"]
 

@@ -246,6 +246,16 @@ A aplicação de boas práticas faz cópia de segurança, `nginx -t`/`apachectl 
 
 API: `GET /api/v1/practices`, `GET|POST /api/v1/plans`, `POST /api/v1/plans/<id>/simulate|approve|execute`.
 
+## Centro de comando (dashboard)
+
+A página inicial consolida a solução num só ecrã, com gráficos SVG (sem scripts nem estilos inline, compatível com a CSP):
+
+- **Ações recomendadas** por prioridade (KEV sem simulação, operações a aguardar OK, SLA, servidores web sem TLS 1.2/1.3, agentes offline ou com Python antigo, validações falhadas…), cada uma com o seu botão;
+- indicadores (exposições, ativos, agentes online, a aguardar OK, compliance, MTTP/MTTR, campanhas, validações), **exposição por risco** (anel), **funil de remediação** (exposição → patch → aprovado → simulado → OK → em execução → concluído) e **conformidade** (NIS2, ISO 27001, DORA, PCI-DSS, CIS);
+- **remediação prioritária** por patch (e CVE sem patch, a mitigar), operações a aguardar OK, campanhas com progresso, boas práticas dos servidores web, frota por SO (agente/Ansible/sem gestão), saúde e integrações (licença, OMXVuln, OMXGRC; para o super-administrador também carga prevista, certificados, última cópia), atividade recente, tendência e ativos mais exploráveis.
+
+**Simular e remediar com um clique:** «Simular» cria um plano de operações (por patch, por ativo, ou TLS 1.2/1.3 nos servidores em falta) e pede a simulação; «Remediar…» faz o mesmo e abre o plano. **Nada é aplicado sem o OK explícito** na página do plano; o auditor vê o painel mas não os botões. O painel executivo anterior continua em *Executivo* (`/executive`).
+
 ## Capacidade, configuração e reinício
 
 *Sistema → Capacidade e carga* (super-administrador; CLI: `omxpatch capacity [--benchmark --agents 50 --seconds 10]`):

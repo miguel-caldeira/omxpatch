@@ -14,7 +14,8 @@
   <a class="logo" href="{{ url_for('main.dashboard') }}">{% if current_tenant and current_tenant.logo_file %}<img class="tenant-logo" src="{{ url_for('branding.logo', tenant_id=current_tenant.id, v=current_tenant.brand_version) }}" alt="{{ current_tenant.name }}">{% endif %}<span class="mark"><b>OMX</b>Patch</span></a>
   {% set ep = request.endpoint or '' %}
   <nav class="main">
-    <a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if ep == 'main.dashboard' }}">Painel</a>
+    <a href="{{ url_for('main.dashboard') }}" class="{{ 'active' if ep == 'main.dashboard' }}">Centro de comando</a>
+    <a href="{{ url_for('main.executive_page') }}" class="{{ 'active' if ep == 'main.executive_page' }}">Executivo</a>
     <a href="{{ url_for('main.assets') }}" class="{{ 'active' if 'asset' in ep }}">Ativos</a>
     <a href="{{ url_for('main.exposures') }}" class="{{ 'active' if 'exposure' in ep }}">Exposição e risco</a>
     <a href="{{ url_for('main.intel_page') }}" class="{{ 'active' if 'intel' in ep }}">Inteligência</a>

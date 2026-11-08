@@ -1,0 +1,40 @@
+{# Gráficos SVG (sem scripts nem estilos inline: compatível com a CSP). #}
+{% macro donut(items, total, label) %}
+{# items: [(rótulo, valor, classe-de-cor)]; círculo r=15.9155 => circunferência 100 #}
+<svg class="donut" viewBox="0 0 42 42" role="img" aria-label="{{ label }}">
+<circle class="donut-ring" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5"/>
+{% set acc = namespace(off=25) %}{% for name, v, cls in items if v %}{% set pct = (v / total * 100) if total else 0 %}
+<circle class="donut-seg {{ cls }}" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5" stroke-dasharray="{{ '%.2f'|format(pct) }} {{ '%.2f'|format(100 - pct) }}" stroke-dashoffset="{{ '%.2f'|format(acc.off) }}"><title>{{ name }}: {{ v }}</title></circle>
+{% set acc.off = acc.off - pct %}{% endfor %}
+<text class="donut-n" x="21" y="22.5" text-anchor="middle">{{ total }}</text><text class="donut-l" x="21" y="27" text-anchor="middle">{{ label }}</text></svg>
+{% endmacro %}
+
+{% macro gauge(pct, label) %}
+<svg class="gauge" viewBox="0 0 42 24" role="img" aria-label="{{ label }}: {{ pct }}%">
+<path class="gauge-bg" d="M5 21 A16 16 0 0 1 37 21" fill="none" stroke-width="4" stroke-linecap="round"/>
+<path class="gauge-fg {{ 'g-ok' if pct >= 80 else 'g-warn' if pct >= 50 else 'g-bad' }}" d="M5 21 A16 16 0 0 1 37 21" fill="none" stroke-width="4" stroke-linecap="round" pathLength="100" stroke-dasharray="{{ pct }} 100"/>
+<text class="gauge-n" x="21" y="19" text-anchor="middle">{{ pct }}%</text></svg>
+{% endmacro %}
+
+{% macro funnel(steps) %}
+{% set mx = (steps|map(attribute=1)|list + [1])|max %}
+<svg class="funnel" viewBox="0 0 320 {{ steps|length * 26 + 4 }}" role="img" aria-label="Funil de remediação">
+{% for name, v in steps %}{% set w = ((v / mx) * 200)|round|int %}<g>
+<text class="axis" x="0" y="{{ loop.index0 * 26 + 16 }}">{{ name }}</text>
+<rect class="fun-bar fun-{{ loop.index0 }}" x="118" y="{{ loop.index0 * 26 + 4 }}" width="{{ [w, 3]|max }}" height="18" rx="3"><title>{{ name }}: {{ v }}</title></rect>
+<text class="fun-v" x="{{ 124 + [w, 3]|max }}" y="{{ loop.index0 * 26 + 17 }}">{{ v }}</text></g>{% endfor %}</svg>
+{% endmacro %}
+
+{% macro stack(row, total_w) %}
+{# row: {agent, ansible, none}: barra horizontal empilhada #}
+{% set t = (row.agent + row.ansible + row.none) or 1 %}
+<svg class="stack" viewBox="0 0 200 12" role="img" aria-label="Agente {{ row.agent }}, Ansible {{ row.ansible }}, sem gestão {{ row.none }}">
+<rect class="st-a" x="0" y="0" width="{{ (row.agent / t * 200)|round(1) }}" height="12"><title>Agente: {{ row.agent }}</title></rect>
+<rect class="st-b" x="{{ (row.agent / t * 200)|round(1) }}" y="0" width="{{ (row.ansible / t * 200)|round(1) }}" height="12"><title>Ansible: {{ row.ansible }}</title></rect>
+<rect class="st-c" x="{{ ((row.agent + row.ansible) / t * 200)|round(1) }}" y="0" width="{{ (row.none / t * 200)|round(1) }}" height="12"><title>Sem gestão: {{ row.none }}</title></rect></svg>
+{% endmacro %}
+
+{% macro pbar(done, total, cls='') %}
+{% set pct = (done / total * 100)|round|int if total else 0 %}
+<svg class="pbar" viewBox="0 0 100 8" preserveAspectRatio="none" role="img" aria-label="{{ done }} de {{ total }}"><rect class="pb-bg" width="100" height="8" rx="3"/><rect class="pb-fg {{ cls }}" width="{{ pct }}" height="8" rx="3"/></svg>
+{% endmacro %}
