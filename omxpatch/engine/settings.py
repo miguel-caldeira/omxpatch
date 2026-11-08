@@ -34,6 +34,13 @@ CATALOG: dict[str, tuple] = {
     "LOGIN_LOCK_MINUTES": ("Bloqueio (min)", "Segurança", "int", 1, 1440, True, ""),
     "PASSWORD_MIN_LENGTH": ("Tamanho mínimo da palavra-passe", "Segurança", "int", 8, 64, True, ""),
     "TLS_MIN_VERSION": ("TLS mínimo", "Segurança", "choice", None, ("1.2", "1.3"), False, "1.3 exclui clientes antigos."),
+    "BACKUP_ENABLED": ("Cópia de segurança automática", "Dados", "bool", None, None, False, "Base de dados + chaves, em <dados>/backups (contém segredos)."),
+    "BACKUP_KEEP": ("Cópias a manter", "Dados", "int", 0, 365, False, "0 = não apagar cópias antigas."),
+    "AUDIT_RETENTION_DAYS": ("Retenção da auditoria (dias)", "Dados", "int", 0, 3650, False, "0 = guardar sempre. Verifique obrigações legais antes de reduzir."),
+    "TASK_RETENTION_DAYS": ("Retenção de tarefas concluídas (dias)", "Dados", "int", 0, 3650, False, "0 = guardar sempre."),
+    "RATE_ENROLL_PER_MIN": ("Registos por IP/minuto", "Segurança", "int", 0, 100000, True, "Proteção contra adivinhação de tokens e inundação; 0 = sem limite."),
+    "RATE_AGENT_PER_MIN": ("Pedidos por agente/minuto", "Segurança", "int", 0, 100000, True, "0 = sem limite."),
+    "AGENT_AUTO_UPDATE": ("Atualização automática dos agentes", "Agentes", "bool", None, None, True, "Só com pacote assinado e autoteste."),
     "MAX_UPLOAD_MB": ("Tamanho máximo de carregamento (MB)", "Desempenho", "int", 1, 4096, False, "Pacotes do repositório de patches."),
 }
 

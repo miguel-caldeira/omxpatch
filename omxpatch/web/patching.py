@@ -8,7 +8,7 @@ from flask_login import login_required
 
 from ..engine import deploy, patches, preflight, rings, sources
 from ..extensions import db
-from ..models import (PREFLIGHT_OUTCOMES, RINGS, Asset, Campaign, CveIntel, Exposure, MaintenanceWindow, Patch, Preflight, RingPolicy, Task,
+from ..models import (RINGS, Asset, Campaign, CveIntel, Exposure, MaintenanceWindow, Patch, Preflight, Task,
                       utcnow)
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
 from .common import parse_date, tenant_or_select

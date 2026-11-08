@@ -204,6 +204,59 @@ def cmd_capacity(args) -> int:
     return 0
 
 
+def cmd_backup(args) -> int:
+    from .engine import backup
+    app = _app(start_worker=False)
+    with app.app_context():
+        if args.action == "list":
+            for b in backup.listing(app.config):
+                print(f"{b['at']}  {b['size'] / 1048576:8.1f} MB  {b['name']}")
+            return 0
+        res = backup.create(app)
+        print(f"Cópia criada: {res['file']} ({res['size'] / 1048576:.1f} MB, {res['engine']}); {res['pruned']} antiga(s) removida(s).")
+        print("AVISO: contém chaves privadas e a chave de sessão — guarde-a cifrada e fora deste servidor.")
+    return 0
+
+
+def cmd_restore(args) -> int:
+    """Repõe uma cópia (serviço parado)."""
+    from .config import load_config
+    from .engine import backup
+    cfg = load_config()
+    try:
+        res = backup.restore(args.file, cfg["DATA_DIR"], force=args.force)
+    except (ValueError, FileExistsError, OSError) as exc:
+        print(f"Não foi possível restaurar: {exc}", file=sys.stderr)
+        return 2
+    print(f"Cópia reposta em {res['restored']}. Arranque o serviço de novo.")
+    return 0
+
+
+def cmd_db(args) -> int:
+    from . import migrations
+    app = _app(start_worker=False)
+    with app.app_context():
+        if args.action == "upgrade":
+            done = migrations.upgrade(backup_dir=Path(app.config["DATA_DIR"]) / "backups")
+            print("Migrações aplicadas: " + (", ".join(done) or "nenhuma (já está atualizado)"))
+        st = migrations.status()
+        print(f"Aplicadas: {len(st['applied'])} · pendentes: {', '.join(st['pending']) or 'nenhuma'} · última: {st['latest']}")
+    return 0
+
+
+def cmd_signing(args) -> int:
+    from . import signing
+    app = _app(start_worker=False)
+    if args.action == "rotate":
+        res = signing.rotate(app.config)
+        print(f"Chave de assinatura rodada. Atual: {res['current']}  (a anterior continua publicada: {res['previous']})")
+        print("Os agentes adotam a nova lista no contacto seguinte; só depois remova task.prev.pub.")
+    else:
+        for i, k in enumerate(signing.public_keys(app.config)):
+            print(("atual   " if i == 0 else "anterior"), k)
+    return 0
+
+
 def cmd_worker(args) -> int:
     from .worker import Worker
     app = _app(start_worker=False)
@@ -396,6 +449,10 @@ def main(argv=None) -> int:
     s = sub.add_parser("serve"); s.add_argument("--host"); s.add_argument("--port", type=int); s.add_argument("--agent-port", type=int); s.add_argument("--prefix")
     s.add_argument("--no-worker", action="store_true"); s.add_argument("--no-tls", action="store_true"); s.set_defaults(fn=cmd_serve)
     sub.add_parser("worker").set_defaults(fn=cmd_worker)
+    b = sub.add_parser("backup"); b.add_argument("action", nargs="?", choices=["create", "list"], default="create"); b.set_defaults(fn=cmd_backup)
+    r_ = sub.add_parser("restore"); r_.add_argument("file"); r_.add_argument("--force", action="store_true"); r_.set_defaults(fn=cmd_restore)
+    d_ = sub.add_parser("db"); d_.add_argument("action", choices=["status", "upgrade"]); d_.set_defaults(fn=cmd_db)
+    sg = sub.add_parser("signing"); sg.add_argument("action", choices=["show", "rotate"]); sg.set_defaults(fn=cmd_signing)
     cp = sub.add_parser("capacity"); cp.add_argument("--benchmark", action="store_true"); cp.add_argument("--agents", type=int, default=50)
     cp.add_argument("--seconds", type=int, default=10); cp.add_argument("--tenant"); cp.add_argument("--json", action="store_true"); cp.set_defaults(fn=cmd_capacity)
     t = sub.add_parser("tls"); t.add_argument("action", choices=["info", "generate"]); t.add_argument("--hostname"); t.add_argument("--agent-hostname"); t.add_argument("--days", type=int)

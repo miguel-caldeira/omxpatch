@@ -10,8 +10,8 @@ from flask_login import current_user, login_required
 
 from ..engine import advisor, autonomous, compliance, controls, executive, simulation
 from ..extensions import db
-from ..models import (CONTROL_ACTIONS, SIMULATIONS, AiPlan, Asset, AutonomousRun, ControlAction, Exposure, Simulation,
-                      Validation, utcnow)
+from ..models import (CONTROL_ACTIONS, AiPlan, Asset, AutonomousRun, ControlAction, Exposure, Simulation,
+                      Validation)
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
 from .common import tenant_or_select
 

@@ -102,6 +102,21 @@ class Worker:
                 intel.sync_all()
             except Exception as exc:  # noqa: BLE001
                 log.warning("Inteligência: %s", exc)
+        if due("job:backup", float(cfg["BACKUP_HOURS"]) * 60, now) and not cfg.get("TESTING"):
+            try:
+                from .engine import backup
+                if cfg["BACKUP_ENABLED"]:
+                    backup.create(self.app)
+                backup.retention(self.app)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Cópia de segurança/retenção: %s", exc)
+                db.session.rollback()
+        if due("job:tls", 24 * 60, now) and not cfg.get("TESTING") and cfg.get("TLS_ENABLED"):
+            try:
+                from . import tls
+                tls.maintain(cfg, log=log.info)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Manutenção do certificado: %s", exc)
         for tenant in Tenant.query.filter_by(active=True):
             if is_suspended(tenant):
                 continue

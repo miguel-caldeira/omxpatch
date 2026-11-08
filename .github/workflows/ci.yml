@@ -9,8 +9,57 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  test:                       # servidor + agente, com o ficheiro de versões fixas
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.9", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ matrix.python-version }}"}
+      - run: pip install --require-hashes -r requirements.lock && pip install pytest coverage
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq openssl
+      - run: coverage run --source=omxpatch,omxpatch_agent -m pytest -q
+      - run: coverage report --fail-under=65
+
+  agent-compat:               # o agente só usa a biblioteca padrão: corre em Windows, macOS e Linux, de Python 3.8 a 3.13
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          - {os: macos-latest, python-version: "3.8"}     # o runner macOS (arm64) não tem Python 3.8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ matrix.python-version }}"}
+      - run: python -m omxpatch_agent selftest
+      - run: python -m omxpatch_agent selftest --json
+
+  windows-macos-server-tests:  # coletores/patchers de Windows e macOS com sistema real (o servidor também arranca nestes SO)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements.lock pytest
+      - run: python -m pytest -q tests/test_platforms.py tests/test_agent.py tests/test_scale_compat.py -k "not openssl and not real_tls"
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install ruff bandit pip-audit
+      - run: ruff check --select F omxpatch omxpatch_agent
+      - run: bandit -q -r omxpatch omxpatch_agent -ll
+      - run: pip-audit -r requirements.txt

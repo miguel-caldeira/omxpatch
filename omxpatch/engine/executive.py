@@ -3,8 +3,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from ..extensions import db
-from ..models import (OPEN_EXPOSURE, RISK_CATEGORIES, Asset, AutonomousRun, Campaign, ControlAction, CveIntel,
+from ..models import (RISK_CATEGORIES, Asset, AutonomousRun, Campaign, ControlAction, CveIntel,
                       Exposure, Patch, Simulation, Tenant, Validation, utcnow)
 from . import risk
 
@@ -19,7 +18,6 @@ def kpis(tenant: Tenant, now=None) -> dict:
     tid = tenant.id
     assets = Asset.query.filter_by(tenant_id=tid).all()
     exps = Exposure.query.filter_by(tenant_id=tid).all()
-    open_ = [e for e in exps if e.status in OPEN_EXPOSURE and e.status != "closed"]
     unresolved = [e for e in exps if e.status in ("open", "mitigated", "patching")]
     by_asset: dict[int, list[Exposure]] = {}
     for e in unresolved:

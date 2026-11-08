@@ -4,7 +4,7 @@ import os
 import shutil
 
 from ..runner import run
-from . import PatchError, check_pkg
+from . import PatchError, check_label, check_pkg
 
 
 def _console_user() -> str:
@@ -33,7 +33,7 @@ def apply(p: dict, download) -> dict:
         r = run(["sudo", "-u", user, _brew(), "upgrade", pkg], 3600)
         out, ok = r.out, r.ok
     else:
-        label = check_pkg(p.get("package") or p.get("uid") or "")
+        label = check_label(p.get("package") or p.get("uid") or "")
         r = run(["softwareupdate", "-i", label, "--agree-to-license"], 7200)
         out, ok = r.out, r.ok
         reboot = "restart" in r.out.lower()
@@ -69,7 +69,7 @@ def simulate(p: dict, stage) -> dict:
             pred["noop"] = True
             add("applicability", "Simulação (brew outdated)", "info", "Sem atualização disponível")
     else:
-        label = check_pkg(p.get("package") or p.get("uid") or "")
+        label = check_label(p.get("package") or p.get("uid") or "")
         r = run(["softwareupdate", "-l"], 300)
         if label.lower() in r.out.lower():
             add("applicability", "Simulação (softwareupdate -l)", "ok", f"{label} disponível")

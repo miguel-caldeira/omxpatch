@@ -1,14 +1,13 @@
 """Operações em massa (por atualização ou por ativo) e boas práticas: simular → ver ações e resultados → OK → executar."""
 from __future__ import annotations
 
-import json
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from ..engine import deploy, plans as plans_mod, practices as pr
 from ..extensions import db
-from ..models import (ITEM_STATUSES, PLAN_STATUSES, Asset, Exposure, OperationPlan, Patch, PlanItem)
+from ..models import (Asset, Exposure, OperationPlan, Patch, PlanItem)
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
 from .common import parse_date, tenant_or_select
 

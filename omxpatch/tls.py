@@ -157,7 +157,11 @@ def ensure(cfg, log=print, force: bool = False, profile: str = "console") -> dic
     if not reason:
         current = info(cert_path)
         dns, ips = wanted_names(cfg, profile)
-        if current["days_left"] < RENEW_DAYS:
+        if current["days_left"] < RENEW_DAYS and profile == "agent" and _promote(cfg, profile, log):
+            return info(cert_path)
+        elif current["days_left"] < RENEW_DAYS and profile == "agent" and next_paths(cfg, profile)[0].is_file():
+            return current           # seguinte ainda em período de publicação: os agentes fixados ignoram a validade do atual
+        elif current["days_left"] < RENEW_DAYS:
             reason = f"expira em {current['days_left']} dias"
         elif profile != "agent" and (not set(dns) <= set(current["dns"]) or not set(ips) <= set(current["ips"])):
             # No perfil dos agentes a confiança vem da impressão digital (thumbprint), não dos nomes/IPs do certificado:
@@ -169,6 +173,53 @@ def ensure(cfg, log=print, force: bool = False, profile: str = "console") -> dic
     log(f"Certificado TLS {PROFILES[profile]['label']} autoassinado gerado ({reason}): {', '.join(data['dns'] + data['ips'])}; válido até "
         f"{data['not_after']:%Y-%m-%d}; SHA-256 {data['sha256']}")
     return data
+
+
+PREPARE_DAYS = 60        # o certificado seguinte é criado (e o seu thumbprint publicado aos agentes) quando faltam menos de 60 dias
+ROTATE_GRACE_DAYS = 7    # o seguinte só substitui o atual depois de publicado há pelo menos 7 dias (agentes que contactam diariamente)
+
+
+def next_paths(cfg, profile: str = "agent") -> tuple[Path, Path]:
+    cert, key, _ = paths(cfg, profile)
+    return cert.with_name(cert.stem + ".next.crt"), key.with_name(key.stem + ".next.key")
+
+
+def agent_pins(cfg, profile: str = "agent") -> list[str]:
+    """Impressões digitais SHA-256 (hex) a publicar aos agentes: o certificado atual e, se já preparado, o seguinte."""
+    cert, _, managed = paths(cfg, profile)
+    out = []
+    ncert, _nk = next_paths(cfg, profile)
+    for c in (cert, ncert):
+        if c.is_file():
+            out.append(info(c)["sha256"].replace(":", "").lower())
+    return out if managed else out[:1]
+
+
+def maintain(cfg, log=print, profile: str = "agent") -> str:
+    """Tarefa periódica (worker): prepara o certificado seguinte quando o atual se aproxima do fim. Devolve o que fez."""
+    cert, key, managed = paths(cfg, profile)
+    ncert, nkey = next_paths(cfg, profile)
+    if not managed or not cert.is_file():
+        return ""
+    if info(cert)["days_left"] < PREPARE_DAYS and not ncert.is_file():
+        data = generate(cfg, ncert, nkey, profile)
+        log(f"Certificado {PROFILES[profile]['label']} seguinte preparado (thumbprint publicado aos agentes): SHA-256 {data['sha256']}")
+        return "prepared"
+    return ""
+
+
+def _promote(cfg, profile: str, log) -> bool:
+    cert, key, _ = paths(cfg, profile)
+    ncert, nkey = next_paths(cfg, profile)
+    if not (ncert.is_file() and nkey.is_file()):
+        return False
+    age_days = (datetime.now(timezone.utc).timestamp() - ncert.stat().st_mtime) / 86400
+    if age_days < ROTATE_GRACE_DAYS:
+        return False
+    os.replace(ncert, cert)
+    os.replace(nkey, key)
+    log(f"Certificado {PROFILES[profile]['label']} substituído pelo seguinte (publicado há {age_days:.0f} dias)")
+    return True
 
 
 def context(cfg, profile: str = "console") -> ssl.SSLContext:

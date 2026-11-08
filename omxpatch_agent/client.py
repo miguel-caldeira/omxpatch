@@ -67,8 +67,10 @@ class StdSession:
     """Sessão HTTP mínima (``request`` / ``download``) com *pinning* do certificado."""
 
     def __init__(self, pin_sha256: str = "", ca_file: str = ""):
-        self.pin, self.ca_file = normalize_pin(pin_sha256), ca_file
-        if self.pin and pin_algorithm(self.pin) is None:
+        self.pins = [normalize_pin(p) for p in str(pin_sha256 or "").split(",") if normalize_pin(p)]   # atual e, na rotação, o seguinte
+        self.pin, self.ca_file = ",".join(self.pins), ca_file
+        self.matched_pin = ""
+        if any(pin_algorithm(p) is None for p in self.pins):
             raise PinError("Impressão digital inválida: use SHA-256 (64 hex) ou o thumbprint SHA-1 (40 hex)")
 
     def _connect(self, url: str, timeout: int):
@@ -88,7 +90,10 @@ class StdSession:
         conn.connect()
         if self.pin:
             der = conn.sock.getpeercert(binary_form=True)
-            if not pin_matches(der, self.pin):
+            hit = [p for p in self.pins if pin_matches(der, p)]
+            if hit:
+                self.matched_pin = hit[0]
+            if not hit:
                 conn.close()
                 raise PinError("O certificado do servidor não corresponde à impressão digital esperada (pin_sha256)")
         return conn, u
@@ -177,6 +182,13 @@ class Client:
             raise ServerError("Chave de agente inválida ou revogada")
         r.raise_for_status()
         return r.json()
+
+    def bundle(self) -> tuple:
+        """Pacote do agente (zip) com o SHA-256 anunciado, para a atualização automática."""
+        r = self._req("GET", "/agent/v1/bundle", timeout=120)
+        if r.status_code != 200:
+            raise ServerError(f"HTTP {r.status_code}")
+        return r.body, r.headers.get("x-content-sha256", "")
 
     def inventory(self, report: dict) -> dict:
         r = self._req("POST", "/agent/v1/inventory", json=report, timeout=300)

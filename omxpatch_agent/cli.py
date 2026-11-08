@@ -16,7 +16,7 @@ import random
 import sys
 import time
 
-from . import __version__, collectors, compat, config, executor, service
+from . import __version__, collectors, compat, config, executor, service, trust, update
 from . import client as client_mod
 from .client import Client, ServerError
 from urllib.parse import urlsplit
@@ -48,6 +48,8 @@ def cmd_enroll(args) -> int:
     except ServerError as exc:
         print(f"Registo recusado: {exc}", file=sys.stderr)
         return 2
+    t = data.get("trust") or {}
+    cfg.update({"agent_id": data.get("agent_id"), "task_keys": [k for k in t.get("task_keys", []) if isinstance(k, str)][:3]})
     cfg.update({"agent_key": data["agent_key"], "poll_seconds": data.get("poll_seconds", 300),
                 "tenant": data.get("tenant", {}).get("slug", ""), "tenant_name": data.get("tenant", {}).get("name", "")})
     path = config.save(cfg)
@@ -85,10 +87,33 @@ def _adopt_servers(client: Client, urls) -> None:
         log.info("Endereços da consola atualizados: %s", cfg["server_url"])
 
 
+def _adopt_trust(client: Client, resp: dict) -> dict:
+    """Impressões digitais (rotação), chaves de assinatura e identificador, publicados pela consola por TLS já fixado."""
+    t = resp.get("trust") or {}
+    cfg = config.load()
+    if t and cfg.get("agent_key") and trust.adopt(cfg, t, getattr(client.s, "matched_pin", "")):
+        config.save(cfg)
+        if cfg.get("pin_sha256") and hasattr(client.s, "pins"):
+            client.s.pins = [p for p in cfg["pin_sha256"].split(",") if p]
+            client.s.pin = cfg["pin_sha256"]
+        log.info("Confiança atualizada (impressões digitais/chaves de assinatura)")
+    return cfg
+
+
 def cycle(client: Client, state: dict) -> int:
     """Um contacto: inventário (se pedido/periódico) e execução das tarefas. Devolve o n.º de tarefas."""
     resp = client.poll()
     _adopt_servers(client, resp.get("server_urls"))
+    cfg = _adopt_trust(client, resp)
+    offer = update.check(cfg, resp.get("trust") or {})
+    if offer and not state.get("update_failed") == offer["version"]:
+        try:
+            log.info("A atualizar o agente para %s", offer["version"])
+            update.apply(client, offer)
+            update.restart_self()
+        except Exception as exc:  # noqa: BLE001 - uma atualização falhada nunca impede o trabalho normal
+            log.warning("Atualização falhou (mantém a versão atual): %s", exc)
+            state["update_failed"] = offer["version"]
     if resp.get("inventory_requested") or time.time() - state.get("last_inventory", 0) > INVENTORY_EVERY:
         try:
             send_inventory(client)
@@ -97,7 +122,12 @@ def cycle(client: Client, state: dict) -> int:
             log.warning("Inventário falhou: %s", exc)
     for task in resp.get("tasks", []):
         log.info("Tarefa %s (%s)", task["id"], task["type"])
-        report = executor.execute(client, task)
+        valid, why = trust.verify_task(cfg, task, cfg.get("agent_id"))
+        if not valid:
+            log.error("Tarefa %s recusada: %s", task["id"], why)
+            report = {"status": "failed", "output": f"Recusada pelo agente: {why}", "rejected": True}
+        else:
+            report = executor.execute(client, task)
         try:
             client.task_result(task["id"], report)
         except Exception as exc:  # noqa: BLE001 - o servidor repõe a tarefa na fila se não houver resposta

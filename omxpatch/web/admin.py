@@ -1,9 +1,10 @@
 """Administração: utilizadores, organizações, definições, auditoria, sistema, integrações e agentes."""
 from __future__ import annotations
 
-import json
 import re
 from datetime import date
+
+from pathlib import Path
 
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
@@ -230,7 +231,8 @@ def system():
 @login_required
 @superadmin_required
 def capacity_page():
-    from ..engine import capacity
+    from ..engine import backup as backup_mod, capacity
+    from .. import migrations
     if request.method == "POST":
         if not request.form.get("confirm_ok"):
             flash("Confirme a caixa «OK»: o teste cria agentes simulados e carrega o servidor durante alguns segundos.", "danger")
@@ -246,7 +248,26 @@ def capacity_page():
     snap = capacity.snapshot(current_app)
     est = capacity.estimate(snap)
     return render_template("admin/capacity.html", snap=snap, est=est, recs=capacity.recommendations(snap, est), bench=capacity.bench_status(),
-                           max_agents=capacity.BENCH_MAX_AGENTS, max_seconds=capacity.BENCH_MAX_SECONDS)
+                           max_agents=capacity.BENCH_MAX_AGENTS, max_seconds=capacity.BENCH_MAX_SECONDS,
+                           backups=backup_mod.listing(current_app.config), migrations=migrations.status())
+
+
+@bp.route("/system/backup", methods=["POST"])
+@login_required
+@superadmin_required
+def backup_now():
+    from ..engine import backup
+    if not request.form.get("confirm_ok"):
+        flash("Confirme a caixa «OK» para criar a cópia.", "danger")
+    else:
+        try:
+            res = backup.create(current_app)
+            audit("backup_created", f"{Path(res['file']).name} ({res['size']} bytes)")
+            db.session.commit()
+            flash(f"Cópia criada: {Path(res['file']).name}. Contém chaves privadas: guarde-a cifrada e fora do servidor.", "success")
+        except Exception as exc:  # noqa: BLE001
+            flash(f"Cópia falhou: {exc}", "danger")
+    return redirect(url_for("admin.capacity_page"))
 
 
 @bp.route("/system/capacity.json")

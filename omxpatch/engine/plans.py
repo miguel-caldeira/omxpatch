@@ -203,7 +203,6 @@ def execute(plan: OperationPlan, tenant: Tenant, user=None, now=None) -> dict:
     for it in plan.items:
         if it.status != "approved":
             continue
-        ok, why = True, ""
         if not it.sim_at or now - it.sim_at > MAX_AGE:
             it.status, it.approved_at, it.approved_by_id = "simulated", None, None
             skipped.append((it, "a simulação caducou: simule e aprove de novo"))

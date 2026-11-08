@@ -10,7 +10,7 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from ..connectors import omxgrc, omxvuln, signals as signals_mod, sync
 from ..connectors.store import ConnectorError
-from ..engine import advisor, autonomous, compliance, controls, correlate, deploy, executive, intel, inventory, patches, plans as plans_mod, practices as practices_mod, preflight, sources
+from ..engine import advisor, autonomous, compliance, correlate, deploy, executive, intel, inventory, patches, plans as plans_mod, practices as practices_mod, preflight, sources
 from ..extensions import db
 from ..models import (OperationPlan, Preflight, Asset, AutonomousRun, Campaign, ControlAction, CveIntel, EnrollmentToken, Exposure, Patch, Tenant,
                       Validation, utcnow)

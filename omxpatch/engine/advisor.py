@@ -207,7 +207,7 @@ def narrate(question: str, asset_name: str, p: dict) -> str:
                                                          f"Plano: {json.dumps(p, ensure_ascii=False, default=str)[:6000]}"}]}
         r = requests.post(cfg["AI_URL"], json=body, timeout=int(cfg["AI_TIMEOUT"]),
                           headers={"x-api-key": cfg["AI_API_KEY"], "anthropic-version": "2023-06-01",
-                                   "content-type": "application/json"})
+                                   "content-type": "application/json"})  # nosec B113 - timeout=int(AI_TIMEOUT) acima
         r.raise_for_status()
         text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text").strip()
         return text or fallback

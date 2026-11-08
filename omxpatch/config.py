@@ -32,8 +32,14 @@ DEFAULTS: dict[str, object] = {
     "AGENT_SERVER_IP": "",             # IP do servidor: os scripts de instalação acrescentam-no ao ficheiro hosts dos postos
     "AGENT_BASE_URL": "",
     "AGENT_ADDRESS_MODE": "name",      # name = os agentes usam o nome (DNS/hosts); ip = só o IP do servidor + thumbprint do certificado
+    "BACKUP_ENABLED": True, "BACKUP_HOURS": 24, "BACKUP_KEEP": 7, "BACKUP_DIR": "",   # cópia diária; 0 cópias a manter = não apagar
+    "AUDIT_RETENTION_DAYS": 0, "TASK_RETENTION_DAYS": 0,                     # retenção (0 = guardar sempre)
+    "RATE_ENROLL_PER_MIN": 120,       # registos/transferências do pacote por IP e minuto (0 = sem limite)
+    "RATE_AUTH_FAIL_PER_MIN": 30,     # chaves de agente inválidas por IP e minuto antes de bloquear 30 s
+    "RATE_AGENT_PER_MIN": 120,        # pedidos por agente e minuto (um agente normal faz ~1 a cada 5 min)
+    "AGENT_AUTO_UPDATE": True,         # os agentes atualizam-se sozinhos (só com pacote assinado pela consola e autoteste)
     "AGENT_SERVER_URLS": "",           # endereços alternativos publicados aos agentes (vírgula), p.ex. https://10.0.0.5:4444,https://10.0.1.5:4444
-    "TLS_ENABLED": True, "TLS_HOSTNAME": "omxpatch.oramix.local",
+    "TLS_HOSTNAME": "omxpatch.oramix.local",
     "TLS_EXTRA_NAMES": "", "TLS_CERT": "", "TLS_KEY": "", "TLS_DAYS": 730, "TLS_MIN_VERSION": "1.2",
     "URL_PREFIX": "", "TRUSTED_PROXIES": 1, "SESSION_COOKIE_SECURE": False, "SESSION_HOURS": 8,
     "FRAME_ANCESTORS": "'self'", "SECRET_KEY": "", "DATABASE_URL": "", "MAX_UPLOAD_MB": 500, "THREADS": 8,

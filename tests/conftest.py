@@ -15,6 +15,9 @@ def app(tmp_path, monkeypatch):
     monkeypatch.delenv("OMXPATCH_CONFIG", raising=False)
     monkeypatch.setattr("omxpatch.models.PASSWORD_HASH_METHOD", "pbkdf2:sha256:1000")      # testes rápidos
     monkeypatch.chdir(tmp_path)
+    from omxpatch import ratelimit, metrics
+    ratelimit.reset()
+    metrics.reset()
     app = create_app({"DATA_DIR": str(tmp_path), "TESTING": True, "KEV_ENABLED": False, "NVD_ENABLED": False,
                       "EPSS_ENABLED": False, "MITRE_ENABLED": False, "ANSIBLE_ENABLED": False,
                       "DATABASE_URL": f"sqlite:///{tmp_path}/t.db", "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path}/t.db",

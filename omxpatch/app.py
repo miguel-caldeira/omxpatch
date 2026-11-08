@@ -206,7 +206,7 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
     with app.app_context():
         db.create_all()
         from .migrations import upgrade
-        upgrade()
+        upgrade(backup_dir=None if app.config.get("TESTING") else Path(app.config["DATA_DIR"]) / "backups")
 
     if start_worker is None:
         start_worker = bool(app.config["EMBEDDED_WORKER"]) and not app.config.get("TESTING")

@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import timedelta
 
 from flask import Blueprint, abort, current_app, g, jsonify, request, send_file
 
 from ..engine import correlate, deploy, inventory, patches
+from .. import ratelimit
 from ..extensions import db
-from ..models import Agent, Asset, EnrollmentToken, Task, Tenant, utcnow
+from ..models import Agent, EnrollmentToken, Task, Tenant, utcnow
 
 bp = Blueprint("agent", __name__, url_prefix="/agent/v1")
 AGENT_VERSION_MIN = "1.0.0"
@@ -25,21 +25,69 @@ def agent_urls(cfg) -> list:
     return urls or [str(cfg["AGENT_BASE_URL"]).rstrip("/")]
 
 
+_bundle_cache: dict = {}
+
+
+def trust_block(agent=None) -> dict:
+    """Confiança publicada aos agentes: impressões digitais (atual + seguinte), chaves de assinatura e oferta de atualização."""
+    from .. import signing, tls
+    cfg = current_app.config
+    out = {"task_keys": signing.public_keys(cfg), "pins": tls.agent_pins(cfg) if cfg["TLS_ENABLED"] else []}
+    if agent is not None:
+        out["agent_id"] = agent.id
+    if cfg.get("AGENT_AUTO_UPDATE", True):
+        data, digest = bundle_bytes()
+        import omxpatch_agent
+        key = (omxpatch_agent.__version__, digest, out["task_keys"][0])      # a rotação da chave invalida a assinatura em cache
+        if _bundle_cache.get("key") != key:
+            _bundle_cache.update(key=key, sig=signing.sign(cfg, "bundle", {"version": omxpatch_agent.__version__, "sha256": digest}))
+        out.update(agent_version=omxpatch_agent.__version__, bundle_sha256=digest, bundle_sig=_bundle_cache["sig"])
+    return out
+
+
 def _hash(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _too_many(retry: int):
+    r = jsonify({"error": "Demasiados pedidos: tente mais tarde"})
+    r.status_code = 429
+    r.headers["Retry-After"] = str(retry)
+    return r
 
 
 @bp.before_request
 def _auth():
     g.agent = None
+    cfg = current_app.config
+    ip = request.remote_addr or "?"
     if request.endpoint in ("agent.enroll", "agent.bundle"):
+        # registo/pacote: limite por IP (tentativas de adivinhar tokens) e por token
+        if ratelimit.peek(f"authfail:{ip}") >= int(cfg["RATE_AUTH_FAIL_PER_MIN"]) > 0:    # tentativas falhadas (adivinhar tokens)
+            return _too_many(30)
+        ok, retry = ratelimit.hit(f"enroll:{ip}", int(cfg["RATE_ENROLL_PER_MIN"]))
+        if not ok:
+            return _too_many(retry)
+        raw = request.headers.get("X-Enrollment-Token") or (request.get_json(silent=True) or {}).get("token") or ""
+        if raw:
+            ok, retry = ratelimit.hit(f"enroll-token:{_hash(str(raw))}", int(cfg["RATE_ENROLL_PER_MIN"]) * 3)
+            if not ok:
+                return _too_many(retry)
         return None                      # autenticação própria (token de registo)
+    if ratelimit.peek(f"authfail:{ip}") >= int(cfg["RATE_AUTH_FAIL_PER_MIN"]) > 0:
+        return _too_many(30)
     header = request.headers.get("Authorization", "")
     if not header.lower().startswith("bearer "):
+        ratelimit.hit(f"authfail:{ip}", 10 ** 6)
         return jsonify({"error": "Chave de agente em falta"}), 401
     agent = Agent.query.filter_by(key_hash=_hash(header[7:].strip()), revoked=False).first()
     if agent is None:
+        ratelimit.hit(f"authfail:{ip}", 10 ** 6)
         return jsonify({"error": "Chave de agente inválida ou revogada"}), 401
+    if not agent.hostname.startswith("loadtest-"):         # os agentes simulados do teste de carga não são limitados
+        ok, retry = ratelimit.hit(f"agent:{agent.id}", int(cfg["RATE_AGENT_PER_MIN"]))
+        if not ok:
+            return _too_many(retry)
     tenant = db.session.get(Tenant, agent.tenant_id)
     from .. import licensing
     if tenant is None or not tenant.active or licensing.is_suspended(tenant):
@@ -63,6 +111,7 @@ def enroll():
     raw = str(data.get("token", ""))
     tok = EnrollmentToken.query.filter_by(token_hash=_hash(raw), revoked=False).first() if raw else None
     if tok is None or (tok.expires_at and tok.expires_at < utcnow()) or (tok.max_uses and tok.uses >= tok.max_uses):
+        ratelimit.hit(f"authfail:{request.remote_addr or '?'}", 10 ** 6)
         return jsonify({"error": "Token de registo inválido, expirado ou esgotado"}), 401
     tenant = db.session.get(Tenant, tok.tenant_id)
     from .. import licensing
@@ -98,7 +147,8 @@ def enroll():
     audit("agent_enrolled", f"{host} ({os_family})", tenant_id=tenant.id)
     db.session.commit()
     return jsonify({"agent_key": key, "agent_id": agent.id, "poll_seconds": int(current_app.config["AGENT_HEARTBEAT_SECONDS"]),
-                    "asset_id": asset.id, "tenant": {"slug": tenant.slug, "name": tenant.name}}), 201
+                    "asset_id": asset.id, "tenant": {"slug": tenant.slug, "name": tenant.name},
+                    "trust": {k: v for k, v in trust_block(agent).items() if k in ("task_keys", "pins", "agent_id")}}), 201
 
 
 @bp.post("/poll")
@@ -108,9 +158,10 @@ def poll():
     _touch(agent, body)
     asset = agent.asset
     need_inventory = asset is not None and (asset.software.count() == 0 or not asset.cmdb_synced_at and False)
-    tasks = deploy.poll(agent, limit=3)
+    from .. import signing
+    tasks = [signing.sign_task(current_app.config, agent.id, t) for t in deploy.poll(agent, limit=3)]
     db.session.commit()
-    return jsonify({"tasks": tasks, "poll_seconds": int(current_app.config["AGENT_HEARTBEAT_SECONDS"]),
+    return jsonify({"tasks": tasks, "trust": trust_block(agent), "poll_seconds": int(current_app.config["AGENT_HEARTBEAT_SECONDS"]),
                     "inventory_requested": bool(need_inventory), "server_time": utcnow().isoformat(),
                     "server_urls": agent_urls(current_app.config)})
 
@@ -205,6 +256,7 @@ def bundle():
         header = request.headers.get("Authorization", "")
         ok = header.lower().startswith("bearer ") and Agent.query.filter_by(key_hash=_hash(header[7:].strip()), revoked=False).first() is not None
     if not ok:
+        ratelimit.hit(f"authfail:{request.remote_addr or '?'}", 10 ** 6)
         return jsonify({"error": "Token de registo inválido ou expirado"}), 401
     data, digest = bundle_bytes()
     return Response(data, mimetype="application/zip", headers={"X-Content-SHA256": digest,

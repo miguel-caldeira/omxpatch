@@ -262,6 +262,17 @@ O agente faz tudo sozinho em Python (inventário, patching, simulação, boas pr
 
 **Só IP + thumbprint:** com `AGENT_ADDRESS_MODE=ip` e `AGENT_SERVER_IP`, os agentes falam com `https://<IP>:4444` sem DNS, ficheiro hosts nem CA: confiam apenas na impressão digital do certificado (SHA-256, ou o *thumbprint* SHA-1 do Windows) que o script traz. Por IP sem impressão digital o agente recusa ligar. `AGENT_SERVER_URLS` publica endereços alternativos (*failover*) aos agentes. O certificado dos agentes **não é regenerado** quando o IP do servidor muda, para o thumbprint se manter.
 
+## Endurecimento e operação
+
+- **Rotação do thumbprint:** quando faltam menos de 60 dias para o certificado dos agentes expirar, o worker prepara o seguinte e a consola publica os **dois** thumbprints no contacto; os agentes só os adotam se contiverem o que acabaram de validar (continuidade). Passados 7 dias o seguinte substitui o atual no arranque seguinte. Agentes fixados ignoram a validade, por isso não há corte. Um agente offline durante todo o período precisa de ser reinstalado.
+- **Tarefas e pacote assinados (Ed25519):** cada tarefa vai com `iat` e assinatura, ligada ao agente; o agente (verificação em Python puro, sem dependências) recusa tarefas alteradas, de outro agente, sem assinatura ou com mais de 1 h. As chaves públicas são fixadas no registo e só se substituem por uma lista que contenha uma conhecida (`omxpatch signing show|rotate`). Protege contra alterações na base de dados, em proxies e por quem não tenha a chave privada (`<dados>/signing/task.key`); **não** protege contra quem controle o servidor inteiro.
+- **Atualização automática dos agentes:** o agente descarrega o pacote anunciado, confere SHA-256 **e** assinatura, corre o `selftest` do código novo e só então troca a pasta (a anterior fica em `omxpatch_agent.prev`; reversão disponível) e reinicia-se. Não atualiza instalações em `site-packages` nem sem assinatura. Desligar: `AGENT_AUTO_UPDATE=false`.
+- **Limitação de pedidos:** por IP no registo/pacote (`RATE_ENROLL_PER_MIN`), bloqueio de 30 s após `RATE_AUTH_FAIL_PER_MIN` tokens/chaves inválidos por IP, e `RATE_AGENT_PER_MIN` por agente. Em memória, por processo.
+- **Versões fixas:** `requirements.lock` (uv, universal, com hashes) é o que o build dos instaladores e o CI usam (`pip --require-hashes`). Regenerar: `uv pip compile requirements.txt --universal --generate-hashes --python-version 3.9 -o requirements.lock`.
+- **Migrações versionadas:** `omxpatch db status|upgrade`; cada migração corre uma vez, em transação (inclui DDL em SQLite), com cópia prévia da base. Para alterar/remover colunas acrescente uma entrada a `MIGRATIONS` em `migrations.py` (não é o Alembic: não há reversão automática).
+- **Cópias e retenção:** `omxpatch backup [list]` / `omxpatch restore <ficheiro> --force` (com o serviço parado) e cópia diária automática (`BACKUP_*`); inclui **chaves privadas**: guarde-as cifradas e fora do servidor. Retenção opcional da auditoria e das tarefas concluídas (`AUDIT_RETENTION_DAYS`, `TASK_RETENTION_DAYS`; 0 = guardar sempre). PostgreSQL: cópia com `pg_dump` se existir.
+- **CI** (`.github/workflows/ci.yml`): testes em Python 3.9/3.11/3.13 com cobertura mínima, `selftest` do agente em Windows, macOS e Linux de 3.8 a 3.13, lint, bandit e pip-audit. *Escrito mas ainda não executado no GitHub Actions.*
+
 ## Segurança
 
 Isolamento por organização em todas as consultas; CSRF, CSP sem *inline*, cookies seguros, MFA TOTP (obrigatório por

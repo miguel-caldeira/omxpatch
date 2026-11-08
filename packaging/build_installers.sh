@@ -35,7 +35,7 @@ $PY -m pip wheel . --no-deps -q -w "$STAGE/app-wheel"
 rm -rf build ./*.egg-info
 
 dl() {  # dl <pasta> <plataforma> <python> -> dependências binárias
-  $PY -m pip download -q -r requirements.txt --only-binary=:all: --platform "$2" --python-version "$3" --implementation cp -d "$1" 2>&1 | tail -2 || true
+  $PY -m pip download -q -r requirements.lock --require-hashes --only-binary=:all: --platform "$2" --python-version "$3" --implementation cp -d "$1" 2>&1 | tail -2
 }
 
 echo "==> Ubuntu"
