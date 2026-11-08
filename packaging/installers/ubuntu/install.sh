@@ -50,12 +50,21 @@ HAS_SYSTEMD=0; [ -d /run/systemd/system ] && [ "$NO_SERVICE" = 0 ] && HAS_SYSTEM
 echo "OMXPatch $(cat "$HERE/VERSION" 2>/dev/null || echo '?') — $(date)"
 
 step "Pacotes do sistema"
+have_py() { command -v python3 >/dev/null && python3 -c 'import sys; assert sys.version_info >= (3, 9)' 2>/dev/null; }
+have_venv() { have_py && python3 -c 'import venv, ensurepip' 2>/dev/null; }
 if [ "$NO_APT" = 0 ] && command -v apt-get >/dev/null; then
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq && apt-get install -y -qq python3 python3-venv ca-certificates openssl openssh-client sshpass
+  # Python, venv e pip (o Ubuntu Server traz o python3 mas não o python3-venv/pip)
+  if apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip ca-certificates openssl openssh-client sshpass; then :; else
+    warn "apt indisponível ou incompleto."
+  fi
 fi
-command -v python3 >/dev/null || { echo "python3 não encontrado" >&2; exit 1; }
-python3 -c 'import venv, sys; assert sys.version_info >= (3, 9)' || { echo "Requer Python ≥ 3.9 com o módulo venv" >&2; exit 1; }
+if ! have_venv && ls "$HERE"/debs/*.deb >/dev/null 2>&1; then
+  warn "A instalar Python/venv/pip a partir dos pacotes incluídos (debs/)."
+  dpkg -i --skip-same-version "$HERE"/debs/*.deb || apt-get install -y -qq -f || true
+fi
+have_py || { echo "Python ≥ 3.9 não encontrado e não foi possível instalá-lo (apt sem rede e sem debs/ compatíveis com esta versão do Ubuntu)." >&2; exit 1; }
+have_venv || { echo "Falta o módulo venv/ensurepip: instale 'python3-venv python3-pip' (sudo apt install python3-venv python3-pip) e repita." >&2; exit 1; }
 
 step "Utilizador e diretórios"
 id "$SVC_USER" >/dev/null 2>&1 || useradd --system --home-dir "$APP" --shell /usr/sbin/nologin "$SVC_USER"

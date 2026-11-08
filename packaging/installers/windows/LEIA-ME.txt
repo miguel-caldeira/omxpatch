@@ -8,3 +8,6 @@ OMXPatch — instalação em Windows Server / Windows 10-11
 Portas: 4434 = consola de gestão · 4444 = agentes → consola (certificados autoassinados de 2 anos, um para cada nome).
 Os nomes têm de resolver (DNS ou ficheiro hosts). Atualizar: execute o instalador da nova versão. Remover: Uninstall-OMXPatch.ps1 [-Purge].
 O modo sem agente (Ansible) exige um controlador Linux/WSL.
+
+Python/pip: se o Python 3.11+ não existir, é instalado a partir de python-installer.exe (incluído no pacote, SHA-256 verificado,
+com pip) ou, se faltar, descarregado de python.org.

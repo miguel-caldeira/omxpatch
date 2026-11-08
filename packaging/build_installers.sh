@@ -4,10 +4,26 @@
 #   omxpatch-windows-<versão>.zip     centro de comando (Windows) com wheelhouse offline (cp312, win_amd64)
 #   omxpatch-agent-<versão>.zip       agente (só biblioteca padrão) para instalação manual/offline
 #   SHA256SUMS
-# Requer: python3 com pip, zip, tar. Uso: packaging/build_installers.sh
+# Requer: python3 com pip e tar (zip é opcional). Uso: packaging/build_installers.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 PY="${PYTHON:-python3}"
+# zip: usa o comando se existir; caso contrário, o módulo zipfile do Python (não exige instalar nada)
+mkzip() {  # mkzip <destino.zip> <pasta>   (executado dentro da pasta-mãe)
+  if command -v zip >/dev/null 2>&1; then zip -qr "$1" "$2"; else
+    "$PY" - "$1" "$2" <<'PYZIP'
+import os, sys, zipfile
+dest, root = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+    for d, _, files in os.walk(root):
+        if not files and not _:
+            z.write(d)
+        for f in files:
+            p = os.path.join(d, f)
+            z.write(p, p)
+PYZIP
+  fi
+}
 VER="$($PY -c "import re;print(re.search(r'__version__ = \"([^\"]+)\"', open('omxpatch/__init__.py').read()).group(1))")"
 DIST="$ROOT/dist"; STAGE="$(mktemp -d)"; rm -rf "$DIST"; mkdir -p "$DIST"
 trap 'rm -rf "$STAGE"' EXIT
@@ -27,6 +43,15 @@ cp "$STAGE"/app-wheel/*.whl "$U/wheels/"
 for arch in manylinux2014_x86_64 manylinux2014_aarch64; do for pv in 3.12 3.13; do dl "$U/wheels" "$arch" "$pv"; done; done
 $PY -m pip download -q "tomli>=2.0" --only-binary=:all: --python-version 3.9 --platform manylinux2014_x86_64 --implementation cp -d "$U/wheels" 2>/dev/null || true
 cp packaging/installers/ubuntu/* "$U/"; echo "$VER" > "$U/VERSION"
+# Python/pip/venv offline (Ubuntu 24.04 amd64): .deb usados pelo instalador se o apt não tiver acesso à rede
+DEBS="python3.12-venv python3-venv python3-pip python3-pip-whl python3-setuptools python3-setuptools-whl python3-pkg-resources python3-wheel sshpass openssh-client libfido2-1 libcbor0.10 libedit2"
+mkdir -p "$U/debs"
+if [ -r /etc/os-release ] && grep -q 'VERSION_ID="24.04"' /etc/os-release && command -v apt-get >/dev/null; then
+  (cd "$U/debs" && apt-get download $DEBS >/dev/null 2>&1) || echo "AVISO: não foi possível descarregar os .deb (debs/ incompleto)"
+else
+  echo "AVISO: construa num Ubuntu 24.04 para incluir os .deb offline (python3-venv, pip) em debs/"
+fi
+ls "$U/debs" | grep -q . || echo "AVISO: pacote Ubuntu sem .deb offline: o instalador precisará de acesso ao apt"
 tar -C "$STAGE" -czf "$DIST/omxpatch-ubuntu-$VER.tar.gz" "omxpatch-ubuntu-$VER"
 
 echo "==> Windows"
@@ -34,8 +59,14 @@ W="$STAGE/omxpatch-windows-$VER"; mkdir -p "$W/wheels"
 cp "$STAGE"/app-wheel/*.whl "$W/wheels/"
 dl "$W/wheels" win_amd64 3.12
 $PY -m pip download -q tzdata --only-binary=:all: -d "$W/wheels" 2>/dev/null || true
+# Python para Windows (offline): PYTHON_WIN_EXE=<ficheiro> ou descarregado de python.org (SHA-256 gravado em python-installer.sha256)
+PYV=3.12.8
+if [ -n "${PYTHON_WIN_EXE:-}" ] && [ -f "$PYTHON_WIN_EXE" ]; then cp "$PYTHON_WIN_EXE" "$W/python-installer.exe"
+else curl -fsSL -m 300 -o "$W/python-installer.exe" "https://www.python.org/ftp/python/$PYV/python-$PYV-amd64.exe" 2>/dev/null || rm -f "$W/python-installer.exe"; fi
+if [ -f "$W/python-installer.exe" ]; then sha256sum "$W/python-installer.exe" | cut -d' ' -f1 > "$W/python-installer.sha256"
+else echo "AVISO: instalador do Python não incluído (sem acesso a python.org): defina PYTHON_WIN_EXE=<python-3.12.x-amd64.exe>"; fi
 cp packaging/installers/windows/* "$W/"; echo "$VER" > "$W/VERSION"
-(cd "$STAGE" && zip -qr "$DIST/omxpatch-windows-$VER.zip" "omxpatch-windows-$VER")
+(cd "$STAGE" && mkzip "$DIST/omxpatch-windows-$VER.zip" "omxpatch-windows-$VER")
 
 echo "==> Agente"
 A="$STAGE/omxpatch-agent-$VER"; mkdir -p "$A"
@@ -44,6 +75,6 @@ cat > "$A/LEIA-ME.txt" <<'EOF'
 Agente OMXPatch (Python 3.8+, sem dependências). Instalação normal: gere o script de auto-instalação na consola («Agentes»).
 Manual:  PYTHONPATH=<esta pasta> python3 -m omxpatch_agent enroll --server https://omxpatchcli.oramix.local:4444 --token omxe_… --pin-sha256 <SHA-256> --install-service
 EOF
-(cd "$STAGE" && zip -qr "$DIST/omxpatch-agent-$VER.zip" "omxpatch-agent-$VER")
+(cd "$STAGE" && mkzip "$DIST/omxpatch-agent-$VER.zip" "omxpatch-agent-$VER")
 
 (cd "$DIST" && sha256sum * > SHA256SUMS && cat SHA256SUMS && du -sh *)

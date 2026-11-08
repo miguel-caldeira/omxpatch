@@ -11,3 +11,6 @@ Opções:  --with-ansible (modo sem agente) · --no-firewall · --port · --agen
 Atualizar: extraia a nova versão e execute ./install.sh outra vez (dados e configuração mantidos).
 Remover:   sudo /opt/omxpatch/uninstall.sh [--purge]
 Registo:   /var/log/omxpatch-install.log
+
+Python/pip: o instalador usa o apt (python3, python3-venv, python3-pip). Sem rede, usa os pacotes .deb incluídos em debs/
+(Ubuntu 24.04 amd64). Noutras versões do Ubuntu/arquitetura, instale primeiro: sudo apt install python3 python3-venv python3-pip

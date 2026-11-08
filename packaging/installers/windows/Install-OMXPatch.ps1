@@ -32,10 +32,18 @@ function Find-Python {
 Step 'Python'
 $Py = Find-Python
 if (-not $Py) {
-  $inst = Join-Path $env:TEMP 'python-installer.exe'
-  Invoke-WebRequest -Uri $PythonUrl -OutFile $inst -UseBasicParsing
+  $inst = Join-Path $Here 'python-installer.exe'
+  if (Test-Path $inst) {                                   # incluído no pacote (instalação offline)
+    $shaFile = Join-Path $Here 'python-installer.sha256'
+    if (-not $PythonSha256 -and (Test-Path $shaFile)) { $PythonSha256 = (Get-Content $shaFile -Raw).Trim() }
+    Write-Host 'A usar o instalador do Python incluído no pacote.'
+  } else {
+    $inst = Join-Path $env:TEMP 'python-installer.exe'
+    Write-Host "A descarregar o Python de $PythonUrl"
+    Invoke-WebRequest -Uri $PythonUrl -OutFile $inst -UseBasicParsing
+  }
   if ($PythonSha256 -and ((Get-FileHash $inst -Algorithm SHA256).Hash -ne $PythonSha256.ToUpper())) { throw 'SHA-256 do instalador do Python não confere' }
-  Start-Process -FilePath $inst -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=0', 'TargetDir=C:\Python312', 'Include_test=0' -Wait
+  Start-Process -FilePath $inst -ArgumentList '/quiet', 'InstallAllUsers=1', 'PrependPath=0', 'TargetDir=C:\Python312', 'Include_test=0', 'Include_pip=1', 'Include_launcher=0' -Wait
   $Py = Find-Python
   if (-not $Py) { throw 'Não foi possível instalar o Python 3.' }
 }
