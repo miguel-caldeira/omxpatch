@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Capacidade e carga{% endblock %}
+{% macro gb(n) %}{{ '%.1f'|format(n / 1073741824) }} GB{% endmacro %}
+{% block content %}<h1>Capacidade e carga</h1>
+<p class="actions"><a class="btn sec" href="{{ url_for('admin.system') }}">Sistema</a> <a class="btn sec" href="{{ url_for('admin.system_settings_page') }}">Configuração e reinício</a> <a class="btn sec" href="{{ url_for('admin.capacity_json') }}">JSON</a></p>
+<div class="panel"><h2>Recomendações</h2>{% for r in recs %}<p class="{{ 'flash ' ~ ('danger' if r.level == 'critical' else 'warning' if r.level == 'warning' else 'info') }}"><strong>{{ r.level|upper }}</strong> — {{ r.text }}</p>{% endfor %}</div>
+<div class="grid2"><div class="panel"><h2>Capacidade prevista</h2><dl class="kv">
+<dt>Agentes</dt><dd>{{ snap.fleet.agents }} ({{ snap.fleet.online }} online)</dd>
+<dt>Contactos por segundo</dt><dd>{{ est.expected_rps }} normal · {{ est.peak_rps }} em pico (3×)</dd>
+<dt>Capacidade</dt><dd>{{ est.capacity_rps }} pedidos/s — {{ est.basis }}</dd>
+<dt>Utilização em pico</dt><dd><strong>{{ '%.0f'|format(est.utilization * 100) }}%</strong></dd>
+<dt>Máximo de agentes</dt><dd>~{{ est.max_agents }} ao intervalo de {{ est.poll_seconds }}s · ~{{ est.max_agents_at_300s }} a 300s</dd></dl></div>
+<div class="panel"><h2>Máquina</h2><dl class="kv">
+<dt>CPU</dt><dd>{{ snap.host.cpus }}{% if snap.host.load %} · carga {{ snap.host.load|join(' / ') }}{% endif %}</dd>
+<dt>Memória</dt><dd>{{ gb(snap.host.mem_available) }} livres de {{ gb(snap.host.mem_total) }} · processo {{ '%.0f'|format(snap.host.process_rss / 1048576) }} MB</dd>
+<dt>Disco</dt><dd>{{ gb(snap.host.disk_free) }} livres de {{ gb(snap.host.disk_total) }}</dd>
+<dt>Base de dados</dt><dd>{{ snap.db.engine }}{% if snap.db.size %} · {{ gb(snap.db.size) }}{% endif %} · {{ snap.db.assets }} ativos · {{ snap.db.tasks }} tarefas · {{ snap.db.exposures }} exposições · {{ snap.db.audit }} registos de auditoria</dd>
+<dt>Tarefas em fila</dt><dd>{{ snap.fleet.queued_tasks }}{% if snap.fleet.oldest_queued_min %} (a mais antiga há {{ snap.fleet.oldest_queued_min }} min){% endif %}</dd>
+<dt>Worker</dt><dd>{% if snap.worker %}último ciclo {{ '%.1f'|format(snap.worker.duration_ms / 1000) }}s ({{ snap.worker.at[:19] }}){% else %}sem dados{% endif %}</dd>
+<dt>Python</dt><dd>{{ snap.host.python }} · THREADS {{ snap.config.THREADS }}</dd></dl></div></div>
+<div class="panel"><h2>Pedidos (últimos 5 min, este processo)</h2><table class="table"><tr><th>Grupo</th><th>Pedidos</th><th>req/s</th><th>p50 ms</th><th>p95 ms</th><th>p99 ms</th><th>Erros 5xx</th></tr>
+{% for g, v in snap.web.groups.items() %}<tr><td>{{ {'agent_poll': 'Contactos de agentes', 'agent_other': 'Agentes (outros)', 'api': 'API', 'console': 'Consola'}[g] }}</td><td>{{ v.requests }}</td><td>{{ v.rps }}</td><td>{{ v.p50 }}</td><td>{{ v.p95 }}</td><td>{{ v.p99 }}</td><td>{{ v.errors }}</td></tr>{% endfor %}</table>
+<p class="small muted">Ativo há {{ snap.web.uptime_s // 60 }} min · {{ snap.web.inflight }} pedido(s) em curso.</p></div>
+<div class="panel"><h2>Teste de carga</h2>
+<p class="small muted">Cria agentes simulados (<code>loadtest-N</code>), que contactam o servidor sem parar durante alguns segundos através da pilha real (autenticação e base de dados), e remove-os no fim. Mede um processo web, sem rede nem TLS. Faça-o fora das horas de ponta: o servidor fica mais lento enquanto corre.</p>
+{% if bench.state == 'running' %}<p class="flash info">A correr: {{ bench.agents }} agentes, {{ bench.seconds }} s…</p>{% elif bench.state == 'error' %}<p class="flash danger">Falhou: {{ bench.error }}</p>{% endif %}
+{% if snap.benchmark %}<dl class="kv"><dt>Último teste</dt><dd>{{ snap.benchmark.at[:19] }} · {{ snap.benchmark.agents }} agentes · {{ snap.benchmark.engine }}</dd><dt>Resultado</dt><dd><strong>{{ snap.benchmark.rps }} pedidos/s</strong> · p50 {{ snap.benchmark.p50 }} ms · p95 {{ snap.benchmark.p95 }} ms · p99 {{ snap.benchmark.p99 }} ms · {{ snap.benchmark.errors }} erros em {{ snap.benchmark.requests }}</dd></dl>{% endif %}
+<form method="post">{{ csrf() }}<div class="row"><div><label for="agents">Agentes simulados (máx. {{ max_agents }})</label><input type="number" id="agents" name="agents" value="50" min="1" max="{{ max_agents }}"></div>
+<div><label for="seconds">Duração (s, máx. {{ max_seconds }})</label><input type="number" id="seconds" name="seconds" value="10" min="3" max="{{ max_seconds }}"></div></div>
+<label class="chk"><input type="checkbox" name="confirm_ok" value="1"> OK — executar o teste agora</label><p class="actions"><button class="btn">Iniciar teste de carga</button></p></form></div>{% endblock %}

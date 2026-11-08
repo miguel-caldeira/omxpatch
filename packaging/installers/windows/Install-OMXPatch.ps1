@@ -111,7 +111,8 @@ $env:OMXPATCH_CONFIG = $Cfg
 Step 'Tarefas agendadas (SYSTEM)'
 foreach ($t in @(@{n = 'OMXPatch'; a = 'serve --no-worker'}, @{n = 'OMXPatch-Worker'; a = 'worker'})) {
   $cmd = "$App\run-$($t.n).cmd"
-  "@echo off`r`nset OMXPATCH_CONFIG=$Cfg`r`n`"$App\venv\Scripts\omxpatch.exe`" $($t.a)`r`n" | Set-Content -Path $cmd -Encoding ASCII
+  # ciclo: se o processo terminar (p.ex. «Reiniciar» na consola) volta a arrancar passados 5 s
+  "@echo off`r`nset OMXPATCH_CONFIG=$Cfg`r`nset OMXPATCH_SUPERVISED=1`r`n:loop`r`n`"$App\venv\Scripts\omxpatch.exe`" $($t.a)`r`ntimeout /t 5 /nobreak >nul`r`ngoto loop`r`n" | Set-Content -Path $cmd -Encoding ASCII
   schtasks /End /TN $t.n 2>$null | Out-Null
   schtasks /Create /F /TN $t.n /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "`"$cmd`"" | Out-Null
   schtasks /Run /TN $t.n | Out-Null

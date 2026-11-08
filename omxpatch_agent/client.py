@@ -1,7 +1,9 @@
-"""Cliente HTTPS do agente, **sem dependências** (só biblioteca padrão): o agente corre em qualquer Python 3.8+.
+"""Cliente HTTPS do agente, **sem dependências** (só biblioteca padrão): o agente corre em Python 3.7+ (testado de 3.8 a 3.13).
 
 O servidor de agentes (porta 4444) usa por omissão um certificado autoassinado (``omxpatchcli.oramix.local``): o agente
-fixa-o pela impressão digital SHA-256 (``pin_sha256``) ou valida-o contra um CA da organização (``ca_file``)."""
+fixa-o pela impressão digital (``pin_sha256``: SHA-256, ou o *thumbprint* SHA-1 do Windows) ou valida-o contra um CA da organização
+(``ca_file``). Com a impressão digital fixada o nome do servidor é irrelevante: o agente pode falar com a consola **só por IP**
+(``https://10.0.0.5:4444``), sem DNS, ficheiro hosts nem CA. ``server_url`` aceita vários endereços separados por vírgula (ordem de preferência)."""
 from __future__ import annotations
 
 import hashlib
@@ -35,7 +37,30 @@ class Response:
 
 
 def normalize_pin(pin: str) -> str:
-    return (pin or "").replace(":", "").strip().lower()
+    return (pin or "").replace(":", "").replace(" ", "").strip().lower()
+
+
+def pin_algorithm(pin: str):
+    """64 hex = SHA-256 (recomendado); 40 hex = SHA-1 (o «Thumbprint» do Windows)."""
+    return {64: hashlib.sha256, 40: hashlib.sha1}.get(len(pin))  # nosec B324 - SHA-1 só como identificador do certificado fixado
+
+
+def pin_matches(der: bytes, pin: str) -> bool:
+    algo = pin_algorithm(pin)
+    return algo is not None and algo(der).hexdigest() == pin
+
+
+def is_ip_host(host: str) -> bool:
+    import ipaddress
+    try:
+        ipaddress.ip_address((host or "").strip("[]").split("%")[0])
+        return True
+    except ValueError:
+        return False
+
+
+def split_urls(value: str) -> list:
+    return [u.strip().rstrip("/") for u in str(value or "").split(",") if u.strip()]
 
 
 class StdSession:
@@ -43,6 +68,8 @@ class StdSession:
 
     def __init__(self, pin_sha256: str = "", ca_file: str = ""):
         self.pin, self.ca_file = normalize_pin(pin_sha256), ca_file
+        if self.pin and pin_algorithm(self.pin) is None:
+            raise PinError("Impressão digital inválida: use SHA-256 (64 hex) ou o thumbprint SHA-1 (40 hex)")
 
     def _connect(self, url: str, timeout: int):
         u = urlsplit(url)
@@ -53,13 +80,15 @@ class StdSession:
             ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE        # a confiança vem da impressão digital
         else:
+            if is_ip_host(host) and not self.ca_file:
+                raise PinError("Ligação por IP sem impressão digital (pin_sha256) nem CA: não há forma de confiar no servidor")
             ctx = ssl.create_default_context(cafile=self.ca_file or None)
         ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         conn = http.client.HTTPSConnection(host, port, timeout=timeout, context=ctx)
         conn.connect()
         if self.pin:
             der = conn.sock.getpeercert(binary_form=True)
-            if hashlib.sha256(der).hexdigest() != self.pin:
+            if not pin_matches(der, self.pin):
                 conn.close()
                 raise PinError("O certificado do servidor não corresponde à impressão digital esperada (pin_sha256)")
         return conn, u
@@ -108,7 +137,8 @@ class StdSession:
 class Client:
     def __init__(self, cfg: dict, session=None):
         self.cfg = cfg
-        self.base = cfg["server_url"].rstrip("/")
+        self.bases = split_urls(cfg["server_url"])
+        self.base = self.bases[0]
         self.s = session or StdSession(cfg.get("pin_sha256", ""), cfg.get("ca_file", ""))
         self.headers = {"User-Agent": f"OMXPatchAgent/{__version__}"}
         if cfg.get("agent_key"):
@@ -117,16 +147,18 @@ class Client:
     def _req(self, method: str, path: str, retries: int = 3, timeout: int = 60, **kw) -> Response:
         last = None
         for i in range(retries):
-            try:
-                r = self.s.request(method, self.base + path, timeout=timeout, headers=self.headers, **kw)
-                if r.status_code >= 500:
-                    raise ServerError(f"HTTP {r.status_code}")
-                return r
-            except PinError:
-                raise                                   # um certificado diferente nunca se resolve a repetir
-            except ServerError as exc:
-                last = exc
-                time.sleep(min(2 ** i, 15))
+            for base in [self.base] + [b for b in self.bases if b != self.base]:     # endereço atual primeiro, depois os alternativos
+                try:
+                    r = self.s.request(method, base + path, timeout=timeout, headers=self.headers, **kw)
+                    if r.status_code >= 500:
+                        raise ServerError(f"HTTP {r.status_code}")
+                    self.base = base
+                    return r
+                except PinError:
+                    raise                               # um certificado diferente nunca se resolve a repetir
+                except ServerError as exc:
+                    last = exc
+            time.sleep(min(2 ** i, 15))
         raise ServerError(str(last))
 
     def enroll(self, token: str, info: dict) -> dict:

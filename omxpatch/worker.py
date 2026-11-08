@@ -12,6 +12,7 @@ Pode correr embebido no processo web (executável) ou como processo próprio (``
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -57,6 +58,7 @@ class Worker:
         self._lock = threading.Lock()
         self.last_tick = None
         self.last_error = ""
+        self.started = time.time()
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._loop, name="omxpatch-worker", daemon=True)
@@ -69,9 +71,16 @@ class Worker:
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
+                t0 = time.perf_counter()
                 with self.app.app_context():
-                    self.tick()
+                    summary = self.tick()
+                    from .engine import capacity
+                    capacity.save_worker_stats(self.app, (time.perf_counter() - t0) * 1000, summary or {})
                 self.last_error = ""
+                from .engine import settings as settings_mod
+                if not self.app.config.get("TESTING") and settings_mod.restart_requested_since(self.app.config, self.started):
+                    log.warning("Reinício pedido na consola: o worker termina (o supervisor volta a arrancá-lo)")
+                    os._exit(0)
             except Exception as exc:  # noqa: BLE001 - o worker nunca morre
                 log.exception("Ciclo do worker falhou: %s", exc)
                 self.last_error = str(exc)

@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block title %}Sistema{% endblock %}
-{% block content %}<h1>Sistema</h1><div class="grid2"><div class="panel"><h2>Componentes</h2><dl class="kv">
+{% block content %}<h1>Sistema</h1><p class="actions"><a class="btn sec" href="{{ url_for('admin.capacity_page') }}">Capacidade e carga</a> <a class="btn sec" href="{{ url_for('admin.system_settings_page') }}">Configuração e reinício</a></p><div class="grid2"><div class="panel"><h2>Componentes</h2><dl class="kv">
 <dt>Versão</dt><dd>{{ version }}</dd><dt>Dados</dt><dd><code>{{ cfg.DATA_DIR }}</code></dd><dt>Configuração</dt><dd>{{ cfg.CONFIG_FILE or '(omissão)' }}</dd>
 <dt>Ansible</dt><dd>{% if ansible %}<span class="ok">✔</span> {{ ansible_bin }}{% else %}<span class="bad">✘</span> ansible-playbook não encontrado (o modo sem agente e a descoberta Hyper-V ficam indisponíveis){% endif %}</dd>
 <dt>Playbooks</dt><dd><code>{{ ansible_dir }}</code></dd>

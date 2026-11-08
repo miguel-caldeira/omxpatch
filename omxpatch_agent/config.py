@@ -50,3 +50,11 @@ def save(cfg: dict) -> Path:
     except OSError:
         pass
     return p
+
+
+def unlink_quiet(path) -> None:
+    """``Path.unlink(missing_ok=True)`` (que só existe a partir do Python 3.8)."""
+    try:
+        os.unlink(str(path))
+    except FileNotFoundError:
+        pass

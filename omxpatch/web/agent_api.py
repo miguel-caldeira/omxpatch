@@ -19,6 +19,12 @@ bp = Blueprint("agent", __name__, url_prefix="/agent/v1")
 AGENT_VERSION_MIN = "1.0.0"
 
 
+def agent_urls(cfg) -> list:
+    """Endereços (por ordem de preferência) que os agentes devem usar: AGENT_SERVER_URLS, ou o URL base configurado."""
+    urls = [u.strip().rstrip("/") for u in str(cfg.get("AGENT_SERVER_URLS") or "").split(",") if u.strip()]
+    return urls or [str(cfg["AGENT_BASE_URL"]).rstrip("/")]
+
+
 def _hash(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -105,7 +111,8 @@ def poll():
     tasks = deploy.poll(agent, limit=3)
     db.session.commit()
     return jsonify({"tasks": tasks, "poll_seconds": int(current_app.config["AGENT_HEARTBEAT_SECONDS"]),
-                    "inventory_requested": bool(need_inventory), "server_time": utcnow().isoformat()})
+                    "inventory_requested": bool(need_inventory), "server_time": utcnow().isoformat(),
+                    "server_urls": agent_urls(current_app.config)})
 
 
 @bp.post("/inventory")

@@ -1,6 +1,7 @@
 """Base das boas práticas de configuração: edições de ficheiros com *diff*, cópia de segurança, aplicação atómica com teste
 da configuração, reversão automática e verificação TLS real por protocolo."""
 from __future__ import annotations
+from ..config import unlink_quiet as _unlink_quiet
 
 import difflib
 import json
@@ -104,7 +105,7 @@ def restore_backup(item: str) -> list[str]:
     for f in m["files"]:
         p = Path(f["path"])
         if f.get("created"):
-            p.unlink(missing_ok=True)
+            _unlink_quiet(p)
         else:
             write_atomic(str(p), (d / f["backup"]).read_text(encoding="utf-8"))
         done.append(str(p))
@@ -121,7 +122,7 @@ def write_atomic(path: str, text: str) -> None:
         os.chmod(tmp, mode)
         os.replace(tmp, path)
     except Exception:
-        Path(tmp).unlink(missing_ok=True)
+        _unlink_quiet(Path(tmp))
         raise
 
 

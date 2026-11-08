@@ -172,6 +172,38 @@ def cmd_tls(args) -> int:
     return 0
 
 
+def cmd_capacity(args) -> int:
+    """Estado de capacidade; com --benchmark corre antes o teste de carga (agentes simulados) na organização indicada."""
+    import json as _json
+    from .engine import capacity
+    from .models import Tenant
+    app = _app(start_worker=False)
+    with app.app_context():
+        if args.benchmark:
+            tenant = Tenant.query.filter_by(slug=args.tenant).first() if args.tenant else Tenant.query.filter_by(active=True).first()
+            if tenant is None:
+                print("Organização não encontrada.", file=sys.stderr)
+                return 2
+            n, secs = max(1, min(args.agents, capacity.BENCH_MAX_AGENTS)), max(3, min(args.seconds, capacity.BENCH_MAX_SECONDS))
+            print(f"Teste de carga: {n} agentes simulados durante {secs}s…", flush=True)
+            capacity._bench_lock.acquire()
+            capacity._run_benchmark(app, tenant.id, n, secs)
+        snap = capacity.snapshot(app)
+        est = capacity.estimate(snap)
+        recs = capacity.recommendations(snap, est)
+        if args.json:
+            print(_json.dumps({"snapshot": snap, "estimate": est, "recommendations": recs}, indent=2, default=str))
+        else:
+            print(f"Agentes: {snap['fleet']['agents']} ({snap['fleet']['online']} online) · pico previsto {est['peak_rps']} req/s · capacidade {est['capacity_rps']} req/s "
+                  f"({est['basis']}) · utilização {est['utilization']:.0%} · máx. ~{est['max_agents']} agentes")
+            b = snap["benchmark"]
+            if b:
+                print(f"Último teste: {b['rps']} req/s, p95 {b['p95']} ms, {b['errors']} erros em {b['requests']} pedidos ({b['agents']} agentes, {b['engine']})")
+            for r in recs:
+                print(f"  [{r['level']}] {r['text']}")
+    return 0
+
+
 def cmd_worker(args) -> int:
     from .worker import Worker
     app = _app(start_worker=False)
@@ -364,6 +396,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("serve"); s.add_argument("--host"); s.add_argument("--port", type=int); s.add_argument("--agent-port", type=int); s.add_argument("--prefix")
     s.add_argument("--no-worker", action="store_true"); s.add_argument("--no-tls", action="store_true"); s.set_defaults(fn=cmd_serve)
     sub.add_parser("worker").set_defaults(fn=cmd_worker)
+    cp = sub.add_parser("capacity"); cp.add_argument("--benchmark", action="store_true"); cp.add_argument("--agents", type=int, default=50)
+    cp.add_argument("--seconds", type=int, default=10); cp.add_argument("--tenant"); cp.add_argument("--json", action="store_true"); cp.set_defaults(fn=cmd_capacity)
     t = sub.add_parser("tls"); t.add_argument("action", choices=["info", "generate"]); t.add_argument("--hostname"); t.add_argument("--agent-hostname"); t.add_argument("--days", type=int)
     t.set_defaults(fn=cmd_tls)
     i = sub.add_parser("init"); i.add_argument("--email", required=True); i.add_argument("--password"); i.add_argument("--tenant"); i.set_defaults(fn=cmd_init)

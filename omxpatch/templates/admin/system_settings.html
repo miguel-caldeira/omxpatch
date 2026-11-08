@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Configuração e reinício{% endblock %}
+{% block content %}<h1>Configuração e reinício</h1>
+<p class="actions"><a class="btn sec" href="{{ url_for('admin.system') }}">Sistema</a> <a class="btn sec" href="{{ url_for('admin.capacity_page') }}">Capacidade e carga</a></p>
+{% if overrides_error %}<p class="flash danger">O ficheiro de alterações está inválido e foi ignorado no arranque: {{ overrides_error }}</p>{% endif %}
+{% for e in errors %}<p class="flash danger">{{ e }}</p>{% endfor %}
+<form method="post" class="panel">{{ csrf() }}<p class="small muted">As alterações ficam em <code>omxpatch.overrides.toml</code> (o ficheiro de configuração original não é tocado; as variáveis de ambiente continuam a ter precedência). Primeiro «Pré-visualizar»; só grava com «OK». Cada gravação guarda uma cópia que pode repor.</p>
+{% set last = namespace(g='') %}<div class="row">{% for r in rows %}{% if r.group != last.g %}{% set last.g = r.group %}<h3 style="flex-basis:100%">{{ r.group }}</h3>{% endif %}
+<div><label for="val_{{ r.key }}">{{ r.label }} <span class="small muted">{{ '(aplica de imediato)' if r.hot else '(exige reinício)' }}{{ ' · alterado' if r.overridden }}</span></label>
+{% if r.type == 'choice' %}<select id="val_{{ r.key }}" name="val_{{ r.key }}">{% for c in r.choices %}<option value="{{ c }}" {{ 'selected' if r.value|string == c }}>{{ c }}</option>{% endfor %}</select>
+{% elif r.type == 'bool' %}<select id="val_{{ r.key }}" name="val_{{ r.key }}"><option value="true" {{ 'selected' if r.value }}>sim</option><option value="false" {{ 'selected' if not r.value }}>não</option></select>
+{% else %}<input type="number" id="val_{{ r.key }}" name="val_{{ r.key }}" value="{{ r.value }}" min="{{ r.min }}" max="{{ r.max }}">{% endif %}
+{% if r.help %}<span class="small muted">{{ r.help }}</span>{% endif %}</div>{% endfor %}</div>
+{% if preview is not none %}<div class="okbox"><strong>Pré-visualização</strong>{% if preview %}<table class="table"><tr><th>Parâmetro</th><th>Atual</th><th>Novo</th><th>Aplicação</th></tr>{% for c in preview %}<tr><td>{{ c.label }}</td><td>{{ c.old }}</td><td><strong>{{ c.new }}</strong></td><td>{{ 'de imediato' if c.hot else 'após reiniciar' }}</td></tr>{% endfor %}</table>{% else %}<p>Sem diferenças.</p>{% endif %}</div>{% endif %}
+<p class="actions"><button class="btn sec" name="action" value="preview">Pré-visualizar</button></p>
+{% if preview %}<label class="chk"><input type="checkbox" name="confirm_ok" value="1"> OK — gravar estas alterações</label><p class="actions"><button class="btn" name="action" value="apply">Gravar</button></p>{% endif %}
+{% if history %}<details><summary>Cópias de segurança ({{ history|length }})</summary><ul>{% for h in history %}<li class="small">{{ h.at }}</li>{% endfor %}</ul>
+<label class="chk"><input type="checkbox" name="confirm_ok" value="1"> OK — repor a cópia mais recente</label><button class="btn sm danger" name="action" value="revert">Repor versão anterior</button></details>{% endif %}</form>
+<form method="post" action="{{ url_for('admin.restart_service') }}" class="panel">{{ csrf() }}<h2>Reiniciar o serviço</h2>
+<p class="small muted">Valida primeiro que a configuração arrancaria; se não, recusa. A consola fica indisponível alguns segundos e os agentes voltam a ligar-se sozinhos (contactos com repetição). {{ 'Há um supervisor (systemd/serviço): o processo termina e é arrancado de novo.' if supervised else 'Sem supervisor (systemd/serviço): o processo relança-se a si próprio.' }} O worker (se for um serviço separado) termina no ciclo seguinte e é arrancado pelo supervisor.</p>
+<label class="chk"><input type="checkbox" name="confirm_ok" value="1"> OK — reiniciar agora</label><p class="actions"><button class="btn danger">Reiniciar</button></p></form>{% endblock %}

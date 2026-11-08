@@ -16,17 +16,26 @@ import random
 import sys
 import time
 
-from . import __version__, collectors, config, executor, service
+from . import __version__, collectors, compat, config, executor, service
+from . import client as client_mod
 from .client import Client, ServerError
+from urllib.parse import urlsplit
 
 log = logging.getLogger("omxpatch.agent")
 INVENTORY_EVERY = 24 * 3600
 
 
 def cmd_enroll(args) -> int:
-    cfg = {"server_url": args.server.rstrip("/"), "pin_sha256": args.pin_sha256 or "", "ca_file": args.ca_file or ""}
-    if not cfg["server_url"].startswith("https://"):
+    urls = client_mod.split_urls(args.server)
+    cfg = {"server_url": ",".join(urls), "pin_sha256": client_mod.normalize_pin(args.pin_sha256 or ""), "ca_file": args.ca_file or ""}
+    if not urls or not all(u.startswith("https://") for u in urls):
         print("AVISO: o servidor deve usar HTTPS.", file=sys.stderr)
+    if cfg["pin_sha256"] and client_mod.pin_algorithm(cfg["pin_sha256"]) is None:
+        print("Impressão digital inválida: use o SHA-256 (64 hex) ou o thumbprint SHA-1 (40 hex).", file=sys.stderr)
+        return 2
+    if any(client_mod.is_ip_host(urlsplit(u).hostname or "") for u in urls) and not (cfg["pin_sha256"] or cfg["ca_file"]):
+        print("Para falar com a consola por IP é obrigatório indicar a impressão digital do certificado (--pin-sha256) ou um CA (--ca-file).", file=sys.stderr)
+        return 2
     existing = config.load()
     if existing.get("agent_key") and not args.force:
         print(f"Este equipamento já está registado na organização «{existing.get('tenant_name', '?')}» "
@@ -57,13 +66,29 @@ def _client() -> Client:
 
 def send_inventory(client: Client) -> None:
     info = collectors.collect()
-    res = client.inventory({**{k: v for k, v in info.items() if k not in ("hostname", "machine_id")}, "version": __version__})
+    res = client.inventory({**{k: v for k, v in info.items() if k not in ("hostname", "machine_id")}, "version": __version__,
+                            "runtime": compat.runtime()})
     log.info("Inventário enviado: %s", res)
+
+
+def _adopt_servers(client: Client, urls) -> None:
+    """A consola pode publicar os seus endereços (ex.: novo IP). Só se aceitam https e só com a impressão digital fixada."""
+    cfg = config.load()
+    if not isinstance(urls, list) or not cfg.get("pin_sha256"):
+        return
+    new = [u.rstrip("/") for u in urls if isinstance(u, str) and u.startswith("https://") and len(u) < 200][:6]
+    if new and new != client_mod.split_urls(cfg.get("server_url", "")):
+        cfg["server_url"] = ",".join(new)
+        config.save(cfg)
+        client.bases = new
+        client.base = new[0]
+        log.info("Endereços da consola atualizados: %s", cfg["server_url"])
 
 
 def cycle(client: Client, state: dict) -> int:
     """Um contacto: inventário (se pedido/periódico) e execução das tarefas. Devolve o n.º de tarefas."""
     resp = client.poll()
+    _adopt_servers(client, resp.get("server_urls"))
     if resp.get("inventory_requested") or time.time() - state.get("last_inventory", 0) > INVENTORY_EVERY:
         try:
             send_inventory(client)
@@ -105,6 +130,21 @@ def cmd_inventory(args) -> int:
     return 0
 
 
+def cmd_selftest(args) -> int:
+    res = compat.selftest()
+    if args.json:
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+    else:
+        rt = res["runtime"]
+        print(f"Python {rt['python']} ({rt['implementation']}) · OpenSSL {rt['openssl']} · nível: {rt['level']}")
+        for d in rt["degraded"]:
+            print("  aviso:", d)
+        for st in res["steps"]:
+            print(f"  [{'OK' if st['status'] == 'ok' else 'FALHA'}] {st['name']}: {st['detail']}")
+        print("Autoteste:", "tudo OK" if res["ok"] else "com falhas")
+    return 0 if res["ok"] else 1
+
+
 def cmd_status(args) -> int:
     cfg = config.load()
     print(f"Agente {__version__} — organização: {cfg.get('tenant_name', '(não registado)')} — servidor: {cfg.get('server_url', '-')} — configuração: {config.config_path()}")
@@ -118,6 +158,7 @@ def main(argv=None) -> int:
     e.add_argument("--pin-sha256"); e.add_argument("--ca-file"); e.add_argument("--install-service", action="store_true"); e.add_argument("--force", action="store_true"); e.set_defaults(fn=cmd_enroll)
     for name, fn in (("run", cmd_run), ("once", cmd_once), ("inventory", cmd_inventory), ("status", cmd_status)):
         sub.add_parser(name).set_defaults(fn=fn)
+    st = sub.add_parser("selftest"); st.add_argument("--json", action="store_true"); st.set_defaults(fn=cmd_selftest)
     sub.add_parser("install-service").set_defaults(fn=lambda a: print(service.install()) or 0)
     sub.add_parser("uninstall-service").set_defaults(fn=lambda a: print(service.uninstall()) or 0)
     args = p.parse_args(argv)

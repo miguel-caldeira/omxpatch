@@ -65,6 +65,11 @@ def local_ips() -> list[str]:
     return out
 
 
+def urlsplit_host(url: str) -> str:
+    from urllib.parse import urlsplit
+    return urlsplit(url.strip()).hostname or ""
+
+
 def wanted_names(cfg, profile: str = "console") -> tuple[list[str], list[str]]:
     pr = PROFILES[profile]
     host = str(cfg.get(pr["prefix"] + "HOSTNAME") or pr["default"]).lower()
@@ -74,6 +79,14 @@ def wanted_names(cfg, profile: str = "console") -> tuple[list[str], list[str]]:
         dns.append(short)
     extra = [h.strip().lower() for h in str(cfg.get(pr["prefix"] + "EXTRA_NAMES") or "").split(",") if h.strip()]
     ips = ["127.0.0.1", "::1"] + local_ips()
+    if profile == "agent":                       # IPs publicados aos agentes (modo «só IP»): também no SAN
+        for raw in (str(cfg.get("AGENT_SERVER_IP") or "").split(",") + [urlsplit_host(u) for u in str(cfg.get("AGENT_SERVER_URLS") or "").split(",")]):
+            raw = raw.strip().strip("[]")
+            try:
+                ipaddress.ip_address(raw)
+                ips.append(raw)
+            except ValueError:
+                pass
     for e in extra:
         try:
             ipaddress.ip_address(e)
@@ -126,7 +139,9 @@ def info(cert_path: Path) -> dict:
     return {"subject": cert.subject.rfc4514_string(), "dns": dns, "ips": ips, "not_before": not_before,
             "not_after": not_after, "days_left": (not_after - datetime.now(timezone.utc)).days,
             "self_signed": cert.issuer == cert.subject, "managed": MARK in ou,
-            "sha256": cert.fingerprint(hashes.SHA256()).hex(":").upper(), "path": str(cert_path)}
+            "sha256": cert.fingerprint(hashes.SHA256()).hex(":").upper(),
+            "sha1": cert.fingerprint(hashes.SHA1()).hex(":").upper(),   # nosec B303 - o «Thumbprint» do Windows é SHA-1; só para identificar
+            "path": str(cert_path)}
 
 
 def ensure(cfg, log=print, force: bool = False, profile: str = "console") -> dict:
@@ -144,7 +159,9 @@ def ensure(cfg, log=print, force: bool = False, profile: str = "console") -> dic
         dns, ips = wanted_names(cfg, profile)
         if current["days_left"] < RENEW_DAYS:
             reason = f"expira em {current['days_left']} dias"
-        elif not set(dns) <= set(current["dns"]) or not set(ips) <= set(current["ips"]):
+        elif profile != "agent" and (not set(dns) <= set(current["dns"]) or not set(ips) <= set(current["ips"])):
+            # No perfil dos agentes a confiança vem da impressão digital (thumbprint), não dos nomes/IPs do certificado:
+            # regenerá-lo por uma mudança de IP faria mudar o thumbprint e deixaria toda a frota sem ligação.
             reason = "nomes/IPs da máquina alterados"
         else:
             return current

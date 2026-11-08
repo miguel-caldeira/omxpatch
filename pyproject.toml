@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omxpatch"
-version = "1.5.20261108"
+version = "1.6.20261108"
 description = "OMXPatch - centro de comando de gestão de patches e remediação contínua (Ativo → Exposição → Risco → Mitigação → Patch → Validação), com agentes Windows/Linux/macOS e Ansible"
 readme = "README.md"
 requires-python = ">=3.9"

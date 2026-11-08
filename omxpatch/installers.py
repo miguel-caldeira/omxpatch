@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import re
 
-URL_RE = re.compile(r"^https?://[A-Za-z0-9.\-]+(:\d{1,5})?$")
-PIN_RE = re.compile(r"^([0-9A-Fa-f]{2}:?){32}$")
+URL_RE = re.compile(r"^https?://([A-Za-z0-9.\-]+|\[[0-9A-Fa-f:.]+\])(:\d{1,5})?(,https?://([A-Za-z0-9.\-]+|\[[0-9A-Fa-f:.]+\])(:\d{1,5})?){0,5}$")
+PIN_RE = re.compile(r"^(([0-9A-Fa-f]{2}:?){32}|([0-9A-Fa-f]{2}:?){20})$")           # SHA-256 ou thumbprint SHA-1 do Windows
 TOKEN_RE = re.compile(r"^omxe_[A-Za-z0-9_\-]{10,80}$")
 HOST_RE = re.compile(r"^[A-Za-z0-9.\-]{1,253}$")
 IP_RE = re.compile(r"^[0-9a-fA-F:.]{0,45}$")
@@ -170,6 +170,7 @@ Write-Host 'Agente removido.'
 
 
 def _check(url: str, pin: str, token: str, host: str, ip: str) -> None:
+    host = host or "-"
     if not URL_RE.match(url):
         raise ValueError("URL do servidor de agentes inválido")
     if pin and not PIN_RE.match(pin):
@@ -185,6 +186,15 @@ def render(os_kind: str, *, url: str, pin: str, token: str, tenant_name: str, ho
     """(nome do ficheiro, conteúdo) do script de instalação. Todos os valores são validados (sem injeção de comandos)."""
     if os_kind not in OS_KINDS:
         raise ValueError("Sistema operativo desconhecido")
+    import ipaddress
+    try:                                         # endereçamento só por IP: sem ficheiro hosts e a impressão digital é obrigatória
+        ipaddress.ip_address(host.strip("[]"))
+        if not pin:
+            raise ValueError("Com o servidor indicado por IP é obrigatória a impressão digital (thumbprint) do certificado: ative o TLS")
+        host, server_ip = "", ""
+    except ValueError as exc:
+        if "impressão" in str(exc):
+            raise
     _check(url, pin, token, host, server_ip)
     label = tenant_name.replace("\n", " ").replace("'", "").replace("$", "")[:80]
     fields = {"URL": url, "PIN": pin.replace(":", "").lower() if pin else "", "TOKEN": token, "HOST": host, "IP": server_ip,

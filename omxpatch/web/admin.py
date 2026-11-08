@@ -5,7 +5,7 @@ import json
 import re
 from datetime import date
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
 
 from .. import branding as _branding
@@ -17,7 +17,7 @@ from ..connectors.store import ConnectorError
 from ..engine import ansible_runner, intel, rings
 from ..extensions import db
 from ..models import (ROLES, Agent, AuditLog, Connector, EnrollmentToken, Tenant, User, PrimaryAdminError, utcnow)
-from ..security import (audit, flash_errors, get_scoped_or_404, password_problems, require_tenant, roles_required, scoped,
+from ..security import (audit, current_tenant, flash_errors, get_scoped_or_404, password_problems, require_tenant, roles_required, scoped,
                         superadmin_required)
 from .api import new_enrollment_token
 
@@ -223,6 +223,95 @@ def system():
                            worker=current_app.extensions.get("omxpatch_worker"))
 
 
+# --------------------------------------------------------------------------- capacidade, configuração e reinício
+
+
+@bp.route("/system/capacity", methods=["GET", "POST"])
+@login_required
+@superadmin_required
+def capacity_page():
+    from ..engine import capacity
+    if request.method == "POST":
+        if not request.form.get("confirm_ok"):
+            flash("Confirme a caixa «OK»: o teste cria agentes simulados e carrega o servidor durante alguns segundos.", "danger")
+        elif capacity.start_benchmark(current_app._get_current_object(), (current_tenant() or Tenant.query.filter_by(active=True).first()).id,
+                                      request.form.get("agents", type=int) or 50,
+                                      request.form.get("seconds", type=int) or 10):
+            audit("capacity_benchmark", f"{request.form.get('agents')} agentes, {request.form.get('seconds')} s")
+            db.session.commit()
+            flash("Teste de carga iniciado: atualize a página dentro de alguns segundos.", "info")
+        else:
+            flash("Já existe um teste de carga em curso.", "warning")
+        return redirect(url_for("admin.capacity_page"))
+    snap = capacity.snapshot(current_app)
+    est = capacity.estimate(snap)
+    return render_template("admin/capacity.html", snap=snap, est=est, recs=capacity.recommendations(snap, est), bench=capacity.bench_status(),
+                           max_agents=capacity.BENCH_MAX_AGENTS, max_seconds=capacity.BENCH_MAX_SECONDS)
+
+
+@bp.route("/system/capacity.json")
+@login_required
+@superadmin_required
+def capacity_json():
+    from ..engine import capacity
+    snap = capacity.snapshot(current_app)
+    est = capacity.estimate(snap)
+    return jsonify({"snapshot": snap, "estimate": est, "recommendations": capacity.recommendations(snap, est), "benchmark": capacity.bench_status()})
+
+
+@bp.route("/system/settings", methods=["GET", "POST"])
+@login_required
+@superadmin_required
+def system_settings_page():
+    """Alterar configuração em dois passos: pré-visualizar (diferenças, o que exige reinício) → OK → gravar."""
+    from ..engine import settings as st
+    preview, errors = None, []
+    if request.method == "POST":
+        raw = {k[4:]: v for k, v in request.form.items() if k.startswith("val_")}
+        clean, errors = st.validate(raw)
+        errors += st.cross_checks(current_app, clean)
+        if request.form.get("action") == "revert":
+            if request.form.get("confirm_ok") and st.revert_last(current_app):
+                audit("settings_reverted", "")
+                db.session.commit()
+                flash("Cópia de segurança anterior reposta. Reinicie para aplicar o que exigir reinício.", "success")
+                return redirect(url_for("admin.system_settings_page"))
+            flash("Confirme a caixa «OK» para repor a versão anterior.", "danger")
+        elif not errors:
+            changes = st.diff(current_app, clean)
+            if request.form.get("action") == "apply":
+                if not request.form.get("confirm_ok"):
+                    flash("Confirme a caixa «OK» para gravar.", "danger")
+                else:
+                    res = st.apply(current_app, clean)
+                    audit("settings_changed", ", ".join(f"{c['key']}={c['new']}" for c in changes)[:480])
+                    db.session.commit()
+                    flash(f"{res['changed']} parâmetro(s) gravado(s)." + (f" Exigem reinício: {', '.join(res['restart_needed'])}." if res["restart_needed"] else ""), "success")
+                    return redirect(url_for("admin.system_settings_page"))
+            preview = changes
+    return render_template("admin/system_settings.html", rows=st.current(current_app), preview=preview, errors=errors, history=st.history(current_app),
+                           supervised=st.supervised(), overrides_error=current_app.config.get("OVERRIDES_ERROR"))
+
+
+@bp.route("/system/restart", methods=["POST"])
+@login_required
+@superadmin_required
+def restart_service():
+    from ..engine import settings as st
+    if not request.form.get("confirm_ok"):
+        flash("Confirme a caixa «OK» para reiniciar o serviço.", "danger")
+        return redirect(url_for("admin.system_settings_page"))
+    res = st.request_restart(current_app, current_user.email)
+    if not res["ok"]:
+        flash("Reinício recusado — a configuração não arrancaria: " + "; ".join(res["errors"]), "danger")
+    else:
+        audit("service_restart", f"por {current_user.email} ({res['mode']})")
+        db.session.commit()
+        flash("Reinício em curso: a consola fica indisponível alguns segundos. Os agentes voltam a ligar-se sozinhos."
+              + ("" if res["supervised"] else " Sem supervisor (systemd/serviço): o processo relança-se a si próprio."), "info")
+    return redirect(url_for("admin.system"))
+
+
 # --------------------------------------------------------------------------- integrações
 
 
@@ -346,20 +435,26 @@ def agents():
     return render_template("admin/agents.html", agents=scoped(Agent).order_by(Agent.last_seen.desc().nullslast()).all(),
                            tokens=scoped(EnrollmentToken).order_by(EnrollmentToken.id.desc()).all(),
                            new_token=session.pop("new_enroll", None), base_url=current_app.config["AGENT_BASE_URL"],
-                           agent_pin=agent_pin(), server_ip=current_app.config["AGENT_SERVER_IP"],
+                           agent_pin=agent_pin(), agent_cert=agent_cert_info(), server_ip=current_app.config["AGENT_SERVER_IP"],
+                           address_mode=current_app.config["AGENT_ADDRESS_MODE"],
                            offline=current_app.config["AGENT_OFFLINE_MINUTES"], tenant=tenant)
+
+
+def agent_cert_info() -> dict:
+    """Certificado do servidor de agentes: impressões digitais SHA-256 e SHA-1 (o «Thumbprint» do Windows) e IPs no SAN."""
+    cfg = current_app.config
+    if not cfg["TLS_ENABLED"]:
+        return {}
+    try:
+        cert, _, _ = tls.paths(cfg, "agent")
+        return tls.info(cert) if cert.is_file() else tls.ensure(cfg, profile="agent")
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def agent_pin() -> str:
     """Impressão digital SHA-256 do certificado do servidor de agentes (omxpatchcli.oramix.local)."""
-    cfg = current_app.config
-    if not cfg["TLS_ENABLED"]:
-        return ""
-    try:
-        cert, _, _ = tls.paths(cfg, "agent")
-        return (tls.info(cert) if cert.is_file() else tls.ensure(cfg, profile="agent"))["sha256"]
-    except Exception:  # noqa: BLE001
-        return ""
+    return agent_cert_info().get("sha256", "")
 
 
 @bp.route("/agents/script", methods=["POST"])

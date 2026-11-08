@@ -1,6 +1,7 @@
 """Instalação do agente como serviço (systemd, launchd, Tarefa Agendada do Windows). Os playbooks Ansible usam o
 mesmo mecanismo; este módulo serve a instalação manual (``omxpatch-agent install-service``)."""
 from __future__ import annotations
+from .config import unlink_quiet as _unlink_quiet
 
 import os
 import sys
@@ -67,12 +68,12 @@ def uninstall() -> str:
     fam = platform_family()
     if fam == "linux":
         run(["systemctl", "disable", "--now", "omxpatch-agent"], 60)
-        Path("/etc/systemd/system/omxpatch-agent.service").unlink(missing_ok=True)
+        _unlink_quiet(Path("/etc/systemd/system/omxpatch-agent.service"))
         return "serviço removido"
     if fam == "macos":
         p = Path("/Library/LaunchDaemons/pt.oramix.omxpatch.agent.plist")
         run(["launchctl", "unload", "-w", str(p)], 60)
-        p.unlink(missing_ok=True)
+        _unlink_quiet(p)
         return "LaunchDaemon removido"
     run(["schtasks", "/Delete", "/F", "/TN", "OMXPatchAgent"], 60)
     return "Tarefa agendada removida"

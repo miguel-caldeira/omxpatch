@@ -22,6 +22,7 @@ except ModuleNotFoundError:  # Python 3.9/3.10
     import tomli as tomllib
 
 APP_NAME = "OMXPatch"
+OVERRIDES_NAME = "omxpatch.overrides.toml"
 
 DEFAULTS: dict[str, object] = {
     # Servidor / integração em NGINX ou IIS
@@ -30,6 +31,8 @@ DEFAULTS: dict[str, object] = {
     "AGENT_TLS_HOSTNAME": "omxpatchcli.oramix.local", "AGENT_TLS_EXTRA_NAMES": "", "AGENT_TLS_CERT": "", "AGENT_TLS_KEY": "",
     "AGENT_SERVER_IP": "",             # IP do servidor: os scripts de instalação acrescentam-no ao ficheiro hosts dos postos
     "AGENT_BASE_URL": "",
+    "AGENT_ADDRESS_MODE": "name",      # name = os agentes usam o nome (DNS/hosts); ip = só o IP do servidor + thumbprint do certificado
+    "AGENT_SERVER_URLS": "",           # endereços alternativos publicados aos agentes (vírgula), p.ex. https://10.0.0.5:4444,https://10.0.1.5:4444
     "TLS_ENABLED": True, "TLS_HOSTNAME": "omxpatch.oramix.local",
     "TLS_EXTRA_NAMES": "", "TLS_CERT": "", "TLS_KEY": "", "TLS_DAYS": 730, "TLS_MIN_VERSION": "1.2",
     "URL_PREFIX": "", "TRUSTED_PROXIES": 1, "SESSION_COOKIE_SECURE": False, "SESSION_HOURS": 8,
@@ -175,6 +178,15 @@ def load_config(overrides: dict | None = None) -> dict:
                 data_dir = Path(str(v))
             elif k in DEFAULTS:
                 cfg[k] = _coerce(v, DEFAULTS[k])
+    cfg["OVERRIDES_ERROR"] = ""
+    ovr = data_dir / OVERRIDES_NAME                      # alterações feitas na consola (Sistema → Configuração)
+    if ovr.is_file():
+        try:
+            for k, v in _load_toml(ovr).items():
+                if k in DEFAULTS:
+                    cfg[k] = _coerce(v, DEFAULTS[k])
+        except Exception as exc:  # noqa: BLE001 - um ficheiro de alterações inválido nunca impede o arranque
+            cfg["OVERRIDES_ERROR"] = f"{ovr.name}: {exc}"
     for key, default in DEFAULTS.items():
         env = os.environ.get(f"OMXPATCH_{key}")
         if env is not None:
@@ -205,7 +217,12 @@ def load_config(overrides: dict | None = None) -> dict:
         cfg["BASE_URL_AUTO"] = True
     if not cfg["AGENT_BASE_URL"]:
         scheme = "https" if cfg["TLS_ENABLED"] else "http"
-        cfg["AGENT_BASE_URL"] = f"{scheme}://{cfg['AGENT_TLS_HOSTNAME']}:{int(cfg['AGENT_PORT'])}"
+        ip = str(cfg.get("AGENT_SERVER_IP") or "").split(",")[0].strip()
+        if str(cfg.get("AGENT_ADDRESS_MODE")) == "ip" and ip:
+            addr = f"[{ip}]" if ":" in ip else ip           # IPv6 entre parênteses retos
+            cfg["AGENT_BASE_URL"] = f"{scheme}://{addr}:{int(cfg['AGENT_PORT'])}"
+        else:
+            cfg["AGENT_BASE_URL"] = f"{scheme}://{cfg['AGENT_TLS_HOSTNAME']}:{int(cfg['AGENT_PORT'])}"
         cfg["AGENT_BASE_URL_AUTO"] = True
     cfg["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
     cfg["MAX_CONTENT_LENGTH"] = int(cfg["MAX_UPLOAD_MB"]) * 1024 * 1024

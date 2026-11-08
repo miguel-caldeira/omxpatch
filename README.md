@@ -246,6 +246,22 @@ A aplicação de boas práticas faz cópia de segurança, `nginx -t`/`apachectl 
 
 API: `GET /api/v1/practices`, `GET|POST /api/v1/plans`, `POST /api/v1/plans/<id>/simulate|approve|execute`.
 
+## Capacidade, configuração e reinício
+
+*Sistema → Capacidade e carga* (super-administrador; CLI: `omxpatch capacity [--benchmark --agents 50 --seconds 10]`):
+
+- estado da máquina (CPU, memória, disco, base de dados), agentes online, fila de tarefas, latência p50/p95/p99 por grupo de rotas e ciclo do worker;
+- **modelo de capacidade:** contactos/s previstos (agentes ÷ intervalo, ×3 em pico) contra a capacidade medida (com 40 % de folga) ou, sem teste, uma estimativa conservadora; indica o máximo de agentes e recomendações (PostgreSQL, intervalo de contacto, worker separado, disco, memória…);
+- **teste de carga** (com «OK»): agentes simulados `loadtest-N` contactam a pilha real (autenticação + BD) e são removidos no fim. Mede **um processo web, sem rede nem TLS**: é um limite superior; confirme com um piloto real.
+
+*Sistema → Configuração e reinício:* alterar parâmetros (intervalos, threads, segurança…) em dois passos (pré-visualizar → «OK»), com validação cruzada (nunca grava uma combinação que não arranca), cópia de segurança e reposição. As alterações ficam em `omxpatch.overrides.toml`; um ficheiro inválido é ignorado no arranque. O **reinício** valida a configuração antes; com supervisor (systemd; ciclo dos serviços Windows do instalador) o processo termina e é rearrancado, sem supervisor relança-se a si próprio. O worker separado termina no ciclo seguinte.
+
+## Agentes: Python do sistema, sem Ansible
+
+O agente faz tudo sozinho em Python (inventário, patching, simulação, boas práticas, BAS, controlos, validação), por isso não depende do Ansible nem de um Python em particular: **3.8 – 3.13 testados** (3.7 por análise estática). `python -m omxpatch_agent selftest` valida cada capacidade no equipamento; o interpretador (versão, OpenSSL, nível `ok`/`legacy`, limitações) é reportado ao servidor no inventário. Os scripts de instalação escolhem o Python conforme o SO (Windows < 10 / Server 2012 R2: 3.8.10).
+
+**Só IP + thumbprint:** com `AGENT_ADDRESS_MODE=ip` e `AGENT_SERVER_IP`, os agentes falam com `https://<IP>:4444` sem DNS, ficheiro hosts nem CA: confiam apenas na impressão digital do certificado (SHA-256, ou o *thumbprint* SHA-1 do Windows) que o script traz. Por IP sem impressão digital o agente recusa ligar. `AGENT_SERVER_URLS` publica endereços alternativos (*failover*) aos agentes. O certificado dos agentes **não é regenerado** quando o IP do servidor muda, para o thumbprint se manter.
+
 ## Segurança
 
 Isolamento por organização em todas as consultas; CSRF, CSP sem *inline*, cookies seguros, MFA TOTP (obrigatório por

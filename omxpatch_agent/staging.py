@@ -1,6 +1,7 @@
 """*Staging* local dos instaladores: a simulação prévia descarrega-os e verifica o SHA-256; a instalação real reutiliza-os
 (sem voltar a descarregar) quando o hash continua a corresponder."""
 from __future__ import annotations
+from .config import unlink_quiet as _unlink_quiet
 
 import hashlib
 import os
@@ -51,7 +52,7 @@ def cleanup(max_age_days: int = 14) -> int:
     n = 0
     for f in staging_dir().iterdir():
         if f.is_file() and time.time() - f.stat().st_mtime > max_age_days * 86400:
-            f.unlink(missing_ok=True)
+            _unlink_quiet(f)
             n += 1
     return n
 

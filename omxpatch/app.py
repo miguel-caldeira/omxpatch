@@ -12,7 +12,7 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from . import __version__, licensing
+from . import __version__, licensing, metrics
 from .config import load_config
 from .extensions import db, login_manager
 from . import models as m
@@ -102,6 +102,10 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
         return user
 
     @app.before_request
+    def _metrics_begin():
+        request.environ["omxpatch.t0"] = metrics.begin()
+
+    @app.before_request
     def _before():
         g.api_user = None
         if request.blueprint == "agent":
@@ -128,6 +132,13 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
         if tenant is not None and tenant.require_mfa and not current_user.mfa_enabled:
             return redirect(url_for("auth.mfa_setup"))
         return None
+
+    @app.after_request
+    def _metrics_end(resp):
+        t0 = request.environ.pop("omxpatch.t0", None)
+        if t0 is not None:
+            metrics.end(request.path, t0, resp.status_code)
+        return resp
 
     @app.after_request
     def _headers(resp):

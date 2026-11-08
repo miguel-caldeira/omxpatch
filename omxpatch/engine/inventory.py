@@ -153,6 +153,10 @@ def ingest_inventory(tenant: Tenant, asset: Asset, report: dict) -> dict:
         hw["hotfixes"] = report["hotfixes"][:2000]        # KB instalados (Windows)
     if report.get("services"):
         hw["services"] = report["services"][:500]
+    if isinstance(report.get("runtime"), dict):                  # interpretador Python do agente (antigo/moderno)
+        rt = report["runtime"]
+        hw["agent_runtime"] = {k: (v if isinstance(v, (bool, list)) else str(v)[:200]) for k, v in rt.items()
+                               if k in ("python", "implementation", "openssl", "tls13", "tls_max", "level", "degraded", "platform", "machine")}
     if report.get("webservers") is not None:
         hw["webservers"] = report["webservers"]               # nginx / Apache / IIS detetados (boas práticas)
     if report.get("capabilities"):
