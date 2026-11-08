@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% from "_macros.html" import chk with context %}{% block title %}Catálogo de boas práticas{% endblock %}
+{% block content %}<div class="actions"><h1>Boas práticas de configuração</h1><span class="spacer"></span><a class="btn" href="{{ url_for('plans.plan_new') }}">Novo plano</a></div>
+<p class="muted small">Aplicadas pelo agente em <b>nginx</b>, <b>Apache</b> e <b>IIS</b>. Cada uma é primeiro <b>simulada</b> (ficheiros e registos a alterar, com <i>diff</i>, teste da configuração e resultado previsto); só depois do OK é aplicada, com cópia de segurança, teste, verificação TLS real e <b>reversão automática</b> se algo falhar.</p>
+{% for id, p in catalog.items() %}<div class="panel"><div class="actions"><h2>{{ p.label }}</h2><span class="spacer"></span><span class="chip">{{ p.category }}</span><span class="chip">risco {{ p.risk }}</span>{% for s in p.servers %}<span class="chip">{{ s }}</span>{% endfor %}
+{% if current_user.can_write %}<a class="btn sm" href="{{ url_for('plans.plan_new', practice=id) }}">Planear</a>{% endif %}</div><p>{{ p.desc }}</p>{% if p.warn %}<p class="small"><b class="warnc">▲ Atenção:</b> {{ p.warn }}</p>{% endif %}</div>{% endfor %}
+<div class="panel"><h2>Servidores web detetados pelos agentes</h2><table><tr><th>Ativo</th><th>SO</th><th>Servidores</th></tr>
+{% for a, ws in rows %}<tr><td><a href="{{ url_for('main.asset_detail', asset_id=a.id) }}">{{ a.name }}</a></td><td>{{ OS_FAMILIES.get(a.os_family, '—') }}</td>
+<td>{% if ws is none %}<span class="muted">por inventariar</span>{% else %}{% for w in ws %}<span class="chip">{{ w.type }} {{ w.version }}{{ ' · ativo' if w.running else ' · parado' }}{% if w.ports %} · TLS :{{ w.ports|join(',') }}{% endif %}</span> {% else %}<span class="muted">nenhum</span>{% endfor %}{% endif %}</td></tr>
+{% else %}<tr><td colspan="3" class="muted">Sem agentes com inventário.</td></tr>{% endfor %}</table></div>{% endblock %}

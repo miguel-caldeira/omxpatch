@@ -84,4 +84,9 @@ def collect() -> dict:
         info["capabilities"] = sources.capabilities()
     except Exception:  # noqa: BLE001 - a sonda nunca impede o inventário
         info["capabilities"] = {}
+    try:
+        from .. import practices
+        info["webservers"] = practices.detect_webservers()
+    except Exception:  # noqa: BLE001
+        pass
     return info

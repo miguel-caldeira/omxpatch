@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% from "_macros.html" import csrf, risk, st with context %}{% block title %}{{ asset.name }}{% endblock %}
 {% block content %}
 <div class="actions"><h1>{{ asset.name }} {% if asset.shadow_it %}<span class="badge st-accepted">Shadow IT</span>{% endif %}</h1><span class="spacer"></span>
-{% if current_user.can_write %}<form method="post" action="{{ url_for('main.asset_inventory', asset_id=asset.id) }}" class="inline">{{ csrf() }}<button class="btn sec">Pedir inventário</button></form>
+{% if current_user.can_write %}<a class="btn sec" href="{{ url_for('plans.plan_new', asset_id=asset.id) }}">Operações no ativo</a><form method="post" action="{{ url_for('main.asset_inventory', asset_id=asset.id) }}" class="inline">{{ csrf() }}<button class="btn sec">Pedir inventário</button></form>
 <a class="btn" href="{{ url_for('main.asset_edit', asset_id=asset.id) }}">Editar</a>{% endif %}
 {% if current_user.can_manage %}<form method="post" action="{{ url_for('main.asset_delete', asset_id=asset.id) }}" class="inline" data-confirm="Eliminar o ativo e os seus dados?">{{ csrf() }}<button class="btn danger">Eliminar</button></form>{% endif %}</div>
 <div class="grid2">

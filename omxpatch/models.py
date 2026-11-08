@@ -56,7 +56,8 @@ INSTALLER_TYPES = {"wua": "Windows Update / WSUS (KB)", "msi": "MSI", "msp": "Pa
 
 CAMPAIGN_STATUSES = {"draft": "Rascunho", "scheduled": "Agendada", "running": "Em execução", "paused": "Em pausa",
                      "completed": "Concluída", "cancelled": "Cancelada", "failed": "Falhou"}
-TASK_TYPES = {"simulate": "Simulação prévia", "inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
+TASK_TYPES = {"practice_sim": "Simulação de boa prática", "practice_apply": "Aplicar boa prática", "practice_rollback": "Reverter boa prática",
+              "simulate": "Simulação prévia", "inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
               "control": "Controlo compensatório", "rollback": "Reverter patch", "wake": "Wake-on-LAN"}
 TASK_STATUSES = {"pending": "Pendente", "waiting_window": "À espera da janela", "waking": "Wake-on-LAN",
                  "queued": "Em fila", "sent": "Enviada ao agente", "running": "Em execução",
@@ -638,6 +639,13 @@ class Task(TimestampMixin, db.Model):
         return jloads(self.result, {})
 
 
+PLAN_STATUSES = {"draft": "Rascunho", "simulating": "A simular", "simulated": "Simulado — a aguardar OK", "executing": "Em execução",
+                 "completed": "Concluído", "cancelled": "Cancelado"}
+ITEM_STATUSES = {"draft": "Por simular", "simulating": "A simular", "simulated": "Simulado", "approved": "Aprovado (OK)", "queued": "Em fila",
+                 "running": "Em execução", "succeeded": "Concluído", "failed": "Falhou", "rolled_back": "Revertido", "skipped": "Ignorado",
+                 "reverted": "Revertido pelo utilizador"}
+ITEM_FINAL = ("succeeded", "failed", "rolled_back", "skipped", "reverted")
+
 PREFLIGHT_OUTCOMES = {"pending": "A simular", "ready": "Pronto", "warning": "Pronto, com avisos", "blocked": "Bloqueado",
                       "noop": "Nada a instalar", "error": "Erro na simulação"}
 
@@ -666,6 +674,85 @@ class Preflight(TimestampMixin, db.Model):
     @property
     def predicted_data(self) -> dict:
         return jloads(self.predicted, {})
+
+
+class OperationPlan(TimestampMixin, db.Model):
+    """Plano de operações em massa — por atualização (um patch/prática em vários ativos) ou por ativo (várias operações num ativo).
+    Fluxo obrigatório: simular → rever ações e resultados → **OK explícito** → executar."""
+    __tablename__ = "operation_plans"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    mode = db.Column(db.String(10), default="by_patch")           # by_patch | by_asset
+    status = db.Column(db.String(12), default="draft", nullable=False, index=True)
+    reboot_policy = db.Column(db.String(10), default="if_needed")
+    respect_windows = db.Column(db.Boolean, default=True, nullable=False)
+    start_at = db.Column(db.DateTime, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    executed_at = db.Column(db.DateTime, nullable=True)
+    items = db.relationship("PlanItem", backref="plan", cascade="all, delete-orphan", lazy="dynamic")
+
+    # atributos usados por deploy.patch_payload (compatível com Campaign)
+    bandwidth_kbps = 0
+    emergency = False
+
+
+class PlanItem(db.Model):
+    """Uma operação (patch ou boa prática) num ativo, com a sua simulação, o OK do utilizador e o resultado."""
+    __tablename__ = "plan_items"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    plan_id = db.Column(db.Integer, db.ForeignKey("operation_plans.id"), nullable=False, index=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("assets.id"), nullable=False, index=True)
+    kind = db.Column(db.String(10), nullable=False)               # patch | practice
+    patch_id = db.Column(db.Integer, db.ForeignKey("patches.id"), nullable=True)
+    practice = db.Column(db.String(32), default="")
+    params = db.Column(db.Text, default="{}")
+    status = db.Column(db.String(12), default="draft", nullable=False, index=True)
+    sim_outcome = db.Column(db.String(10), default="none")        # none | pending | ready | warning | blocked | noop | error
+    sim_checks = db.Column(db.Text, default="[]")
+    sim_actions = db.Column(db.Text, default="[]")
+    sim_predicted = db.Column(db.Text, default="{}")
+    sim_at = db.Column(db.DateTime, nullable=True)
+    sim_task_id = db.Column(db.Integer, nullable=True)
+    preflight_id = db.Column(db.Integer, nullable=True)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    accepted_warnings = db.Column(db.Boolean, default=False, nullable=False)
+    task_id = db.Column(db.Integer, nullable=True)
+    result = db.Column(db.Text, default="{}")
+    output = db.Column(db.Text, default="")
+    finished_at = db.Column(db.DateTime, nullable=True)
+    asset = db.relationship("Asset")
+    patch = db.relationship("Patch")
+    approved_by = db.relationship("User", foreign_keys=[approved_by_id])
+
+    @property
+    def params_data(self) -> dict:
+        return jloads(self.params, {})
+
+    @property
+    def check_list(self) -> list[dict]:
+        return jloads(self.sim_checks, [])
+
+    @property
+    def action_list(self) -> list[dict]:
+        return jloads(self.sim_actions, [])
+
+    @property
+    def predicted_data(self) -> dict:
+        return jloads(self.sim_predicted, {})
+
+    @property
+    def result_data(self) -> dict:
+        return jloads(self.result, {})
+
+    @property
+    def label(self) -> str:
+        if self.kind == "patch":
+            return self.patch.patch_uid if self.patch else "patch"
+        from .engine.practices import PRACTICES
+        return PRACTICES.get(self.practice, {}).get("label", self.practice)
 
 
 class RingPolicy(db.Model):

@@ -126,6 +126,8 @@ def task_start(task_id: int):
     task = _task(task_id)
     if task.status in ("sent", "queued"):
         task.status, task.started_at = "running", utcnow()
+        from ..engine import plans
+        plans.on_task_started(task)
         db.session.commit()
     return jsonify({"ok": True})
 

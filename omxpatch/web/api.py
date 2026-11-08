@@ -10,9 +10,9 @@ from flask import Blueprint, abort, g, jsonify, request
 
 from ..connectors import omxgrc, omxvuln, signals as signals_mod, sync
 from ..connectors.store import ConnectorError
-from ..engine import advisor, autonomous, compliance, controls, correlate, deploy, executive, intel, inventory, patches, preflight, sources
+from ..engine import advisor, autonomous, compliance, controls, correlate, deploy, executive, intel, inventory, patches, plans as plans_mod, practices as practices_mod, preflight, sources
 from ..extensions import db
-from ..models import (Preflight, Asset, AutonomousRun, Campaign, ControlAction, CveIntel, EnrollmentToken, Exposure, Patch, Tenant,
+from ..models import (OperationPlan, Preflight, Asset, AutonomousRun, Campaign, ControlAction, CveIntel, EnrollmentToken, Exposure, Patch, Tenant,
                       Validation, utcnow)
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
 
@@ -386,3 +386,88 @@ def enrollment_token():
     audit("enrollment_token_created", tok.name, user=g.api_user)
     db.session.commit()
     return jsonify({"token": raw, "expires_at": tok.expires_at.isoformat()}), 201
+
+
+# --------------------------------------------------------------------------- operações e boas práticas
+
+
+def _item(it) -> dict:
+    return {"id": it.id, "asset_id": it.asset_id, "asset": it.asset.name, "kind": it.kind, "label": it.label, "status": it.status,
+            "simulation": it.sim_outcome, "checks": it.check_list, "actions": it.action_list, "predicted": it.predicted_data,
+            "approved_at": it.approved_at.isoformat() if it.approved_at else None, "output": it.output}
+
+
+def _plan(p: OperationPlan, items: bool = True) -> dict:
+    d = {"id": p.id, "name": p.name, "mode": p.mode, "status": p.status, "summary": plans_mod.summary(p)}
+    if items:
+        d["items"] = [_item(i) for i in p.items]
+    return d
+
+
+@bp.get("/practices")
+def practices_catalog():
+    return jsonify([{"id": k, "label": v["label"], "category": v["category"], "risk": v["risk"], "servers": v["servers"],
+                     "params": {pk: {"label": pv[0], "choices": pv[1], "default": pv[2]} for pk, pv in v["params"].items()}}
+                    for k, v in practices_mod.PRACTICES.items()])
+
+
+@bp.get("/plans")
+def plans_list():
+    return jsonify([_plan(p, False) for p in scoped(OperationPlan).order_by(OperationPlan.id.desc()).limit(200)])
+
+
+@bp.get("/plans/<int:plan_id>")
+def plan_get(plan_id: int):
+    return jsonify(_plan(get_scoped_or_404(OperationPlan, plan_id)))
+
+
+@bp.post("/plans")
+@roles_required("admin", "user")
+def plan_create():
+    """``{"name", "mode": by_patch|by_asset, "asset_ids": [], "patch_ids": [], "practices": [{"id", "params"}]}``."""
+    d = request.get_json(silent=True) or {}
+    try:
+        p = plans_mod.create(require_tenant(), str(d.get("name") or "Plano API"), d.get("mode") or "by_patch",
+                             [int(x) for x in d.get("asset_ids") or []], [int(x) for x in d.get("patch_ids") or []],
+                             list(d.get("practices") or []), g.api_user, reboot_policy=d.get("reboot_policy") or "if_needed",
+                             respect_windows=bool(d.get("respect_windows", True)))
+    except (plans_mod.PlanError, ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+    audit("plan_created", f"API #{p.id}", user=g.api_user)
+    db.session.commit()
+    return jsonify(_plan(p)), 201
+
+
+@bp.post("/plans/<int:plan_id>/simulate")
+@roles_required("admin", "user")
+def plan_simulate(plan_id: int):
+    p = get_scoped_or_404(OperationPlan, plan_id)
+    n = plans_mod.simulate(p, require_tenant(), g.api_user)
+    audit("plan_simulate", f"API #{p.id}: {n}", user=g.api_user)
+    db.session.commit()
+    return jsonify({"simulating": n}), 202
+
+
+@bp.post("/plans/<int:plan_id>/approve")
+@roles_required("admin", "user")
+def plan_approve(plan_id: int):
+    """OK explícito: exige ``"ok": true``; ``item_ids`` ou ``all_ok``; ``accept_warnings`` para itens com avisos."""
+    p = get_scoped_or_404(OperationPlan, plan_id)
+    d = request.get_json(silent=True) or {}
+    if d.get("ok") is not True:
+        return jsonify({"error": "OK explícito em falta (\"ok\": true)"}), 400
+    res = plans_mod.approve(p, [int(x) for x in d.get("item_ids") or []] or None, g.api_user,
+                            accept_warnings=bool(d.get("accept_warnings")), all_ok=bool(d.get("all_ok")))
+    audit("plan_approved", f"API #{p.id}: {res['approved']}", user=g.api_user)
+    db.session.commit()
+    return jsonify({"approved": res["approved"], "refused": [{"item_id": i.id, "reason": w} for i, w in res["refused"]]})
+
+
+@bp.post("/plans/<int:plan_id>/execute")
+@roles_required("admin", "user")
+def plan_execute(plan_id: int):
+    p = get_scoped_or_404(OperationPlan, plan_id)
+    res = plans_mod.execute(p, require_tenant(), g.api_user)
+    audit("plan_executed", f"API #{p.id}: {res['queued']}", user=g.api_user)
+    db.session.commit()
+    return jsonify({"queued": res["queued"], "skipped": [{"item_id": i.id, "reason": w} for i, w in res["skipped"]]})

@@ -1,7 +1,8 @@
 {% extends "base.html" %}{% from "_macros.html" import csrf, st, level, bar, pfbadge with context %}{% block title %}{{ p.patch_uid }}{% endblock %}
 {% block content %}
 <div class="actions"><h1>{{ p.patch_uid }}</h1><span class="spacer"></span>{{ st(p.status, PATCH_STATUSES[p.status]) }} {{ level(intel.level) }}
-{% if current_user.can_write and p.status == 'approved' %}<a class="btn" href="{{ url_for('patching.campaign_new', patch_id=p.id) }}">Criar campanha</a>{% endif %}</div>
+{% if current_user.can_write and p.status == 'approved' %}<a class="btn" href="{{ url_for('patching.campaign_new', patch_id=p.id) }}">Criar campanha</a>{% endif %}
+{% if current_user.can_write %}<a class="btn sec" href="{{ url_for('plans.plan_new', patch_id=p.id) }}">Operações em massa</a>{% endif %}</div>
 <div class="grid2"><div class="panel"><h2>Detalhes</h2><dl class="kv"><dt>Título</dt><dd>{{ p.title }}</dd><dt>Fabricante / produto</dt><dd>{{ p.vendor }} {{ p.product }}</dd>
 <dt>SO / instalador</dt><dd>{{ OS_FAMILIES.get(p.os_family, 'qualquer') }} · {{ INSTALLER_TYPES.get(p.installer, p.installer) }}{% if p.package_name %} ({{ p.package_name }}){% endif %}</dd>
 <dt>Versão corrigida</dt><dd>{{ p.version_fixed or '—' }}</dd><dt>CVE</dt><dd>{% for c in p.cve_list %}<a href="{{ url_for('main.intel_detail', cve_id=c) }}">{{ c }}</a> {% else %}—{% endfor %}</dd>

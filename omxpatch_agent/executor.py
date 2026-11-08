@@ -135,7 +135,7 @@ def _wake(client: Client, task: dict) -> dict:
 
 def _inventory(client: Client, task: dict) -> dict:
     info = collectors.collect()
-    return {"status": "succeeded", **{k: info[k] for k in ("software", "hardware", "open_ports", "reboot_pending", "os_name", "os_version", "primary_user", "ip", "mac", "fqdn", "capabilities") if k in info},
+    return {"status": "succeeded", **{k: info[k] for k in ("software", "hardware", "open_ports", "reboot_pending", "os_name", "os_version", "primary_user", "ip", "mac", "fqdn", "capabilities", "webservers") if k in info},
             "hotfixes": info.get("hotfixes"), "output": f"{len(info['software'])} itens"}
 
 
@@ -143,7 +143,26 @@ def _simulate(client: Client, task: dict) -> dict:
     return preflight.run_simulation(client, task["payload"])
 
 
-HANDLERS = {"simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
+def _practice_sim(client: Client, task: dict) -> dict:
+    from . import practices
+    p = task["payload"]
+    res = practices.simulate(p["practice"], p.get("params") or {})
+    return {"status": "succeeded", **res, "output": res.get("predicted", {}).get("summary", "")}
+
+
+def _practice_apply(client: Client, task: dict) -> dict:
+    from . import practices
+    p = task["payload"]
+    return practices.apply(p["practice"], p.get("params") or {}, f"item-{p['item_id']}")
+
+
+def _practice_rollback(client: Client, task: dict) -> dict:
+    from . import practices
+    p = task["payload"]
+    return practices.rollback(f"item-{p['item_id']}", p.get("params") or {})
+
+
+HANDLERS = {"practice_sim": _practice_sim, "practice_apply": _practice_apply, "practice_rollback": _practice_rollback, "simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
             "rollback": lambda c, t: {"status": "failed", "output": "Reversão automática não suportada neste agente"}}
 
 

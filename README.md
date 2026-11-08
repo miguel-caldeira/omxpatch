@@ -211,7 +211,32 @@ curl -H "Authorization: Bearer $T" -X POST https://omxpatch/api/v1/sync/omxvuln
 
 `/me`, `/assets`, `/discover`, `/exposures`, `/correlate`, `/intel/<cve>`, `/patches`, `/patches/<id>/approve`, `/campaigns`,
 `/signals`, `/controls`, `/advisor`, `/autonomous`, `/validations`, `/compliance`, `/executive`, `/sync/omxvuln`, `/sync/omxgrc`,
-`/grc/controls`, `/grc/evidence`, `/enrollment-tokens`.
+`/grc/controls`, `/grc/evidence`, `/enrollment-tokens`, `/practices`, `/plans`.
+
+## Boas práticas e planos de operações
+
+Além de instalar patches, o OMXPatch aplica **boas práticas de configuração** (menu *Operações e boas práticas*):
+
+| Boa prática | nginx | Apache | IIS |
+|---|---|---|---|
+| TLS 1.2/1.3 apenas, cifras «intermediate» da Mozilla | `ssl_protocols`, `ssl_ciphers` | `SSLProtocol`, `SSLCipherSuite` | Schannel + .NET (exige reinício) |
+| HSTS | `add_header` | `Header always set` | `customHeaders` |
+| Ocultar a versão | `server_tokens off` | `ServerTokens Prod` | `removeServerHeader`, `X-Powered-By` |
+| Cabeçalhos de segurança | sim | sim | sim |
+
+**Fluxo obrigatório: simular → OK → executar.** Um *plano* junta ativos × operações (patches e/ou boas práticas):
+
+1. **Simular** — o agente não altera nada e devolve verificações, as **ações** (com *diff* dos ficheiros/registo) e o resultado previsto
+   (`pronto`, `avisos`, `bloqueado`, `nada a fazer`, `erro`).
+2. **OK explícito** — só itens simulados (há menos de 24 h) e sem bloqueio podem ser aprovados; é preciso marcar a caixa «OK»
+   (e aceitar os avisos, se existirem). Sem OK, nenhuma tarefa de execução é criada. Na API: `{"ok": true}`.
+3. **Executar** — apenas os itens aprovados, respeitando hora de início e janelas de manutenção.
+
+Cada plano pode ser visto **por operação** (a atualização/prática a aplicar, em vários ativos) ou **por ativo** (várias operações num ativo).
+A aplicação de boas práticas faz cópia de segurança, `nginx -t`/`apachectl configtest`, recarga, verificação real dos protocolos TLS
+(handshakes TLS 1.0/1.1/1.2/1.3) e **reversão automática** se algo falhar; itens concluídos podem ser revertidos manualmente.
+
+API: `GET /api/v1/practices`, `GET|POST /api/v1/plans`, `POST /api/v1/plans/<id>/simulate|approve|execute`.
 
 ## Segurança
 
@@ -239,6 +264,9 @@ e os playbooks (`--syntax-check` de todos e execução real de inventário/valid
 - **Testado:** servidor, motores, API, interface, agente em **Linux** (inventário real, firewall com comandos simulados), e os 17
   playbooks Ansible (sintaxe; inventário e validação executados de verdade).
 - **Windows:** a sonda de origens, os comandos de cada instalador, os códigos de saída e a simulação foram testados com saídas simuladas (formatos de winget, choco, WUA e apt escritos de memória); nunca correram num Windows real. No Linux a simulação correu de verdade (`apt-get -s`).
+- **Boas práticas:** nginx e Apache foram validados contra servidores reais (instalação, aplicação, `-t`, recarga, matriz TLS e
+  reversão). O **IIS** (Schannel, WebAdministration) foi testado apenas com PowerShell simulado, nunca num Windows real; o TLS 1.3
+  só é configurado em Windows build ≥ 20348 e o Schannel só vale após reiniciar. Sem boas práticas para macOS.
 - **Não testado em sistemas reais:** os caminhos Windows e macOS do agente (registo, WUA/winget/MSI, softwareupdate/brew/pkg, netsh/pf,
   tarefa agendada/LaunchDaemon) e os playbooks Windows/macOS foram escritos e verificados quanto à sintaxe, mas nunca executados
   nesses sistemas; teste-os num anel de laboratório antes de os usar.

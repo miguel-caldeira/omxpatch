@@ -14,3 +14,7 @@
 {% macro bar(value, max=100, cls='') %}<progress class="{{ cls }}" value="{{ value or 0 }}" max="{{ max }}"></progress>{% endmacro %}
 {% macro pfbadge(o) %}<span class="badge pf-{{ o }}">{{ PREFLIGHT_OUTCOMES.get(o, o) }}</span>{% endmacro %}
 {% macro chk(s) %}{% if s == 'ok' %}<span class="ok">✔</span>{% elif s == 'block' %}<span class="bad">✘</span>{% elif s == 'warn' %}<span class="warnc">▲</span>{% else %}<span class="muted">ℹ</span>{% endif %}{% endmacro %}
+{% macro simbadge(o) %}{% if o == 'none' %}<span class="badge st-draft">Por simular</span>{% else %}{{ pfbadge(o) }}{% endif %}{% endmacro %}
+{% macro itbadge(s) %}<span class="badge it-{{ s }}">{{ ITEM_STATUSES.get(s, s) }}</span>{% endmacro %}
+{% macro actions_view(actions) %}{% for a in actions %}<div class="act"><b>{{ a.kind }}</b>{% if a.server %} <span class="chip">{{ a.server }}</span>{% endif %} <code class="small">{{ a.target }}</code>
+<div class="small">{{ a.summary }}</div>{% if a.diff %}<pre class="diff">{{ a.diff }}</pre>{% endif %}</div>{% else %}<p class="muted small">Sem alterações previstas.</p>{% endfor %}{% endmacro %}

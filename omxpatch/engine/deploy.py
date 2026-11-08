@@ -394,6 +394,9 @@ def complete_task(task: Task, report: dict) -> Task:
     elif task.type == "simulate":
         from . import preflight
         preflight.on_report(task, report)
+    elif task.type == "practice_sim":
+        from . import plans
+        plans.on_sim_report(task, report)
     elif task.type == "bas":
         from . import simulation
         simulation.on_report(task, report)
@@ -403,6 +406,8 @@ def complete_task(task: Task, report: dict) -> Task:
     elif task.type == "inventory":
         from . import inventory
         inventory.ingest_inventory(tenant, asset, report)
+    from . import plans
+    plans.on_task_done(task, report)
     return task
 
 

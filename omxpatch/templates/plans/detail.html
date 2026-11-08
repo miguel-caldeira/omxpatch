@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st, simbadge, itbadge, actions_view, chk with context %}{% block title %}{{ plan.name }}{% endblock %}
+{% block content %}
+<div class="actions"><h1>{{ plan.name }}</h1><span class="spacer"></span>{{ st(plan.status, PLAN_STATUSES[plan.status]) }}
+<a class="btn sm sec" href="{{ url_for('plans.plan_detail', plan_id=plan.id, by='operation') }}">Por atualização / prática</a><a class="btn sm sec" href="{{ url_for('plans.plan_detail', plan_id=plan.id, by='asset') }}">Por ativo</a></div>
+<p class="small muted">{{ n_items }} item(ns) · simulação: {% for k, n in summary.simulation.items() %}<span class="chip">{{ PREFLIGHT_OUTCOMES.get(k, 'por simular') }}: {{ n }}</span> {% endfor %}· reinício: {{ plan.reboot_policy }}{{ ' · início ' ~ (plan.start_at|dt) if plan.start_at }}</p>
+{% if current_user.can_write and plan.status != 'cancelled' %}
+<form method="post" action="{{ url_for('plans.plan_action', plan_id=plan.id, action='approve') }}" id="planform">{{ csrf() }}<input type="hidden" name="by" value="{{ by }}">
+{% for g in groups %}<div class="panel"><h2>{{ g.title }}</h2><table><tr><th></th><th>{{ 'Operação' if by == 'asset' else 'Ativo' }}</th><th>Simulação</th><th>Estado</th><th>Ações e resultado previsto</th></tr>
+{% for it in g['items'] %}{% set e = eligible[it.id] %}{% set pr = it.predicted_data %}<tr><td>{% if e[0] or it.status == 'approved' %}<input type="checkbox" name="item_ids" value="{{ it.id }}" aria-label="Selecionar">{% endif %}</td>
+<td><a href="{{ url_for('plans.item_detail', item_id=it.id) }}">{{ it.label if by == 'asset' else it.asset.name }}</a>{% if it.kind == 'practice' %} <span class="chip">boa prática</span>{% endif %}</td>
+<td>{{ simbadge(it.sim_outcome) }}</td><td>{{ itbadge(it.status) }}{% if it.status == 'approved' %}<div class="small muted">OK de {{ it.approved_by.email if it.approved_by }} {{ it.approved_at|dt }}</div>{% endif %}</td>
+<td><details class="sim"><summary>{{ pr.summary or (it.action_list[0].summary if it.action_list else (it.check_list|selectattr('status', 'equalto', 'block')|map(attribute='detail')|first) or 'ver detalhe') }}</summary>
+{% if it.check_list %}<table class="small">{% for c in it.check_list %}<tr><td>{{ chk(c.status) }}</td><td>{{ c.label }}</td><td class="wrap">{{ c.detail }}</td></tr>{% endfor %}</table>{% endif %}
+{{ actions_view(it.action_list) }}{% if it.output %}<pre>{{ it.output }}</pre>{% endif %}</details>
+{% if not e[0] and it.status in ('simulated', 'draft') %}<div class="small muted">Não aprovável: {{ e[1] }}</div>{% endif %}</td></tr>{% endfor %}</table></div>{% endfor %}
+<div class="okbox"><h2>OK do utilizador</h2><p class="small">Reveja as ações e os resultados previstos acima. Só os itens com o seu <b>OK</b> podem ser executados; a aprovação caduca 24 h depois da simulação.</p>
+<label class="chk"><input type="checkbox" name="confirm_ok" value="1"> <b>OK</b> — revi as ações e resultados da simulação e autorizo a execução</label>
+<label class="chk"><input type="checkbox" name="accept_warnings" value="1"> Aceito os avisos dos itens «Pronto, com avisos»</label>
+<p class="actions"><button class="btn">OK — aprovar selecionados</button>
+<button class="btn sec" name="all_ok" value="1">OK — aprovar todos os prontos</button>
+<button class="btn sec" formaction="{{ url_for('plans.plan_action', plan_id=plan.id, action='revoke') }}" formnovalidate>Retirar o OK dos selecionados</button>
+<button class="btn sec" formaction="{{ url_for('plans.plan_action', plan_id=plan.id, action='simulate') }}" formnovalidate>Simular selecionados / todos</button>
+<button class="btn accent" formaction="{{ url_for('plans.plan_action', plan_id=plan.id, action='execute') }}" formnovalidate data-confirm-btn="Executar os itens aprovados?">Executar aprovados</button>
+<button class="btn danger" formaction="{{ url_for('plans.plan_action', plan_id=plan.id, action='cancel') }}" formnovalidate>Cancelar plano</button></p></div></form>
+{% else %}{% for g in groups %}<div class="panel"><h2>{{ g.title }}</h2><table>{% for it in g['items'] %}<tr><td>{{ it.label if by == 'asset' else it.asset.name }}</td><td>{{ simbadge(it.sim_outcome) }}</td><td>{{ itbadge(it.status) }}</td></tr>{% endfor %}</table></div>{% endfor %}{% endif %}
+{% endblock %}

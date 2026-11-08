@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% from "_macros.html" import st with context %}{% block title %}Operações e boas práticas{% endblock %}
+{% block content %}<div class="actions"><h1>Operações em massa e boas práticas</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('plans.practices_page') }}">Catálogo de boas práticas</a>
+{% if current_user.can_write %}<a class="btn" href="{{ url_for('plans.plan_new') }}">Novo plano</a>{% endif %}</div>
+<p class="muted small">Um plano junta várias operações (instalar atualizações, aplicar boas práticas como TLS 1.2/1.3 no IIS, Apache e NGINX) em vários ativos — <b>por atualização</b> ou <b>por ativo</b>. Fluxo: <b>simular</b> → ver ações e resultados → <b>OK</b> → executar. Nada é executado sem o OK.</p>
+<div class="panel"><table><tr><th>#</th><th>Plano</th><th>Vista</th><th>Estado</th><th>Itens</th><th>Simulação</th><th>Criado</th></tr>
+{% for p in rows %}{% set s = summaries[p.id] %}<tr><td><a href="{{ url_for('plans.plan_detail', plan_id=p.id) }}">{{ p.id }}</a></td><td><a href="{{ url_for('plans.plan_detail', plan_id=p.id) }}">{{ p.name }}</a></td>
+<td>{{ 'Por ativo' if p.mode == 'by_asset' else 'Por atualização' }}</td><td>{{ st(p.status, PLAN_STATUSES[p.status]) }}</td><td>{{ s.total }}</td>
+<td class="small">{% for k, n in s.simulation.items() %}<span class="chip">{{ PREFLIGHT_OUTCOMES.get(k, 'por simular') }}: {{ n }}</span> {% endfor %}</td><td>{{ p.created_at|dt }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem planos. Crie um a partir de um patch, de um ativo ou aqui.</td></tr>{% endfor %}</table></div>{% endblock %}

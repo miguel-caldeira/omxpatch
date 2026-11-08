@@ -202,3 +202,6 @@ header.top .logo .mark{color:var(--header-fg,#fff)}header.top .logo .mark b{colo
 .login .logo b{color:#ff8000}
 .pf-ready,.pf-noop{background:var(--ok)}.pf-warning{background:var(--warn)}.pf-blocked,.pf-error{background:var(--err)}.pf-pending{background:#868e96}
 .noop{background:#6b7a90}.warnc{color:var(--warn);font-weight:700}
+.it-approved,.it-succeeded{background:var(--ok)}.it-queued,.it-running,.it-simulating{background:var(--brand2)}.it-failed,.it-rolled_back{background:var(--err)}.it-skipped,.it-reverted{background:#6b7a90}.it-simulated{background:var(--warn)}.it-draft{background:#868e96}
+.act{border-left:3px solid var(--brand2);padding:4px 10px;margin:8px 0;background:rgba(127,127,127,.06)}pre.diff{max-height:320px;font-size:11.5px}
+details.sim>summary{cursor:pointer;color:var(--brand2)}.okbox{border:2px solid var(--ok);border-radius:8px;padding:12px;margin:12px 0}

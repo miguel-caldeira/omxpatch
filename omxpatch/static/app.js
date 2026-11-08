@@ -90,3 +90,10 @@ document.querySelectorAll("button[data-confirm]").forEach(function (b) {
 document.querySelectorAll("dialog.license-notice[open]").forEach(function (d) {
   if (typeof d.showModal === "function") { d.close(); d.showModal(); }
 });
+
+// Botões com confirmação (formaction): data-confirm-btn
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("button[data-confirm-btn]").forEach(function (b) {
+    b.addEventListener("click", function (e) { if (!confirm(b.dataset.confirmBtn)) e.preventDefault(); });
+  });
+});

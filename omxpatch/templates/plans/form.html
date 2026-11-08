@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Novo plano de operações{% endblock %}
+{% block content %}<h1>Novo plano de operações</h1>
+<form method="post" class="panel">{{ csrf() }}
+<div class="row"><div><label for="name">Nome</label><input type="text" id="name" name="name" value="{{ 'Plano do ativo' if mode == 'by_asset' else 'Plano de atualização' }}"></div>
+<div><label for="mode">Vista principal</label><select id="mode" name="mode"><option value="by_patch" {{ 'selected' if mode == 'by_patch' }}>Por atualização / prática (uma operação em vários ativos)</option><option value="by_asset" {{ 'selected' if mode == 'by_asset' }}>Por ativo (várias operações em cada ativo)</option></select></div>
+<div><label for="reboot_policy">Reinício</label><select id="reboot_policy" name="reboot_policy"><option value="if_needed">Se necessário</option><option value="none">Nunca (fica pendente)</option><option value="force">Forçar</option></select></div>
+<div><label for="start_at">Início (vazio = após o OK)</label><input type="datetime-local" id="start_at" name="start_at"></div></div>
+<h2>1. Operações</h2>
+<div class="grid2"><div><h3>Atualizações (patches)</h3><table>{% for p in patches %}<tr><td><label class="chk"><input type="checkbox" name="patch_ids" value="{{ p.id }}" {{ 'checked' if p.id in pre_patches }}> <b>{{ p.patch_uid }}</b> <span class="muted small">{{ (p.title or p.product)[:60] }} · {{ INSTALLER_TYPES.get(p.installer, p.installer) }}</span></label></td></tr>
+{% else %}<tr><td class="muted">Sem patches no repositório.</td></tr>{% endfor %}</table></div>
+<div><h3>Boas práticas</h3>{% for id, c in catalog.items() %}<div class="act"><label class="chk"><input type="checkbox" name="practice_{{ id }}" value="1" {{ 'checked' if pre_practice == id }}> <b>{{ c.label }}</b> <span class="chip">risco {{ c.risk }}</span></label><div class="small muted">{{ c.desc }}</div>
+{% for k, (label, choices, default) in c.params.items() %}<label class="small">{{ label }} {% if choices %}<select name="pp_{{ id }}_{{ k }}">{% for ch in choices %}<option {{ 'selected' if ch == default }}>{{ ch }}</option>{% endfor %}</select>{% else %}<input type="text" name="pp_{{ id }}_{{ k }}" value="{{ default }}">{% endif %}</label> {% endfor %}
+{% if c.warn %}<div class="small"><span class="warnc">▲</span> {{ c.warn }}</div>{% endif %}</div>{% endfor %}
+<label for="server" class="small">Servidor (boas práticas)</label><select id="server" name="server"><option value="">Todos os detetados</option><option>nginx</option><option>apache</option><option>iis</option></select></div></div>
+<h2>2. Ativos</h2><div class="row"><div><label for="asset_ids_text">IDs de ativos (vírgulas), além dos marcados</label><input type="text" id="asset_ids_text" name="asset_ids_text" placeholder="1,2,3"></div></div>
+<table><tr><th></th><th>Ativo</th><th>SO</th><th>Servidores web</th><th>Agente</th></tr>
+{% for a in assets %}<tr><td><input type="checkbox" name="asset_ids" value="{{ a.id }}" {{ 'checked' if a.id in pre_assets }} aria-label="{{ a.name }}"></td><td>{{ a.name }}</td><td>{{ OS_FAMILIES.get(a.os_family, '—') }}</td><td class="small">{{ detected(a)|join(', ') or '—' }}</td><td>{{ '✔' if a.agent else '—' }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">Sem ativos.</td></tr>{% endfor %}</table>
+<label class="chk"><input type="checkbox" name="respect_windows" value="1" checked> Respeitar janelas de manutenção ao executar</label>
+<label class="chk"><input type="checkbox" name="simulate_now" value="1" checked> Simular logo (nada é executado sem o seu OK)</label>
+<p class="actions"><button class="btn">Criar plano</button><a class="btn sec" href="{{ url_for('plans.plans_list') }}">Cancelar</a></p></form>{% endblock %}

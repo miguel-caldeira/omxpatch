@@ -104,6 +104,8 @@ def on_report(task: Task, report: dict) -> None:
     pf.checks, pf.predicted = json.dumps(checks, ensure_ascii=False), json.dumps(predicted)
     pf.outcome = "error" if (report.get("status") == "failed" and not report.get("checks")) else classify(checks, predicted)
     pf.finished_at = utcnow()
+    from . import plans
+    plans.on_preflight_done(pf)
 
 
 def latest(patch_id: int, asset_id: int, max_age: timedelta = MAX_AGE) -> Preflight | None:

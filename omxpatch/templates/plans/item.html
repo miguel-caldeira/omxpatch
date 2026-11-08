@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, simbadge, itbadge, actions_view, chk with context %}{% block title %}{{ it.label }} em {{ it.asset.name }}{% endblock %}
+{% block content %}{% set pr = it.predicted_data %}
+<div class="actions"><h1>{{ it.label }} — <a href="{{ url_for('main.asset_detail', asset_id=it.asset_id) }}">{{ it.asset.name }}</a></h1><span class="spacer"></span>{{ simbadge(it.sim_outcome) }} {{ itbadge(it.status) }}
+<a class="btn sec sm" href="{{ url_for('plans.plan_detail', plan_id=it.plan_id) }}">Plano #{{ it.plan_id }}</a>
+{% if current_user.can_manage and it.kind == 'practice' and it.status == 'succeeded' %}<form method="post" action="{{ url_for('plans.item_revert', item_id=it.id) }}" class="inline" data-confirm="Reverter esta boa prática (repõe os ficheiros/registos anteriores)?">{{ csrf() }}<button class="btn sm danger">Reverter</button></form>{% endif %}</div>
+<div class="grid2"><div class="panel"><h2>Verificações da simulação</h2><table><tr><th></th><th>Verificação</th><th>Detalhe</th></tr>
+{% for c in it.check_list %}<tr><td>{{ chk(c.status) }}</td><td>{{ c.label }}</td><td class="small wrap">{{ c.detail }}</td></tr>{% else %}<tr><td colspan="3" class="muted">Sem simulação.</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Resultado previsto</h2><dl class="kv"><dt>Resumo</dt><dd>{{ pr.summary or '—' }}</dd><dt>Reinício</dt><dd>{{ 'previsto' if pr.reboot else 'não previsto' }}</dd>
+{% if pr.servers %}<dt>Servidores</dt><dd>{% for s in pr.servers %}<span class="chip">{{ s.server }}: {{ 'conforme' if s.compliant else 'a alterar' }}</span> {% endfor %}</dd>{% endif %}
+<dt>Parâmetros</dt><dd><code class="small">{{ it.params_data }}</code></dd><dt>Simulado em</dt><dd>{{ it.sim_at|dt }}</dd><dt>OK</dt><dd>{{ (it.approved_by.email ~ ' · ' ~ (it.approved_at|dt)) if it.approved_at else '—' }}{{ ' (avisos aceites)' if it.accepted_warnings }}</dd></dl></div></div>
+<div class="panel"><h2>Ações previstas</h2>{{ actions_view(it.action_list) }}</div>
+{% if it.status in ('succeeded', 'failed', 'rolled_back', 'reverted') or it.output %}<div class="panel"><h2>Resultado da execução</h2><pre>{{ it.output }}</pre>
+{% set v = it.result_data.get('verification') %}{% if v %}<h3>Verificação</h3><pre>{{ v|tojson_pretty }}</pre>{% endif %}</div>{% endif %}{% endblock %}
