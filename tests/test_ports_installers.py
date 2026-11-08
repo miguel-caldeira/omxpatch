@@ -266,3 +266,15 @@ def test_windows_script_has_utf8_bom_and_robust_python_install(app, tenant):
     import pathlib
     for f in pathlib.Path("packaging/installers/windows").glob("*.ps1"):
         assert f.read_bytes().startswith(b"\xef\xbb\xbf"), f.name
+
+
+def test_windows_2012r2_installer_generation(tmp_path):
+    out = tmp_path / "i.ps1"
+    subprocess.run([sys.executable, "packaging/make_2012r2.py", "packaging/installers/windows/Install-OMXPatch.ps1", str(out)], check=True)
+    raw = out.read_bytes()
+    t = raw.decode("utf-8-sig")
+    assert raw.startswith(b"\xef\xbb\xbf") and "python-3.11.9-amd64.exe" in t and "python-3.12" not in t.replace("Python312", "")
+    assert "KB2999226" in t and "PowerShell 4.0" in t and ".NET Framework 4.5" in t and "SchUseStrongCrypto" in t
+    assert t.index("Verificações prévias") < t.index("Step 'Python'")
+    _, agent = installers.render("windows", url="https://h.example:4444", pin=PIN, token="omxe_abcdefghijkl", tenant_name="T", host="h.example")
+    assert "python-3.8.10-amd64.exe" in agent

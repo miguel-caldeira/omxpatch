@@ -30,7 +30,7 @@ function Find-Python {
   foreach ($k in 'HKLM:\SOFTWARE\Python\PythonCore', 'HKLM:\SOFTWARE\WOW6432Node\Python\PythonCore', 'HKCU:\SOFTWARE\Python\PythonCore') {
     Get-ChildItem $k -ErrorAction SilentlyContinue | ForEach-Object { $ip = (Get-ItemProperty "$($_.PSPath)\InstallPath" -ErrorAction SilentlyContinue).'(default)'; if ($ip) { $c += (Join-Path $ip 'python.exe') } }
   }
-  foreach ($p in $c) { if ($p -and (Test-Path $p)) { try { if ((& $p -c 'import sys;print(sys.version_info>=(3,8))' 2>$null) -eq 'True') { return $p } } catch {} } }
+  foreach ($p in $c) { if ($p -and (Test-Path $p)) { try { if ((& $p -c 'import sys;print(sys.version_info>=(3,9))' 2>$null) -eq 'True') { return $p } } catch {} } }
   $g = Get-Command python.exe -ErrorAction SilentlyContinue
   if ($g -and $g.Source -notlike '*WindowsApps*') { return $g.Source }
   return $null

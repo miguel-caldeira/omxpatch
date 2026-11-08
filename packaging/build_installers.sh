@@ -2,6 +2,7 @@
 # Constrói os pacotes de instalação em dist/:
 #   omxpatch-ubuntu-<versão>.tar.gz   centro de comando (Ubuntu/Debian) com wheelhouse offline (cp312/cp313, x86_64 e aarch64)
 #   omxpatch-windows-<versão>.zip     centro de comando (Windows) com wheelhouse offline (cp312, win_amd64)
+#   omxpatch-windows2012r2-<versão>.zip centro de comando para Windows Server 2012 R2 (Python 3.11, cp311 win_amd64)
 #   omxpatch-agent-<versão>.zip       agente (só biblioteca padrão) para instalação manual/offline
 #   SHA256SUMS
 # Requer: python3 com pip e tar (zip é opcional). Uso: packaging/build_installers.sh
@@ -67,6 +68,22 @@ if [ -f "$W/python-installer.exe" ]; then sha256sum "$W/python-installer.exe" | 
 else echo "AVISO: instalador do Python não incluído (sem acesso a python.org): defina PYTHON_WIN_EXE=<python-3.12.x-amd64.exe>"; fi
 cp packaging/installers/windows/* "$W/"; echo "$VER" > "$W/VERSION"
 (cd "$STAGE" && mkzip "$DIST/omxpatch-windows-$VER.zip" "omxpatch-windows-$VER")
+
+echo "==> Windows Server 2012 R2 (Python 3.11)"
+W2="$STAGE/omxpatch-windows2012r2-$VER"; mkdir -p "$W2/wheels" "$W2/prereq"
+cp "$STAGE"/app-wheel/*.whl "$W2/wheels/"
+dl "$W2/wheels" win_amd64 3.11
+$PY -m pip download -q tzdata --only-binary=:all: -d "$W2/wheels" 2>/dev/null || true
+cp packaging/installers/windows/Instalar.cmd packaging/installers/windows/Uninstall-OMXPatch.ps1 "$W2/"
+$PY packaging/make_2012r2.py packaging/installers/windows/Install-OMXPatch.ps1 "$W2/Install-OMXPatch.ps1"
+cp packaging/installers/windows2012r2/LEIA-ME.txt "$W2/"; echo "$VER" > "$W2/VERSION"
+PY2=3.11.9
+if [ -n "${PYTHON_WIN2012_EXE:-}" ] && [ -f "$PYTHON_WIN2012_EXE" ]; then cp "$PYTHON_WIN2012_EXE" "$W2/python-installer.exe"
+else curl -fsSL -m 300 -o "$W2/python-installer.exe" "https://www.python.org/ftp/python/$PY2/python-$PY2-amd64.exe" 2>/dev/null || rm -f "$W2/python-installer.exe"; fi
+if [ -f "$W2/python-installer.exe" ]; then sha256sum "$W2/python-installer.exe" | cut -d' ' -f1 > "$W2/python-installer.sha256"
+else echo "AVISO: pacote 2012 R2 sem python-installer.exe (defina PYTHON_WIN2012_EXE=<python-3.11.x-amd64.exe>)"; fi
+for f in "$W2"/*.ps1; do head -c3 "$f" | grep -q $'\xef\xbb\xbf' || { printf '\xef\xbb\xbf' | cat - "$f" > "$f.n" && mv "$f.n" "$f"; }; done
+(cd "$STAGE" && mkzip "$DIST/omxpatch-windows2012r2-$VER.zip" "omxpatch-windows2012r2-$VER")
 
 echo "==> Agente"
 A="$STAGE/omxpatch-agent-$VER"; mkdir -p "$A"

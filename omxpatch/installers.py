@@ -125,6 +125,7 @@ function Install-Python([string]$Installer) {
 $Py = Find-Python
 if (-not $Py) {
   Write-Host 'A instalar o Python 3...'
+  if ([Environment]::OSVersion.Version.Major -lt 10 -and $PSBoundParameters.Count -eq 0) { $PythonUrl = 'https://www.python.org/ftp/python/3.8.10/python-3.8.10-amd64.exe'; Write-Host 'Windows anterior ao 10 / Server 2016: Python 3.8.10.' }
   $inst = Join-Path $env:TEMP 'python-installer.exe'
   Invoke-WebRequest -Uri $PythonUrl -OutFile $inst -UseBasicParsing
   if ($PythonSha256 -and ((Get-FileHash $inst -Algorithm SHA256).Hash -ne $PythonSha256.ToUpper())) { throw 'SHA-256 do instalador do Python não confere' }

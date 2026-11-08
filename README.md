@@ -116,6 +116,7 @@ A password inicial do super-administrador (`admin@omxpatch.local`) é mostrada n
 |---|---|
 | `omxpatch-ubuntu-<versão>.tar.gz` | centro de comando para Ubuntu 24.04/26.04 ou Debian: `sudo ./install.sh [--hostname … --agent-hostname … --server-ip …]`; ambiente virtual com *wheelhouse* offline, serviços systemd (web + worker), ufw 4434/4444, certificados e password inicial |
 | `omxpatch-windows-<versão>.zip` | centro de comando para Windows Server/10/11: `Instalar.cmd` ou `Install-OMXPatch.ps1`; instala o Python se faltar, tarefas agendadas SYSTEM, regras de firewall, certificados |
+| `omxpatch-windows2012r2-<versão>.zip` | centro de comando para **Windows Server 2012 R2**: Python 3.11 (o 3.12 já não o suporta), verificações prévias (PowerShell 4, .NET 4.5, KB2999226), TLS 1.2 no .NET; os agentes gerados na consola usam o Python 3.8.10 em Windows < 10 |
 | `omxpatch-agent-<versão>.zip` | agente (só biblioteca padrão) para instalação manual/offline; o normal é gerar os scripts de auto-instalação na consola |
 
 Cada pacote traz `LEIA-ME.txt`, atualiza mantendo dados e configuração, e tem desinstalador. Verificação: `SHA256SUMS`.

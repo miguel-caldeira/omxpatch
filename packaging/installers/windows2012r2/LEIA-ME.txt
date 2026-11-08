@@ -1,0 +1,17 @@
+OMXPatch — centro de comando para Windows Server 2012 R2
+=======================================================
+1. Copie esta pasta para o servidor e execute «Instalar.cmd» (pede elevação) ou, numa PowerShell de administrador:
+     .\Install-OMXPatch.ps1 -Hostname omxpatch.empresa.pt -AgentHostname omxpatchcli.empresa.pt -ServerIp 10.0.0.5
+2. Consola: https://<hostname>:4434/   Agentes: https://<agent-hostname>:4444/   (dois certificados autoassinados, 2 anos).
+
+O que é diferente do instalador normal
+- Python 3.11 (o 3.12 já não suporta o 2012 R2). Incluído em python-installer.exe (SHA-256 verificado) ou descarregado de python.org.
+- Verificações prévias: Windows 64 bits ≥ 6.3, PowerShell 4.0+, .NET Framework 4.5+, atualização KB2999226 (Universal C Runtime).
+  Se faltar a KB2999226, coloque o ficheiro .msu (Windows8.1-KB2999226-x64.msu) em prereq\ e o instalador instala-o;
+  esta atualização exige a KB2919355 (abril de 2014).
+- Ativa TLS 1.2 por omissão no .NET (SchUseStrongCrypto) para as transferências.
+- Tarefas agendadas SYSTEM (consola + worker), regras de firewall 4434/4444 e super-administrador inicial.
+
+Agentes: o script de auto-instalação gerado na consola deteta o Windows < 10 e instala o Python 3.8.10 (o agente só usa a biblioteca padrão).
+Limite: o Ansible não corre no Windows; para o modo sem agente use um controlador Linux.
+Atenção: o Windows Server 2012 R2 está fora do suporte da Microsoft (fim: outubro de 2023, ESU até 2026): isole-o e mantenha-o atualizado.
