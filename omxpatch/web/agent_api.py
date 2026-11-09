@@ -101,7 +101,11 @@ def _touch(agent: Agent, body: dict | None = None) -> None:
     agent.last_seen = utcnow()
     agent.ip = (request.remote_addr or "")[:64]
     if body:
-        agent.version = str(body.get("version", agent.version))[:32]
+        new_version = str(body.get("version", agent.version))[:32]
+        if agent.version and new_version != agent.version and agent.asset_id:        # agente atualizado: pede já uma descoberta nova
+            from ..engine import updates as updates_mod
+            updates_mod.request_scan(g.tenant, [agent.asset_id])
+        agent.version = new_version
         if isinstance(body.get("state"), dict):
             st = {k: (v if isinstance(v, (int, float, bool)) else str(v)[:80]) for k, v in list(body["state"].items())[:12]}
             agent.status_json = json.dumps(st)

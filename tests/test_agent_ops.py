@@ -207,3 +207,38 @@ def test_auto_update_flag_comes_from_console(tmp_path, monkeypatch):
     cfg = {"auto_update": True, "task_keys": []}
     assert update.check(cfg, {"agent_version": "99.0.0", "bundle_sha256": "a" * 64, "bundle_sig": "00" * 64}) is None
     assert telemetry.runtime()["auto_update"] is False
+
+
+def test_first_cycle_after_upgrade_forces_discovery(tmp_path, monkeypatch):
+    from omxpatch_agent import cli, config, telemetry
+    from omxpatch_agent.updates import sync
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(config, "load", lambda: {"agent_key": "k"})
+    calls = []
+    monkeypatch.setattr(sync, "run_and_upload", lambda client, force=False, hours=6: calls.append(force) or {"scanned": True, "sent": True})
+
+    class C:
+        s = object()
+        def poll(self, state=None):
+            return {"tasks": [], "trust": {}, "poll_seconds": 300}
+        def logs(self, ev):
+            return {"ok": True}
+    monkeypatch.setattr(cli, "_adopt_servers", lambda *a: None)
+    monkeypatch.setattr(cli, "_adopt_trust", lambda c, r: {})
+    monkeypatch.setattr(cli.time, "time", cli.time.time)
+    monkeypatch.setattr(cli, "send_inventory", lambda c: None)
+    cli.cycle(C(), {"last_inventory": 10 ** 12})
+    cli.cycle(C(), {"last_inventory": 10 ** 12})
+    assert calls == [True, False]                 # 1.º contacto da versão: força; seguintes: segue o intervalo normal
+
+
+def test_version_change_requests_discovery(app, client, ag):
+    from omxpatch.web.agent_api import _hash
+    with app.app_context():
+        a = db.session.get(Agent, ag.id)
+        a.key_hash = _hash("omxa_vkeyvkeyvkey")
+        a.version = "1.2.20261108"
+        db.session.commit()
+    r = client.c.post("/agent/v1/poll", json={"version": "1.27.20261109"}, headers={"Authorization": "Bearer omxa_vkeyvkeyvkey"})
+    assert r.status_code == 200
+    assert any(t["type"] == "update_scan" for t in r.get_json()["tasks"])

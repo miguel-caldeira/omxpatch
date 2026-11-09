@@ -121,7 +121,7 @@ def test_agent_cycle_against_real_server(app, tenant, tmp_path, monkeypatch):
     db.session.commit()
     sess = FlaskSession(app)
     cfg = {"server_url": "https://omxpatch.test"}
-    data = Client(cfg, session=sess).enroll(raw, {**collectors.base_info(), "version": "1.0.0"})
+    data = Client(cfg, session=sess).enroll(raw, {**collectors.base_info(), "version": agent_cli.__version__})
     assert data["agent_key"].startswith("omxa_")
     cfg["agent_key"] = data["agent_key"]
     assert data["tenant"] == {"slug": "alpha", "name": "Alpha"}

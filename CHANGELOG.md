@@ -2,6 +2,10 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.27.20261109 — Windows Update: resolução definitiva
+- O WUA deixa de pedir URL de transferência (inúteis: o Windows instala pelo Windows Update); a resposta passa de centenas de KB para poucos KB e cada atualização é lida de forma isolada.
+- Depois de uma atualização do agente, a descoberta repete-se logo (no agente e por pedido da consola ao detetar a nova versão): deixam de ficar erros de versões anteriores no diagnóstico.
+
 ## 1.26.20261109 — Atualização do agente a partir da consola
 - Corrigido: depois de atualizar, o agente relançava-se como `python …/__main__.py`, que falhava na importação relativa e deixava o agente desligado (sobretudo no Windows). Passa a relançar com `python -m omxpatch_agent` e o `__main__.py` também funciona como script (cobre agentes antigos a atualizar).
 - «Atualizar agente» na consola faz mesmo a atualização (descarga, verificação, autoteste, troca) e reporta o resultado verdadeiro, incluindo falhas; sem pacote assinado publicado diz-o.

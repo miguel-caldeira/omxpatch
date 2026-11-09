@@ -17,14 +17,15 @@ try {
   Write-Output "WUA_ERROR $hr $($_.Exception.Message)"
   exit 3
 }
-$out = @()
+$out = New-Object System.Collections.ArrayList
 foreach ($u in $r.Updates) {
-  $urls = @(); try { foreach ($c in $u.DownloadContents) { if ($c.DownloadUrl -and $urls.Count -lt 1) { $urls += $c.DownloadUrl } } } catch {}
-  $out += [pscustomobject]@{ id = $u.Identity.UpdateID; rev = $u.Identity.RevisionNumber; title = $u.Title; kb = (@($u.KBArticleIDs) -join ','); severity = "$($u.MsrcSeverity)";
-    cves = @($u.CveIDs); size = [int64]$u.MaxDownloadSize; reboot = ($u.InstallationBehavior.RebootBehavior -ne 0); eula = [bool]$u.EulaAccepted;
-    categories = @($u.Categories | ForEach-Object { $_.Name }); urls = $urls; released = "$($u.LastDeploymentChangeTime)" }
+  try {
+    [void]$out.Add([pscustomobject]@{ id = [string]$u.Identity.UpdateID; rev = [int]$u.Identity.RevisionNumber; title = [string]$u.Title; kb = (@($u.KBArticleIDs) -join ',');
+      severity = "$($u.MsrcSeverity)"; cves = @($u.CveIDs | ForEach-Object { [string]$_ }); size = [int64]$u.MaxDownloadSize;
+      reboot = ($u.InstallationBehavior.RebootBehavior -ne 0); eula = [bool]$u.EulaAccepted; categories = @($u.Categories | ForEach-Object { [string]$_.Name }) })
+  } catch { }
 }
-$json = ConvertTo-Json -InputObject @($out) -Compress -Depth 5
+$json = ConvertTo-Json -InputObject @($out.ToArray()) -Compress -Depth 4
 [System.IO.File]::WriteAllText($OutFile, $json, (New-Object System.Text.UTF8Encoding $false))
 Write-Output 'OMXJSON_DONE'
 """

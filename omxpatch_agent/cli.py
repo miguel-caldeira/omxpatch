@@ -135,7 +135,11 @@ def cycle(client: Client, state: dict) -> int:
             log.warning("Inventário falhou: %s", exc)
     try:                                              # descoberta periódica de atualizações (com reenvio garantido)
         from .updates import sync
-        sync.run_and_upload(client, hours=float((resp.get("updates") or {}).get("scan_hours") or 6))
+        rt = telemetry.runtime()
+        first_after_upgrade = rt.get("scanned_version") != __version__      # versão nova do agente: descobre logo (não mantém resultados/erros da versão anterior)
+        res = sync.run_and_upload(client, force=first_after_upgrade, hours=float((resp.get("updates") or {}).get("scan_hours") or 6))
+        if first_after_upgrade and res.get("scanned"):
+            telemetry.update_runtime(scanned_version=__version__)
     except Exception as exc:  # noqa: BLE001 - nunca impede o resto do ciclo
         log.warning("Descoberta de atualizações: %s", exc)
     for task in resp.get("tasks", []):
