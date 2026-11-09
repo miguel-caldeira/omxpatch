@@ -77,7 +77,7 @@ W2="$STAGE/omxpatch-windows2012r2-$VER"; mkdir -p "$W2/wheels" "$W2/prereq"
 cp "$STAGE"/app-wheel/*.whl "$W2/wheels/"
 dl "$W2/wheels" win_amd64 3.11
 $PY -m pip download -q tzdata --only-binary=:all: -d "$W2/wheels" 2>/dev/null || true
-cp packaging/installers/windows/Instalar.cmd packaging/installers/windows/Uninstall-OMXPatch.ps1 "$W2/"
+cp packaging/installers/windows/Instalar.cmd packaging/installers/windows/Atualizar.cmd packaging/installers/windows/Update-OMXPatch.ps1 packaging/installers/windows/Uninstall-OMXPatch.ps1 "$W2/"
 $PY packaging/make_2012r2.py packaging/installers/windows/Install-OMXPatch.ps1 "$W2/Install-OMXPatch.ps1"
 cp packaging/installers/windows2012r2/LEIA-ME.txt "$W2/"; echo "$VER" > "$W2/VERSION"
 PY2=3.11.9

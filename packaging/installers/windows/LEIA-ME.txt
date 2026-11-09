@@ -11,3 +11,5 @@ O modo sem agente (Ansible) exige um controlador Linux/WSL.
 
 Python/pip: se o Python 3.11+ não existir, é instalado a partir de python-installer.exe (incluído no pacote, SHA-256 verificado,
 com pip) ou, se faltar, descarregado de python.org.
+
+ATUALIZAR uma instalacao existente: duplo clique em Atualizar.cmd (ou .\\Update-OMXPatch.ps1)  - mantem configuracao e dados e verifica a versao final.

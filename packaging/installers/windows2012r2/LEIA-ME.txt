@@ -15,3 +15,5 @@ O que é diferente do instalador normal
 Agentes: o script de auto-instalação gerado na consola deteta o Windows < 10 e instala o Python 3.8.10 (o agente só usa a biblioteca padrão).
 Limite: o Ansible não corre no Windows; para o modo sem agente use um controlador Linux.
 Atenção: o Windows Server 2012 R2 está fora do suporte da Microsoft (fim: outubro de 2023, ESU até 2026): isole-o e mantenha-o atualizado.
+
+ATUALIZAR uma instalacao existente: duplo clique em Atualizar.cmd (ou .\\Update-OMXPatch.ps1)  - mantem configuracao e dados e verifica a versao final.
