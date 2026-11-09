@@ -442,3 +442,26 @@ def test_dashboard_shows_updates_panel_and_actions(app, tenant, enroll_token):
     ag.c.post("/agent/v1/updates", headers=ag.h, json=_report([_item()]))
     html = admin.get("/").get_data(as_text=True)
     assert "1/1" in html and "ainda não enviaram" not in html
+
+
+def test_diagnose_old_agent_and_no_scan(app):
+    from datetime import timedelta
+    from omxpatch.engine import updates as upd
+    from omxpatch.extensions import db
+    from omxpatch.models import Agent, Asset, Tenant
+    from omxpatch.models import utcnow
+    with app.app_context():
+        t = Tenant(name="D", slug="diag-t")
+        db.session.add(t)
+        db.session.flush()
+        a = Asset(tenant_id=t.id, name="h1", uid="diag-h1")
+        b = Asset(tenant_id=t.id, name="h2", uid="diag-h2")
+        db.session.add_all([a, b])
+        db.session.flush()
+        db.session.add_all([Agent(tenant_id=t.id, asset_id=a.id, key_hash="k1", key_prefix="p1", hostname="h1", version="1.2.20261108", last_seen=utcnow()),
+                            Agent(tenant_id=t.id, asset_id=b.id, key_hash="k2", key_prefix="p2", hostname="h2", version="1.17.20261109", last_seen=utcnow())])
+        db.session.commit()
+        rows = {r["agent"].hostname: r for r in upd.diagnose(t)}
+        assert "anterior" in rows["h1"]["verdict"] and rows["h1"]["level"] == "high"
+        assert "Ainda sem descoberta" in rows["h2"]["verdict"]
+        assert timedelta

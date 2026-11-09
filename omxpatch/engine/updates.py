@@ -354,3 +354,44 @@ def summary(tenant: Tenant, now: datetime | None = None) -> dict:
             "repo_bytes": sum(int(u.size_bytes or 0) for u in rows if u.status == "downloaded"), "agents": len(agents), "scanned": len(last),
             "never_scanned": len(never), "stale": len(stale), "scan_hours": hours,
             "last_received": max((s.received_at for s in last.values()), default=None)}
+
+
+# --------------------------------------------------------------------------- diagnóstico (porque é que a lista está vazia?)
+
+MIN_AGENT_VERSION = (1, 10)             # primeira versão do agente com descoberta de atualizações
+
+
+def _ver(v: str) -> tuple:
+    try:
+        return tuple(int(x) for x in (v or "0").split(".")[:2])
+    except ValueError:
+        return (0, 0)
+
+
+def diagnose(tenant: Tenant, now: datetime | None = None) -> list[dict]:
+    """Uma linha por agente com o veredicto: agente antigo, sem contacto, sem descoberta, origens com erro ou OK."""
+    now = now or utcnow()
+    offline = timedelta(minutes=int(_cfg("AGENT_OFFLINE_MINUTES", 20)))
+    last = {}
+    for sc in UpdateScan.query.filter_by(tenant_id=tenant.id).order_by(UpdateScan.id):
+        last[sc.asset_id] = sc
+    rows = []
+    for ag in Agent.query.filter_by(tenant_id=tenant.id, revoked=False):
+        sc = last.get(ag.asset_id)
+        errs = []
+        if sc:
+            errs = [f"{k}: {v.get('error', 'erro')}" for k, v in sc.source_data.items() if v.get("ok") is False]
+        if _ver(ag.version) < MIN_AGENT_VERSION:
+            verdict, level = f"Agente {ag.version or '?'} é anterior à descoberta de atualizações (≥ 1.10): atualize o agente.", "high"
+        elif not ag.last_seen or now - ag.last_seen > offline:
+            verdict, level = "Agente sem contacto recente com a consola.", "high"
+        elif not sc:
+            verdict, level = "Ainda sem descoberta recebida (use «Descobrir agora»; se persistir, veja o registo do agente).", "medium"
+        elif errs:
+            verdict, level = "Descoberta recebida, mas há origens com erro: " + "; ".join(errs)[:300], "medium"
+        elif not sc.total:
+            verdict, level = "Descoberta recebida: o equipamento não tem atualizações pendentes.", "ok"
+        else:
+            verdict, level = f"Descoberta recebida: {sc.total} atualização(ões).", "ok"
+        rows.append({"agent": ag, "last_scan": sc.received_at if sc else None, "total": sc.total if sc else None, "verdict": verdict, "level": level})
+    return rows

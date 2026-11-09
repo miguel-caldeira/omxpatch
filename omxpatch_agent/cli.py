@@ -209,6 +209,25 @@ def cmd_validate(args) -> int:
     return 0 if rep["summary"]["ok"] else 1
 
 
+def cmd_updates(args) -> int:
+    """Diagnóstico local: corre a descoberta, mostra o resultado por origem e (com --send) envia-o à consola."""
+    from . import updates as upd
+    rep = upd.discover(refresh=not args.no_refresh)
+    print(f"Plataforma: {rep['platform']} — {len(rep['updates'])} atualização(ões) descoberta(s)")
+    if not rep["sources"]:
+        print("Nenhuma origem aplicável encontrada neste equipamento (apt/dnf/zypper/WUA/winget/choco/softwareupdate/brew).")
+    for name, s in rep["sources"].items():
+        print(f"  {name:14} {'OK ' if s['ok'] else 'ERRO'} {s['count']:4} item(s) {s.get('error') or s.get('note') or ''}")
+    for u in rep["updates"][:args.limit]:
+        print(f"  - {u.get('name')} {u.get('current_version') or ''} -> {u.get('new_version') or ''} [{u.get('severity')}]")
+    if args.send:
+        from .updates import sync
+        res = sync.run_and_upload(_client(), force=True)
+        print("Enviado à consola:" , "sim" if res.get("sent") else f"NÃO ({res.get('error', '')})")
+        return 0 if res.get("sent") else 1
+    return 0
+
+
 def cmd_status(args) -> int:
     cfg = config.load()
     print(f"Agente {__version__} — organização: {cfg.get('tenant_name', '(não registado)')} — servidor: {cfg.get('server_url', '-')} — configuração: {config.config_path()}")
@@ -225,6 +244,7 @@ def main(argv=None) -> int:
     va = sub.add_parser("validate"); va.add_argument("--level", choices=["read", "lab"], default="read"); va.add_argument("--yes-lab", action="store_true")
     va.add_argument("--with-isolation", action="store_true"); va.add_argument("--server"); va.add_argument("--pin"); va.add_argument("--json"); va.add_argument("--report")
     va.add_argument("--no-redact", action="store_true"); va.add_argument("--quiet", action="store_true"); va.set_defaults(fn=cmd_validate)
+    up = sub.add_parser("updates"); up.add_argument("--send", action="store_true"); up.add_argument("--no-refresh", action="store_true"); up.add_argument("--limit", type=int, default=20); up.set_defaults(fn=cmd_updates)
     st = sub.add_parser("selftest"); st.add_argument("--json", action="store_true"); st.set_defaults(fn=cmd_selftest)
     sub.add_parser("install-service").set_defaults(fn=lambda a: print(service.install()) or 0)
     sub.add_parser("uninstall-service").set_defaults(fn=lambda a: print(service.uninstall()) or 0)

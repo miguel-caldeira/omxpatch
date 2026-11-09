@@ -287,6 +287,9 @@ O isolamento (controlo `isolate_host`) exige **aprovação** e um agente instala
 
 # 15. Operação e resolução de problemas
 
+**A lista de «Atualizações disponíveis» está vazia.** Abra **Atualizações → Diagnóstico por agente**: cada agente mostra o veredicto (agente anterior à 1.10 sem descoberta, sem contacto, sem descoberta recebida, origem com erro, ou sem atualizações pendentes). No próprio equipamento corra `omxpatch-agent updates` (mostra o resultado por origem: apt, dnf, WUA, softwareupdate…) e `omxpatch-agent updates --send` para o enviar à consola. A descoberta de `apt`/`dnf` precisa de o agente correr como root/SYSTEM.
+
+
 ## 15.1 Serviços e registos
 
 | | Linux | Windows |

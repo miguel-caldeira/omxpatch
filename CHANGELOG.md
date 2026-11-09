@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.18.20261109 — Diagnóstico das atualizações
+- Atualizações: painel «Diagnóstico por agente» (agente antigo, sem contacto, sem descoberta, origens com erro) e comando `omxpatch-agent updates [--send]` para diagnosticar e enviar a descoberta a partir do equipamento.
+
 ## 1.17.20261109 — Scripts de atualização
 - Novos `update.sh` (Ubuntu) e `Update-OMXPatch.ps1`/`Atualizar.cmd` (Windows e 2012 R2): atualizam uma instalação existente, fazem cópia da configuração, forçam a reinstalação se a versão não mudar, reiniciam os serviços e verificam a versão final.
 

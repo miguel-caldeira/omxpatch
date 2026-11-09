@@ -1,6 +1,6 @@
 """OMXPatch - centro de comando de gestão de patches e remediação contínua (Ativo → Exposição → Risco → Mitigação
 → Patch → Validação → Monitorização contínua)."""
-__version__ = "1.17.20261109"
+__version__ = "1.18.20261109"
 
 import warnings  # noqa: E402
 

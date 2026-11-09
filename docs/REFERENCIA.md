@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.17.20261109
+# Referência técnica — OMXPatch 1.18.20261109
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
@@ -174,6 +174,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `selftest` | `omxpatch-agent selftest [-h] [--json]` |
 | `status` | `omxpatch-agent status [-h]` |
 | `uninstall-service` | `omxpatch-agent uninstall-service [-h]` |
+| `updates` | `omxpatch-agent updates [-h] [--send] [--no-refresh] [--limit LIMIT]` |
 | `validate` | `omxpatch-agent validate [-h] [--level {read,lab}] [--yes-lab] [--with-isolation] [--server SERVER] [--pin PIN] [--json JSON] [--report REPORT] [--no-redact] [--quiet]` |
 
 ## Tipos de tarefa

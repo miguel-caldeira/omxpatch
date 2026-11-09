@@ -38,7 +38,7 @@ def updates_list():
     rows = _query().order_by(AvailableUpdate.severity.desc(), AvailableUpdate.id.desc()).offset((page - 1) * 100).limit(100).all()
     rows.sort(key=lambda u: (SEV_ORDER.get(u.severity, 9), u.asset.name if u.asset else ""))
     scans = scoped(UpdateScan).order_by(UpdateScan.id.desc()).limit(8).all()
-    return render_template("updates/list.html", rows=rows, summary=updates_mod.summary(tenant), scans=scans, statuses=UPDATE_STATUSES, page=page,
+    return render_template("updates/list.html", rows=rows, summary=updates_mod.summary(tenant), diag=updates_mod.diagnose(tenant), scans=scans, statuses=UPDATE_STATUSES, page=page,
                            assets=scoped(Asset).order_by(Asset.name).limit(500).all(), sources=sorted({s for (s,) in db.session.query(AvailableUpdate.source).filter(
                                AvailableUpdate.tenant_id == tenant.id).distinct()}))
 
