@@ -2,6 +2,12 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.20.20261109 — Operação remota e registos dos agentes
+- Página de detalhe do agente: registos de operação, auditoria e depuração (filtros, CSV), estado reportado, comandos recentes.
+- Ações a partir da consola: depuração completa com validade, reiniciar, atualizar e pedir registos (tarefas assinadas; contacto de 5 em 5 min).
+- O agente desliga-se (desativa o serviço) se não contactar a consola durante 2 h; recuo progressivo; eventos guardados localmente e reenviados.
+- Todos os parâmetros editáveis em Sistema → Configuração: intervalo, tempo até desligar, depuração, envio/nível/retenção de registos.
+
 ## 1.19.20261109 — Windows Update (WUA) mais robusto
 - O PowerShell do agente passa a usar `-EncodedCommand` (sem problemas de aspas/acentos) e saída UTF-8.
 - A falha do WUA devolve o código HRESULT e uma explicação (rede/WSUS, acesso negado, serviço parado…), visível no Histórico de descobertas.

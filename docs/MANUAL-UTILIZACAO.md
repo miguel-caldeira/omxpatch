@@ -320,3 +320,7 @@ A lista completa está na *Referência técnica* (`REFERENCIA.md`). A API respei
 - **Linha de base (gold image):** requisitos mínimos que as imagens padrão devem trazer.
 - **Isolamento:** corte do tráfego de um ativo mantendo só a consola.
 - **Thumbprint / impressão digital:** identificador do certificado do servidor em que os agentes confiam.
+
+
+# Anexo — Operar e acompanhar um agente
+Em **Agentes**, o botão **Detalhe** mostra o estado de cada agente (online/offline, versão, depuração) e os seus registos de operação, auditoria e depuração, com filtros e exportação CSV. O administrador pode ainda reiniciar ou atualizar o agente, e ativar a depuração completa por um tempo limitado. Os comandos são aplicados no contacto seguinte do agente (de 5 em 5 minutos). Um agente que fique 2 horas sem conseguir falar com a consola desliga-se sozinho; veja no Manual de Administração como o reativar.

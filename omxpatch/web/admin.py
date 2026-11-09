@@ -15,9 +15,9 @@ from ..connectors import discovery, omxgrc, omxvuln, outbound, signals as signal
 from ..connectors import store as cstore
 from ..connectors.catalog import GROUPS, KINDS
 from ..connectors.store import ConnectorError
-from ..engine import ansible_runner, intel, rings
+from ..engine import agentops, ansible_runner, intel, rings
 from ..extensions import db
-from ..models import (ROLES, Agent, AuditLog, Connector, EnrollmentToken, Tenant, User, PrimaryAdminError, utcnow)
+from ..models import (ROLES, Agent, AgentLog, AuditLog, Connector, EnrollmentToken, Tenant, User, PrimaryAdminError, utcnow)
 from ..security import (audit, current_tenant, flash_errors, get_scoped_or_404, password_problems, require_tenant, roles_required, scoped,
                         superadmin_required)
 from .api import new_enrollment_token
@@ -571,3 +571,69 @@ def agent_revoke(agent_id: int):
     audit("agent_revoked", ag.hostname)
     db.session.commit()
     return redirect(url_for("admin.agents"))
+
+
+# --------------------------------------------------------------------------- operação remota e registos de cada agente
+
+
+def _agent_log_query(ag: Agent):
+    q = AgentLog.query.filter(AgentLog.agent_id == ag.id, AgentLog.tenant_id == ag.tenant_id)
+    a = request.args
+    if a.get("kind") in agentops.KINDS:
+        q = q.filter(AgentLog.kind == a["kind"])
+    if a.get("level") in agentops.LEVELS:
+        q = q.filter(AgentLog.level == a["level"])
+    if a.get("q"):
+        q = q.filter(AgentLog.message.ilike(f"%{a['q'][:80]}%"))
+    return q
+
+
+@bp.route("/agents/<int:agent_id>")
+@login_required
+@roles_required("admin", "auditor", "user")
+def agent_detail(agent_id: int):
+    ag = get_scoped_or_404(Agent, agent_id)
+    page = max(1, request.args.get("page", 1, type=int))
+    logs = _agent_log_query(ag).order_by(AgentLog.ts.desc(), AgentLog.id.desc()).offset((page - 1) * 100).limit(100).all()
+    from ..models import Task
+    cmds = Task.query.filter(Task.tenant_id == ag.tenant_id, Task.asset_id == ag.asset_id, Task.type == "agent_ctl").order_by(Task.id.desc()).limit(8).all() if ag.asset_id else []
+    return render_template("admin/agent_detail.html", ag=ag, logs=logs, page=page, cmds=cmds, actions=agentops.ACTIONS, now=utcnow(),
+                           offline=current_app.config["AGENT_OFFLINE_MINUTES"], heartbeat=current_app.config["AGENT_HEARTBEAT_SECONDS"],
+                           giveup=current_app.config["AGENT_GIVEUP_MINUTES"], debug_default=current_app.config["AGENT_DEBUG_DEFAULT_MINUTES"])
+
+
+@bp.route("/agents/<int:agent_id>/command", methods=["POST"])
+@login_required
+@roles_required("admin")
+def agent_command(agent_id: int):
+    ag = get_scoped_or_404(Agent, agent_id)
+    action = request.form.get("action", "")
+    if action not in agentops.ACTIONS:
+        abort(400)
+    if ag.revoked:
+        flash("Agente revogado.", "danger")
+        return redirect(url_for("admin.agent_detail", agent_id=ag.id))
+    agentops.command(ag, action, current_user, request.form.get("minutes", type=int))
+    audit("agent_command", f"{ag.hostname}: {action}")
+    db.session.commit()
+    hb = max(1, int(current_app.config["AGENT_HEARTBEAT_SECONDS"]) // 60)
+    flash(f"«{agentops.ACTIONS[action]}» pedido: o agente aplica-o no próximo contacto (até ~{hb} min).", "info")
+    return redirect(url_for("admin.agent_detail", agent_id=ag.id))
+
+
+@bp.route("/agents/<int:agent_id>/logs.csv")
+@login_required
+@roles_required("admin", "auditor")
+def agent_logs_csv(agent_id: int):
+    import csv
+    import io
+    from flask import Response
+    ag = get_scoped_or_404(Agent, agent_id)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ts_utc", "origem", "tipo", "nivel", "mensagem"])
+    for r in _agent_log_query(ag).order_by(AgentLog.ts.desc(), AgentLog.id.desc()).limit(20000):
+        w.writerow([r.ts.isoformat(), r.source, r.kind, r.level, ("'" + r.message) if r.message[:1] in "=+-@" else r.message])
+    audit("agent_logs_export", ag.hostname)
+    db.session.commit()
+    return Response(buf.getvalue(), mimetype="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="agente-{ag.hostname}-registos.csv"'})

@@ -58,7 +58,8 @@ CAMPAIGN_STATUSES = {"draft": "Rascunho", "scheduled": "Agendada", "running": "E
                      "completed": "Concluída", "cancelled": "Cancelada", "failed": "Falhou"}
 TASK_TYPES = {"update_scan": "Descobrir atualizações", "practice_sim": "Simulação de boa prática", "practice_apply": "Aplicar boa prática", "practice_rollback": "Reverter boa prática",
               "simulate": "Simulação prévia", "inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
-              "control": "Controlo compensatório", "rollback": "Reverter patch", "wake": "Wake-on-LAN"}
+              "control": "Controlo compensatório", "rollback": "Reverter patch", "wake": "Wake-on-LAN",
+              "agent_ctl": "Comando ao agente"}
 TASK_STATUSES = {"pending": "Pendente", "waiting_window": "À espera da janela", "waking": "Wake-on-LAN",
                  "queued": "Em fila", "sent": "Enviada ao agente", "running": "Em execução",
                  "succeeded": "Concluída", "failed": "Falhou", "rolled_back": "Revertida",
@@ -383,7 +384,29 @@ class Agent(TimestampMixin, db.Model):
     ip = db.Column(db.String(64), default="")
     last_seen = db.Column(db.DateTime, nullable=True)
     revoked = db.Column(db.Boolean, default=False, nullable=False)
+    debug_until = db.Column(db.DateTime, nullable=True)           # depuração completa pedida pela consola (com validade)
+    status_json = db.Column(db.Text, default="{}")                # estado enviado pelo agente em cada contacto
     asset = db.relationship("Asset", backref=db.backref("agent", uselist=False))
+
+    @property
+    def status(self) -> dict:
+        return jloads(self.status_json, {})
+
+
+class AgentLog(db.Model):
+    """Eventos do agente (operação, auditoria, depuração) e ações da consola sobre o agente."""
+    __tablename__ = "agent_logs"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    agent_id = db.Column(db.Integer, db.ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    ts = db.Column(db.DateTime, nullable=False, index=True)                       # no agente (ou na consola)
+    received_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    kind = db.Column(db.String(10), nullable=False, index=True)                   # operation | audit | debug
+    level = db.Column(db.String(8), default="info")
+    source = db.Column(db.String(8), default="agent")                             # agent | console
+    message = db.Column(db.String(2000), default="")
+    data = db.Column(db.Text, default="")
+    agent = db.relationship("Agent", backref=db.backref("logs", lazy="dynamic", passive_deletes=True))
 
 
 # --------------------------------------------------------------------------- Módulo 2 — inteligência

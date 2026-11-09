@@ -139,7 +139,7 @@ def restore(file: str, data_dir: str, force: bool = False) -> dict:
 
 def retention(app) -> dict:
     """Apaga auditoria e tarefas concluídas antigas, conforme a configuração (0 = nunca)."""
-    cfg, now, out = app.config, utcnow(), {"audit": 0, "tasks": 0}
+    cfg, now, out = app.config, utcnow(), {"audit": 0, "tasks": 0, "agent_logs": 0}
     days = int(cfg.get("AUDIT_RETENTION_DAYS") or 0)
     if days > 0:
         out["audit"] = AuditLog.query.filter(AuditLog.created_at < now - timedelta(days=days)).delete(synchronize_session=False)
@@ -147,5 +147,9 @@ def retention(app) -> dict:
     if days > 0:
         out["tasks"] = Task.query.filter(Task.status.in_(("succeeded", "failed", "rolled_back", "cancelled")),
                                          Task.created_at < now - timedelta(days=days)).delete(synchronize_session=False)
+    days = int(cfg.get("AGENT_LOG_RETENTION_DAYS") or 0)
+    if days > 0:
+        from ..models import AgentLog
+        out["agent_logs"] = AgentLog.query.filter(AgentLog.ts < now - timedelta(days=days)).delete(synchronize_session=False)
     db.session.commit()
     return out

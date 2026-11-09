@@ -17,7 +17,7 @@ import random
 import sys
 import time
 
-from . import __version__, collectors, compat, config, executor, service, trust, update
+from . import __version__, collectors, compat, config, executor, service, telemetry, trust, update
 from . import client as client_mod
 from .client import Client, ServerError
 from urllib.parse import urlsplit
@@ -109,15 +109,21 @@ def cycle(client: Client, state: dict) -> int:
             log.warning("Isolamento expirado: ativo libertado")
     except Exception as exc:  # noqa: BLE001
         log.warning("Verificação do isolamento: %s", exc)
-    resp = client.poll()
+    resp = client.poll(_report_state(state))
+    telemetry.contact_ok()
+    telemetry.adopt_server_config(resp.get("agent_config") or {})
+    executor.LAST_TRUST.clear()
+    executor.LAST_TRUST.update(resp.get("trust") or {})
+    log.debug("Contacto com a consola: %s tarefa(s), intervalo %ss", len(resp.get("tasks", [])), resp.get("poll_seconds"))
     _adopt_servers(client, resp.get("server_urls"))
     cfg = _adopt_trust(client, resp)
     offer = update.check(cfg, resp.get("trust") or {})
     if offer and not state.get("update_failed") == offer["version"]:
         try:
             log.info("A atualizar o agente para %s", offer["version"])
+            telemetry.audit("agent_update", f"{__version__} -> {offer['version']} (automática)")
             update.apply(client, offer)
-            update.restart_self()
+            _finish_and_restart(client)
         except Exception as exc:  # noqa: BLE001 - uma atualização falhada nunca impede o trabalho normal
             log.warning("Atualização falhou (mantém a versão atual): %s", exc)
             state["update_failed"] = offer["version"]
@@ -145,24 +151,88 @@ def cycle(client: Client, state: dict) -> int:
         except Exception as exc:  # noqa: BLE001 - o servidor repõe a tarefa na fila se não houver resposta
             log.error("Não foi possível enviar o resultado da tarefa %s: %s", task["id"], exc)
     state["poll"] = int(resp.get("poll_seconds") or 300)
+    try:
+        sent = telemetry.flush(client)
+        if sent:
+            log.debug("%s evento(s) enviados à consola", sent)
+    except Exception as exc:  # noqa: BLE001 - fica no ficheiro local e é reenviado
+        log.debug("Envio de registos adiado: %s", exc)
+    _run_pending_action(client, state)
     return len(resp.get("tasks", []))
 
 
+def _report_state(state: dict) -> dict:
+    """Estado do agente enviado em cada contacto (visível na consola)."""
+    return {"uptime_s": int(time.time() - state.setdefault("started", time.time())), "debug": telemetry.debug_active(), "python": sys.version.split()[0],
+            "platform": sys.platform, "update_failed": state.get("update_failed", ""), "events_pending": telemetry.pending_count()}
+
+
+def _finish_and_restart(client: Client) -> None:
+    try:
+        telemetry.flush(client)
+    except Exception:  # noqa: BLE001
+        pass
+    update.restart_self()
+
+
+def _run_pending_action(client: Client, state: dict) -> None:
+    """Reiniciar/atualizar a pedido da consola — depois de o resultado da tarefa ter sido enviado."""
+    act = dict(executor.PENDING_ACTION)
+    executor.PENDING_ACTION.clear()
+    if act.get("update"):
+        try:
+            update.apply(client, act["update"])
+            telemetry.audit("agent_update", f"{__version__} -> {act['update']['version']} (pedida pela consola)")
+            _finish_and_restart(client)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Atualização pedida pela consola falhou (mantém a versão atual): %s", exc)
+            telemetry.event("operation", "error", f"Atualização pedida pela consola falhou: {exc}")
+            return
+    if act.get("restart"):
+        telemetry.audit("agent_restart", "reinício pedido pela consola")
+        _finish_and_restart(client)
+
+
 def cmd_run(args) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    client, state = _client(), {}
+    telemetry.setup()
+    client, state = _client(), {"started": time.time()}
+    if telemetry.runtime().get("disconnected"):                      # arranque manual depois de o agente se ter desligado: novo período de tentativas
+        telemetry.update_runtime(first_fail=None, disconnected=None)
+    telemetry.audit("agent_start", f"agente {__version__} iniciado")
     while True:
         try:
             n = cycle(client, state)
             wait = 5 if n else state.get("poll", 300)
         except ServerError as exc:
-            log.warning("Sem contacto com o servidor: %s", exc)
-            wait = 60
+            mins = telemetry.contact_failed()
+            log.warning("Sem contacto com o servidor há %.0f min: %s", mins, exc)
+            if telemetry.should_give_up(mins):
+                return _give_up(mins)
+            wait = 60 if mins < 10 else (120 if mins < 30 else 300)       # recuo progressivo: poupa recursos enquanto a consola não responde
         time.sleep(wait + random.randint(0, max(1, wait // 10)))
 
 
+def _give_up(mins: float) -> int:
+    """Sem contacto durante o período máximo definido na consola (por defeito 2 h): o agente desliga-se para poupar recursos."""
+    telemetry.audit("agent_giveup", f"sem contacto com a consola há {mins:.0f} min: o agente desliga-se")
+    telemetry.update_runtime(disconnected=time.time())
+    log.error("Sem contacto há %.0f min: a desligar o agente. Para reativar: iniciar o serviço (ver o manual).", mins)
+    if service.stop_self():
+        time.sleep(5)
+        return 0
+    log.warning("Não foi possível desativar o serviço: o agente fica em repouso (uma tentativa de contacto a cada 6 h).")
+    while True:
+        time.sleep(6 * 3600)
+        try:
+            cycle(_client(), {"started": time.time()})
+            telemetry.contact_ok()
+            return cmd_run(None)
+        except ServerError:
+            continue
+
+
 def cmd_once(args) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    telemetry.setup()
     print(f"{cycle(_client(), {})} tarefa(s) executada(s)")
     return 0
 

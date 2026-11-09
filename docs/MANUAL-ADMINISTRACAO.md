@@ -287,6 +287,19 @@ O isolamento (controlo `isolate_host`) exige **aprovação** e um agente instala
 
 # 15. Operação e resolução de problemas
 
+## Operação remota e registos dos agentes
+Em **Agentes → Detalhe** (um agente) o administrador pode, a partir da consola:
+- **Ativar/desativar a depuração completa** (validade em minutos; desliga-se sozinha). Em depuração o agente regista também os pedidos à consola, os comandos executados e os tempos de cada contacto, e envia-os como registos de «depuração».
+- **Reiniciar** o agente e **atualizá-lo** para a versão publicada pela consola (pacote assinado, autoteste e reversão automática).
+- **Pedir o envio imediato dos registos**; consultar, filtrar (tipo, nível, texto) e **exportar (CSV)** os registos de *operação*, *auditoria* e *depuração*. As ações feitas na consola ficam registadas com o utilizador que as pediu. Segredos (chaves, tokens, palavras-passe) são removidos antes de saírem do equipamento.
+
+Os comandos são tarefas assinadas que o agente recolhe no **contacto seguinte**: o agente contacta a consola de **5 em 5 minutos** (`AGENT_HEARTBEAT_SECONDS`). A depuração é declarativa: mantém-se mesmo se o agente reiniciar, até expirar.
+
+**Sem consola, o agente desliga-se.** Se não conseguir falar com a consola durante **2 horas** (`AGENT_GIVEUP_MINUTES`; 0 = nunca) o agente regista o facto, desativa o serviço e termina, poupando recursos (entretanto tenta com intervalos crescentes de 1, 2 e 5 min). Os eventos ficam guardados localmente (limite de 2 MB) e seguem quando houver contacto. Para o reativar depois de resolver a ligação: `sudo systemctl enable --now omxpatch-agent` (Linux), `sudo launchctl load -w /Library/LaunchDaemons/pt.oramix.omxpatch.agent.plist` (macOS) ou, em PowerShell administrador, `schtasks /Change /TN OMXPatchAgent /ENABLE` e `schtasks /Run /TN OMXPatchAgent` (Windows). O agente mostra-se como *offline* na consola até voltar.
+
+**Todos os parâmetros são configuráveis em Sistema → Configuração (grupo Agentes):** intervalo de contacto, tempo até desligar, validade por defeito da depuração, envio de registos (ligar/desligar), nível mínimo dos registos de operação, eventos por envio e retenção dos registos (dias). Aplicam-se de imediato; os agentes adotam-nos no contacto seguinte.
+
+
 **A lista de «Atualizações disponíveis» está vazia.** Abra **Atualizações → Diagnóstico por agente**: cada agente mostra o veredicto (agente anterior à 1.10 sem descoberta, sem contacto, sem descoberta recebida, origem com erro, ou sem atualizações pendentes). No próprio equipamento corra `omxpatch-agent updates` (mostra o resultado por origem: apt, dnf, WUA, softwareupdate…) e `omxpatch-agent updates --send` para o enviar à consola. A descoberta de `apt`/`dnf` precisa de o agente correr como root/SYSTEM.
 
 

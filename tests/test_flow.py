@@ -33,7 +33,7 @@ class FakeAgent:
         assert r.status_code == 200, r.data
         return r.get_json()
 
-    def poll(self):
+    def poll(self, state=None):
         r = self.c.post("/agent/v1/poll", headers=self.h, json={"version": "1.0.0"})
         assert r.status_code == 200, r.data
         return r.get_json()["tasks"]

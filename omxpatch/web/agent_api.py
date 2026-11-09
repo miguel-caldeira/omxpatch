@@ -6,11 +6,12 @@ Autenticação por chave do agente (Bearer), guardada com hash; sem cookies nem 
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 
 from flask import Blueprint, abort, current_app, g, jsonify, request, send_file
 
-from ..engine import correlate, deploy, inventory, patches
+from ..engine import agentops, correlate, deploy, inventory, patches
 from .. import ratelimit
 from ..extensions import db
 from ..models import Agent, EnrollmentToken, Task, Tenant, utcnow
@@ -101,6 +102,9 @@ def _touch(agent: Agent, body: dict | None = None) -> None:
     agent.ip = (request.remote_addr or "")[:64]
     if body:
         agent.version = str(body.get("version", agent.version))[:32]
+        if isinstance(body.get("state"), dict):
+            st = {k: (v if isinstance(v, (int, float, bool)) else str(v)[:80]) for k, v in list(body["state"].items())[:12]}
+            agent.status_json = json.dumps(st)
     if agent.asset is not None:
         agent.asset.last_seen = utcnow()
 
@@ -161,9 +165,23 @@ def poll():
     from .. import signing
     tasks = [signing.sign_task(current_app.config, agent.id, t) for t in deploy.poll(agent, limit=3)]
     db.session.commit()
-    return jsonify({"tasks": tasks, "trust": trust_block(agent), "updates": {"scan_hours": int(current_app.config["UPDATES_SCAN_HOURS"])}, "poll_seconds": int(current_app.config["AGENT_HEARTBEAT_SECONDS"]),
+    return jsonify({"tasks": tasks, "trust": trust_block(agent), "updates": {"scan_hours": int(current_app.config["UPDATES_SCAN_HOURS"])},
+                    "agent_config": agentops.agent_config(agent), "poll_seconds": int(current_app.config["AGENT_HEARTBEAT_SECONDS"]),
                     "inventory_requested": bool(need_inventory), "server_time": utcnow().isoformat(),
                     "server_urls": agent_urls(current_app.config)})
+
+
+@bp.post("/logs")
+def post_logs():
+    agent: Agent = g.agent
+    body = request.get_json(silent=True) or {}
+    events = body.get("events")
+    if not isinstance(events, list):
+        abort(400, description="events em falta")
+    _touch(agent)
+    n = agentops.ingest(agent, events)
+    db.session.commit()
+    return jsonify({"ok": True, "stored": n})
 
 
 @bp.post("/inventory")

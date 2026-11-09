@@ -78,7 +78,7 @@ def test_agent_rejects_unsigned_task_and_reports_failure(app, tenant, enroll_tok
     class C:
         s = object()
 
-        def poll(self):
+        def poll(self, state=None):
             return {"tasks": [{"id": 5, "type": "inventory", "payload": {}}], "poll_seconds": 60}
 
         def task_result(self, i, rep):
@@ -360,9 +360,9 @@ def test_retention_deletes_only_old_records(app, tenant):
     db.session.add(Task(tenant_id=tenant.id, type="inventory", asset_id=a.id, status="queued", payload="{}", created_at=old))   # em fila: nunca apagada
     db.session.commit()
     n_audit, n_tasks = AuditLog.query.count(), Task.query.count()
-    assert backup.retention(app) == {"audit": 0, "tasks": 0}                         # 0 = guardar sempre
+    assert backup.retention(app) == {"audit": 0, "tasks": 0, "agent_logs": 0}                         # 0 = guardar sempre
     app.config.update(AUDIT_RETENTION_DAYS=365, TASK_RETENTION_DAYS=365)
-    assert backup.retention(app) == {"audit": 1, "tasks": 1}
+    assert backup.retention(app) == {"audit": 1, "tasks": 1, "agent_logs": 0}
     assert AuditLog.query.count() == n_audit - 1 and Task.query.count() == n_tasks - 1
     assert Task.query.filter_by(status="queued").count() == 1
 

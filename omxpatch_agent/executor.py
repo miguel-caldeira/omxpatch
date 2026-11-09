@@ -166,6 +166,39 @@ def _practice_rollback(client: Client, task: dict) -> dict:
     return practices.rollback(f"item-{p['item_id']}", {**(p.get("params") or {}), "practice": p.get("practice", "")})
 
 
+PENDING_ACTION: dict = {}              # ação a executar depois de o resultado da tarefa ser enviado (reiniciar / atualizar)
+LAST_TRUST: dict = {}                  # confiança publicada no último contacto (oferta de atualização assinada)
+
+
+def _agent_ctl(client: Client, task: dict) -> dict:
+    """Comandos da consola ao próprio agente: reiniciar, atualizar, depuração, enviar registos."""
+    from . import telemetry, update, config as agent_config
+    p = task["payload"]
+    action = str(p.get("action", ""))
+    telemetry.audit("console_command", action, task_id=task["id"], requested_by=str(p.get("requested_by", ""))[:120])
+    if action == "restart":
+        PENDING_ACTION["restart"] = True
+        return {"status": "succeeded", "output": "Reinício pedido: o agente reinicia-se depois de enviar este resultado."}
+    if action == "update":
+        offer = update.check(agent_config.load(), LAST_TRUST, manual=True)
+        if offer:
+            PENDING_ACTION["update"] = offer
+            return {"status": "succeeded", "output": f"A atualizar o agente para {offer['version']} (autoteste e reversão automática)."}
+        ok, why = update.can_update()
+        from . import __version__
+        if not ok:
+            return {"status": "failed", "output": f"Atualização não aplicável: {why}"}
+        return {"status": "succeeded", "output": f"O agente já está na versão mais recente publicada pela consola ({__version__})."}
+    if action in ("debug_on", "debug_off"):
+        secs = int(p.get("minutes") or 60) * 60 if action == "debug_on" else 0
+        telemetry.set_debug(secs)
+        return {"status": "succeeded", "output": "Depuração " + (f"ativada por {secs // 60} min" if secs else "desativada")}
+    if action == "logs":
+        n = telemetry.flush(client)
+        return {"status": "succeeded", "output": f"{n} evento(s) enviado(s) à consola"}
+    return {"status": "failed", "output": f"Ação desconhecida: {action}"}
+
+
 def _update_scan(client: Client, task: dict) -> dict:
     """Descobre as atualizações instaláveis e envia-as à consola (a pedido do servidor)."""
     from .updates import sync
@@ -176,7 +209,7 @@ def _update_scan(client: Client, task: dict) -> dict:
             "sources": {k: {kk: vv for kk, vv in v.items() if kk in ("ok", "count")} for k, v in res.get("sources", {}).items()}}
 
 
-HANDLERS = {"update_scan": _update_scan, "practice_sim": _practice_sim, "practice_apply": _practice_apply, "practice_rollback": _practice_rollback, "simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
+HANDLERS = {"agent_ctl": _agent_ctl, "update_scan": _update_scan, "practice_sim": _practice_sim, "practice_apply": _practice_apply, "practice_rollback": _practice_rollback, "simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
             "rollback": lambda c, t: {"status": "failed", "output": "Reversão automática não suportada neste agente"}}
 
 

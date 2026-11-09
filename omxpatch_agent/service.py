@@ -77,3 +77,16 @@ def uninstall() -> str:
         return "LaunchDaemon removido"
     run(["schtasks", "/Delete", "/F", "/TN", "OMXPatchAgent"], 60)
     return "Tarefa agendada removida"
+
+
+def stop_self() -> bool:
+    """Desliga e desativa o serviço do agente (poupança de recursos quando a consola está inacessível). Devolve True se conseguiu.
+    Reativação: ``systemctl enable --now omxpatch-agent`` | ``launchctl load -w …`` | ``schtasks /Change /TN OMXPatchAgent /ENABLE`` + ``/Run``."""
+    fam = platform_family()
+    if fam == "linux":
+        r = run(["systemctl", "disable", "omxpatch-agent"], 60)
+        run(["systemctl", "stop", "--no-block", "omxpatch-agent"], 60)
+        return r.ok
+    if fam == "macos":
+        return run(["launchctl", "unload", "-w", "/Library/LaunchDaemons/pt.oramix.omxpatch.agent.plist"], 60).ok
+    return run(["schtasks", "/Change", "/TN", "OMXPatchAgent", "/DISABLE"], 60).ok

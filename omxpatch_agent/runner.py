@@ -1,8 +1,12 @@
 """Execução de comandos sem shell, com tempo limite e saída limitada."""
 from __future__ import annotations
 
+import logging
 import subprocess  # nosec B404
+import time
 from dataclasses import dataclass
+
+log = logging.getLogger("omxpatch.agent.runner")
 
 
 @dataclass
@@ -16,10 +20,13 @@ class Result:
 
 
 def run(cmd: list[str], timeout: int = 3600, input_text: str | None = None, env: dict | None = None) -> Result:
+    t0 = time.time()
+    log.debug("exec: %s", " ".join(str(c) for c in cmd)[:300] if len(cmd) < 8 or cmd[0] != "powershell.exe" else "powershell.exe …")
     try:
         import os
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=input_text,  # nosec B603
                            encoding="utf-8", errors="replace", env={**os.environ, **env} if env else None)
+        log.debug("exec rc=%s em %.1fs", p.returncode, time.time() - t0)
         return Result(p.returncode, ((p.stdout or "") + (p.stderr or ""))[-30000:])
     except FileNotFoundError:
         return Result(127, f"Comando não encontrado: {cmd[0]}")

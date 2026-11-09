@@ -19,6 +19,13 @@ CATALOG: dict[str, tuple] = {
     "THREADS": ("Threads do servidor web", "Desempenho", "int", 2, 256, False, "Pedidos simultâneos por processo. Regra: 2–4× o n.º de CPU."),
     "AGENT_HEARTBEAT_SECONDS": ("Intervalo de contacto dos agentes (s)", "Agentes", "int", 30, 3600, True,
                                 "Maior intervalo = menos carga. Os agentes adotam o novo valor no contacto seguinte."),
+    "AGENT_GIVEUP_MINUTES": ("Agente desliga-se sem contacto durante (min)", "Agentes", "int", 0, 10080, True,
+                             "Se o agente não conseguir falar com a consola durante este tempo, desliga o serviço para poupar recursos (120 = 2 h; 0 = nunca)."),
+    "AGENT_DEBUG_DEFAULT_MINUTES": ("Validade por defeito da depuração (min)", "Agentes", "int", 1, 1440, True, "A depuração completa desliga-se sozinha no fim."),
+    "AGENT_LOG_UPLOAD": ("Agentes enviam registos à consola", "Agentes", "bool", None, None, True, "Operação e auditoria do agente ficam disponíveis na consola."),
+    "AGENT_LOG_LEVEL": ("Nível mínimo dos registos de operação", "Agentes", "choice", None, ("info", "warning", "error"), True, "A auditoria é sempre enviada."),
+    "AGENT_LOG_MAX_BATCH": ("Eventos por envio de registos", "Agentes", "int", 10, 1000, True, ""),
+    "AGENT_LOG_RETENTION_DAYS": ("Retenção dos registos de agentes (dias)", "Dados", "int", 0, 3650, False, "0 = guardar sempre."),
     "AGENT_OFFLINE_MINUTES": ("Agente offline após (min)", "Agentes", "int", 2, 1440, True, "Sem contacto durante este tempo = offline."),
     "AGENT_TASK_TIMEOUT_MINUTES": ("Limite de uma tarefa de agente (min)", "Agentes", "int", 5, 1440, True, ""),
     "AGENT_ADDRESS_MODE": ("Endereçamento dos agentes", "Agentes", "choice", None, ("name", "ip"), False,
@@ -109,6 +116,9 @@ def cross_checks(app, clean: dict) -> list[str]:
             errs.append("Endereçamento por IP exige TLS (o thumbprint é a única forma de confiar no servidor).")
     if int(merged["AGENT_OFFLINE_MINUTES"]) * 60 <= int(merged["AGENT_HEARTBEAT_SECONDS"]) * 2:
         errs.append("«Agente offline após» tem de ser bem maior que o intervalo de contacto (pelo menos 2×).")
+    gu = int(merged["AGENT_GIVEUP_MINUTES"])
+    if gu and gu * 60 < int(merged["AGENT_HEARTBEAT_SECONDS"]) * 3:
+        errs.append("«Agente desliga-se sem contacto» tem de ser pelo menos 3× o intervalo de contacto (ou 0 para nunca).")
     return errs
 
 

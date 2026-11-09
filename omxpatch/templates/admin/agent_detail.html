@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, st with context %}{% block title %}Agente {{ ag.hostname }}{% endblock %}
+{% block content %}{% set online = ag.last_seen and (now - ag.last_seen).total_seconds() < offline * 60 %}{% set dbg = ag.debug_until and ag.debug_until > now %}{% set s = ag.status %}
+<div class="actions"><h1>Agente — {{ ag.hostname }}</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('admin.agents') }}">Todos os agentes</a>
+{% if current_user.can_manage %}<a class="btn sec" href="{{ url_for('admin.agent_logs_csv', agent_id=ag.id, kind=request.args.get('kind'), level=request.args.get('level'), q=request.args.get('q')) }}">Exportar registos (CSV)</a>{% endif %}</div>
+<div class="grid grid4">
+<div class="kpi"><div class="l">Estado</div><div class="v">{% if ag.revoked %}revogado{% elif online %}online{% else %}offline{% endif %}</div><div class="small muted">último contacto {{ ag.last_seen|dt if ag.last_seen else '—' }}</div></div>
+<div class="kpi"><div class="l">Versão</div><div class="v">{{ ag.version or '?' }}</div><div class="small muted">{{ ag.ip }} · {{ ag.os_family }}</div></div>
+<div class="kpi"><div class="l">Depuração</div><div class="v">{{ 'ativa' if dbg else 'desligada' }}</div><div class="small muted">{% if dbg %}até {{ ag.debug_until|dt }}{% else %}predefinição {{ debug_default }} min{% endif %}</div></div>
+<div class="kpi"><div class="l">Contacto</div><div class="v">{{ heartbeat // 60 }} min</div><div class="small muted">desliga-se sem consola após {{ (giveup // 60) ~ ' h ' ~ (giveup % 60) ~ ' min' if giveup else 'nunca' }}</div></div></div>
+{% if s %}<p class="muted small">Estado reportado pelo agente: ativo há {{ (s.get('uptime_s', 0) // 3600) }} h · Python {{ s.get('python', '?') }} · {{ s.get('platform', '') }} · registos por enviar: {{ s.get('events_pending', 0) }}{% if s.get('update_failed') %} · atualização falhada: {{ s.update_failed }}{% endif %}</p>{% endif %}
+{% if current_user.can_manage and not ag.revoked %}<div class="panel"><h2>Ações no agente</h2>
+<p class="muted small">Os comandos chegam ao agente no próximo contacto (de {{ heartbeat // 60 }} em {{ heartbeat // 60 }} min, configurável em Sistema → Configuração). Ficam registados na auditoria.</p>
+<div class="actions">
+<form method="post" action="{{ url_for('admin.agent_command', agent_id=ag.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="action" value="debug_on"><label class="small" for="minutes">Depuração (min)</label> <input type="number" id="minutes" name="minutes" value="{{ debug_default }}" min="1" max="1440" style="width:6em"> <button class="btn sec">Ativar depuração completa</button></form>
+<form method="post" action="{{ url_for('admin.agent_command', agent_id=ag.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="action" value="debug_off"><button class="btn sec">Desativar depuração</button></form>
+<form method="post" action="{{ url_for('admin.agent_command', agent_id=ag.id) }}" class="inline" data-confirm="Reiniciar o agente?">{{ csrf() }}<input type="hidden" name="action" value="restart"><button class="btn sec">Reiniciar agente</button></form>
+<form method="post" action="{{ url_for('admin.agent_command', agent_id=ag.id) }}" class="inline" data-confirm="Atualizar o agente para a versão publicada pela consola?">{{ csrf() }}<input type="hidden" name="action" value="update"><button class="btn sec">Atualizar agente</button></form>
+<form method="post" action="{{ url_for('admin.agent_command', agent_id=ag.id) }}" class="inline">{{ csrf() }}<input type="hidden" name="action" value="logs"><button class="btn sec">Pedir registos agora</button></form></div></div>{% endif %}
+{% if cmds %}<div class="panel"><h2>Comandos recentes</h2><table><tr><th>Quando</th><th>Comando</th><th>Estado</th><th>Resultado</th></tr>
+{% for t in cmds %}<tr><td class="small">{{ t.created_at|dt }}</td><td>{{ actions.get(t.payload_data.get('action'), t.payload_data.get('action')) }}</td><td>{{ t.status }}</td><td class="small">{{ t.output[:200] }}</td></tr>{% endfor %}</table></div>{% endif %}
+<form method="get" class="panel filters"><div class="row">
+<div><label for="kind">Tipo</label><select id="kind" name="kind"><option value="">todos</option>{% for k, l in (('operation', 'Operação'), ('audit', 'Auditoria'), ('debug', 'Depuração')) %}<option value="{{ k }}" {{ 'selected' if request.args.get('kind') == k }}>{{ l }}</option>{% endfor %}</select></div>
+<div><label for="level">Nível</label><select id="level" name="level"><option value="">todos</option>{% for l in ('debug', 'info', 'warning', 'error') %}<option {{ 'selected' if request.args.get('level') == l }}>{{ l }}</option>{% endfor %}</select></div>
+<div><label for="q">Pesquisar</label><input id="q" name="q" value="{{ request.args.get('q', '') }}"></div>
+<div><label>&nbsp;</label><button class="btn sm">Filtrar</button></div></div></form>
+<div class="panel"><h2>Registos do agente</h2><table><tr><th>Quando (UTC)</th><th>Origem</th><th>Tipo</th><th>Nível</th><th>Mensagem</th></tr>
+{% for r in logs %}<tr><td class="small nowrap">{{ r.ts.strftime('%Y-%m-%d %H:%M:%S') }}</td><td class="small">{{ 'consola' if r.source == 'console' else 'agente' }}</td><td class="small">{{ {'operation': 'operação', 'audit': 'auditoria', 'debug': 'depuração'}[r.kind] }}</td>
+<td><span class="badge {{ 'risk-high' if r.level == 'error' else ('risk-medium' if r.level == 'warning' else 'risk-low') }}">{{ r.level }}</span></td><td class="small">{{ r.message }}</td></tr>
+{% else %}<tr><td colspan="5" class="muted">Sem registos. O agente envia-os no contacto seguinte (nível mínimo e envio configuráveis em Sistema → Configuração).</td></tr>{% endfor %}</table>
+<p class="actions">{% if page > 1 %}<a class="btn sm sec" href="{{ url_for('admin.agent_detail', agent_id=ag.id, page=page - 1, kind=request.args.get('kind'), level=request.args.get('level'), q=request.args.get('q')) }}">Mais recentes</a>{% endif %}
+{% if logs|length == 100 %}<a class="btn sm sec" href="{{ url_for('admin.agent_detail', agent_id=ag.id, page=page + 1, kind=request.args.get('kind'), level=request.args.get('level'), q=request.args.get('q')) }}">Mais antigos</a>{% endif %}</p></div>{% endblock %}

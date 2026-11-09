@@ -9,11 +9,15 @@ from __future__ import annotations
 import hashlib
 import http.client
 import json as jsonlib
+import logging
 import ssl
 import time
 from urllib.parse import urlsplit
 
 from . import __version__
+
+
+log = logging.getLogger("omxpatch.agent.client")
 
 
 class ServerError(RuntimeError):
@@ -154,7 +158,9 @@ class Client:
         for i in range(retries):
             for base in [self.base] + [b for b in self.bases if b != self.base]:     # endereço atual primeiro, depois os alternativos
                 try:
+                    t0 = time.time()
                     r = self.s.request(method, base + path, timeout=timeout, headers=self.headers, **kw)
+                    log.debug("%s %s -> HTTP %s (%.2fs)", method, base + path, r.status_code, time.time() - t0)
                     if r.status_code >= 500:
                         raise ServerError(f"HTTP {r.status_code}")
                     self.base = base
@@ -176,8 +182,8 @@ class Client:
             raise ServerError(msg)
         return r.json()
 
-    def poll(self) -> dict:
-        r = self._req("POST", "/agent/v1/poll", json={"version": __version__})
+    def poll(self, state: dict | None = None) -> dict:
+        r = self._req("POST", "/agent/v1/poll", json={"version": __version__, "state": state or {}})
         if r.status_code == 401:
             raise ServerError("Chave de agente inválida ou revogada")
         r.raise_for_status()
@@ -189,6 +195,12 @@ class Client:
         if r.status_code != 200:
             raise ServerError(f"HTTP {r.status_code}")
         return r.body, r.headers.get("x-content-sha256", "")
+
+    def logs(self, events: list) -> dict:
+        """Envia eventos (operação/auditoria/depuração); a consola confirma a receção."""
+        r = self._req("POST", "/agent/v1/logs", json={"events": events}, timeout=120, retries=1)
+        r.raise_for_status()
+        return r.json()
 
     def updates(self, report: dict) -> dict:
         """Envia a descoberta de atualizações; devolve a confirmação da consola (``ok``, ``received``)."""

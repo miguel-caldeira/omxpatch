@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.19.20261109
+# Referência técnica — OMXPatch 1.20.20261109
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
@@ -78,6 +78,12 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `LICENSE_GRACE_DAYS` | `[licensing] grace_days` | `15` |
 | `LICENSE_WARN_DAYS` | `[licensing] warn_days` | `30` |
 | `AGENT_HEARTBEAT_SECONDS` | `[agents] heartbeat_seconds` | `300` |
+| `AGENT_GIVEUP_MINUTES` | `[agents] giveup_minutes` | `120` |
+| `AGENT_DEBUG_DEFAULT_MINUTES` | `[agents] debug_default_minutes` | `60` |
+| `AGENT_LOG_UPLOAD` | `[agents] log_upload` | sim |
+| `AGENT_LOG_LEVEL` | `[agents] log_level` | `info` |
+| `AGENT_LOG_MAX_BATCH` | `[agents] log_max_batch` | `200` |
+| `AGENT_LOG_RETENTION_DAYS` | `[agents] log_retention_days` | `30` |
 | `AGENT_OFFLINE_MINUTES` | `[agents] offline_minutes` | `20` |
 | `AGENT_TASK_TIMEOUT_MINUTES` | `[agents] task_timeout_minutes` | `120` |
 | `AGENT_PACKAGE_DIR` | `[agents] package_dir` | (vazio) |
@@ -193,6 +199,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `control` | Controlo compensatório |
 | `rollback` | Reverter patch |
 | `wake` | Wake-on-LAN |
+| `agent_ctl` | Comando ao agente |
 
 ## Boas práticas
 
@@ -271,6 +278,9 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | admin | `/agents/tokens` | POST | admin |
 | admin | `/agents/tokens/<int:token_id>/revoke` | POST | admin |
 | admin | `/agents/<int:agent_id>/revoke` | POST | admin |
+| admin | `/agents/<int:agent_id>` | GET | admin/auditor/user |
+| admin | `/agents/<int:agent_id>/command` | POST | admin |
+| admin | `/agents/<int:agent_id>/logs.csv` | GET | admin/auditor |
 | auth | `/login` | GET,POST | qualquer utilizador autenticado |
 | auth | `/mfa` | GET,POST | qualquer utilizador autenticado |
 | auth | `/mfa/setup` | GET,POST | qualquer utilizador autenticado |

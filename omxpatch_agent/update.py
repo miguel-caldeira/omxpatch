@@ -47,10 +47,10 @@ def _safe_extract(data: bytes, dest: Path) -> None:
         z.extractall(dest)
 
 
-def check(cfg: dict, trust_info: dict) -> dict | None:
+def check(cfg: dict, trust_info: dict, manual: bool = False) -> dict | None:
     """Devolve a oferta de atualização se houver uma mais recente e **assinada**; senão None."""
     v, sha, sig = trust_info.get("agent_version"), trust_info.get("bundle_sha256"), trust_info.get("bundle_sig")
-    if not (v and sha and sig) or not cfg.get("auto_update", True):
+    if not (v and sha and sig) or (not manual and not cfg.get("auto_update", True)):
         return None
     if compare(str(v), __version__) <= 0:
         return None

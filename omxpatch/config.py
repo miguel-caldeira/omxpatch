@@ -62,6 +62,12 @@ DEFAULTS: dict[str, object] = {
     "LICENSE_GRACE_DAYS": 15, "LICENSE_WARN_DAYS": 30,
     # Agentes (clientes Windows / Linux / macOS)
     "AGENT_HEARTBEAT_SECONDS": 300,   # intervalo de contacto pedido aos agentes
+    "AGENT_GIVEUP_MINUTES": 120,      # sem contacto com a consola durante este tempo o agente desliga-se (0 = nunca)
+    "AGENT_DEBUG_DEFAULT_MINUTES": 60,    # validade por defeito da depuração completa pedida na consola
+    "AGENT_LOG_UPLOAD": True,         # os agentes enviam eventos de operação/auditoria à consola
+    "AGENT_LOG_LEVEL": "info",        # nível mínimo dos eventos de operação enviados (info|warning|error)
+    "AGENT_LOG_MAX_BATCH": 200,       # eventos por envio
+    "AGENT_LOG_RETENTION_DAYS": 30,   # retenção dos registos de agentes na consola (0 = guardar sempre)
     "AGENT_OFFLINE_MINUTES": 20,      # sem contacto durante este tempo = offline
     "AGENT_TASK_TIMEOUT_MINUTES": 120,
     "AGENT_PACKAGE_DIR": "",          # vazio: <dados>/packages (repositório local de patches)
