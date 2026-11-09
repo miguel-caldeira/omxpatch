@@ -40,7 +40,7 @@
     <a href="{{ url_for('admin.tenant_settings') }}" class="{{ 'active' if ep in ('admin.tenant_settings','admin.audit_log') }}">Organização</a>
     {% endif %}
     {% if current_user.is_superadmin %}
-    <a href="{{ url_for('admin.tenants') }}" class="{{ 'active' if ep in ('admin.tenants','admin.tenant_new') }}">Organizações</a>
+    <a href="{{ url_for('admin.tenants') }}" class="{{ 'active' if ep in ('admin.tenants','admin.tenant_new') }}">Tenants</a>
     <a href="{{ url_for('admin.system') }}" class="{{ 'active' if ep == 'admin.system' }}">Sistema</a>
     {% endif %}
   </nav>

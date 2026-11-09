@@ -19,16 +19,16 @@ agente, mitigação, descoberta).
 | **Cliente / agente** (`omxpatch_agent/`) | Windows, Linux e macOS. Só liga *para fora* (HTTPS), regista-se com um token, envia inventário e executa o que *puxa*: patches, validações, simulações seguras, firewall local, Wake-on-LAN. |
 | **Ansible** (`ansible/`) | Instala o servidor e os agentes; no **modo sem agente** o próprio centro de comando corre inventário, patches, validação e mitigação por SSH/WinRM. |
 
-> ## Versão atual: **1.13.20261108**
-> **Instaladores** (em [`releases/1.13.20261108/`](releases/1.13.20261108/), com `SHA256SUMS`):
-> [Ubuntu/Debian](releases/1.13.20261108/omxpatch-ubuntu-1.13.20261108.tar.gz) ·
-> [Windows](releases/1.13.20261108/omxpatch-windows-1.13.20261108.zip) ·
-> [Windows Server 2012 R2](releases/1.13.20261108/omxpatch-windows2012r2-1.13.20261108.zip) ·
-> [Agente](releases/1.13.20261108/omxpatch-agent-1.13.20261108.zip) ·
-> [Kit de validação Windows/macOS](releases/1.13.20261108/omxpatch-validation-kit-1.13.20261108.zip)
+> ## Versão atual: **1.14.20261109**
+> **Instaladores** (em [`releases/1.14.20261109/`](releases/1.14.20261109/), com `SHA256SUMS`):
+> [Ubuntu/Debian](releases/1.14.20261109/omxpatch-ubuntu-1.14.20261109.tar.gz) ·
+> [Windows](releases/1.14.20261109/omxpatch-windows-1.14.20261109.zip) ·
+> [Windows Server 2012 R2](releases/1.14.20261109/omxpatch-windows2012r2-1.14.20261109.zip) ·
+> [Agente](releases/1.14.20261109/omxpatch-agent-1.14.20261109.zip) ·
+> [Kit de validação Windows/macOS](releases/1.14.20261109/omxpatch-validation-kit-1.14.20261109.zip)
 >
-> **Manuais:** [Utilização](docs/MANUAL-UTILIZACAO.md) ([PDF](releases/1.13.20261108/docs/MANUAL-UTILIZACAO-1.13.20261108.pdf)) ·
-> [Administração](docs/MANUAL-ADMINISTRACAO.md) ([PDF](releases/1.13.20261108/docs/MANUAL-ADMINISTRACAO-1.13.20261108.pdf)) ·
+> **Manuais:** [Utilização](docs/MANUAL-UTILIZACAO.md) ([PDF](releases/1.14.20261109/docs/MANUAL-UTILIZACAO-1.14.20261109.pdf)) ·
+> [Administração](docs/MANUAL-ADMINISTRACAO.md) ([PDF](releases/1.14.20261109/docs/MANUAL-ADMINISTRACAO-1.14.20261109.pdf)) ·
 > [Referência técnica](docs/REFERENCIA.md) · [Histórico de versões](CHANGELOG.md)
 
 ---
@@ -158,7 +158,7 @@ pelo que o ambiente gráfico nunca fica exposto aos postos clientes. Os nomes t�
 scripts o acrescentarem ao ficheiro *hosts* dos postos). Abra no firewall as duas portas. Certificados próprios: `[server] tls_cert/tls_key`
 e `[agents] tls_cert/tls_key`.
 
-### Organizações (tenants) e agentes
+### Tenants (organizações) e agentes
 
 Cada agente reporta a **uma única organização**: a do token de registo com que foi instalado. Um equipamento (identificado por
 `machine-id` / `IOPlatformUUID` / `MachineGuid`) já registado numa organização é recusado (HTTP 409) por qualquer outra até o agente ser

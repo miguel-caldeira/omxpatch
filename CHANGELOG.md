@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.14.20261109 — Menu Tenants
+- O menu e as páginas «Organizações» passam a **Tenants**, alinhado com o OMXVuln.
+
 ## 1.13.20261108 — Manuais de Administração e de Utilização
 - **Manual de Utilização** e **Manual de Administração** (Markdown, Word e PDF, com capturas de ecrã) e **Referência técnica** gerada a partir do código (`docs/`).
 - CI: o relatório de validação em Windows/macOS reais passa a aparecer no registo; teste do agente deixa de depender do sistema operativo.
