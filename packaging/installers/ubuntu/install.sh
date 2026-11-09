@@ -75,9 +75,9 @@ step "Aplicação (ambiente virtual)"
 python3 -m venv "$APP/venv"
 PIP="$APP/venv/bin/pip"
 "$PIP" install -q --upgrade pip >/dev/null 2>&1 || true
-if ! "$PIP" install -q --no-index --find-links "$HERE/wheels" omxpatch; then
+if ! "$PIP" install -q --upgrade --no-index --find-links "$HERE/wheels" omxpatch; then
   warn "Instalação offline incompatível com este Python; a usar o PyPI."
-  "$PIP" install -q --find-links "$HERE/wheels" omxpatch
+  "$PIP" install -q --upgrade --find-links "$HERE/wheels" omxpatch
 fi
 if [ "$WITH_ANSIBLE" = 1 ]; then
   step "Ansible (modo sem agente)"

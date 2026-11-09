@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.16.20261109 — Correção da atualização por cima de instalação existente
+- Os instaladores Ubuntu e Windows usam `pip install --upgrade`: antes, numa máquina com uma versão antiga já instalada (ex.: 1.2), o pip considerava o OMXPatch «já satisfeito» e mantinha a versão antiga apesar de o pacote ser mais recente.
+
 ## 1.15.20261109 — Tenants em toda a interface
 - Todas as referências visíveis a «organização» (menu, seletor, títulos, tabelas) passam a **Tenant**.
 

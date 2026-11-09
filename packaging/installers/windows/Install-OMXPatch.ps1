@@ -77,8 +77,8 @@ Step 'Aplicação (ambiente virtual)'
 New-Item -ItemType Directory -Force -Path $App, $Data | Out-Null
 & $Py -m venv "$App\venv"
 $Pip = "$App\venv\Scripts\pip.exe"
-& $Pip install --quiet --no-index --find-links "$Here\wheels" omxpatch
-if ($LASTEXITCODE -ne 0) { Write-Warning 'Instalação offline incompatível; a usar o PyPI.'; & $Pip install --quiet --find-links "$Here\wheels" omxpatch; if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar o OMXPatch' } }
+& $Pip install --quiet --upgrade --no-index --find-links "$Here\wheels" omxpatch
+if ($LASTEXITCODE -ne 0) { Write-Warning 'Instalação offline incompatível; a usar o PyPI.'; & $Pip install --quiet --upgrade --find-links "$Here\wheels" omxpatch; if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar o OMXPatch' } }
 if ($WithAnsible) { & $Pip install --quiet pywinrm requests-credssp; Write-Warning 'O Ansible não corre nativamente no Windows: use WSL ou um controlador Linux para o modo sem agente.' }
 
 Step 'Configuração'
