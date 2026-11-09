@@ -2,6 +2,12 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.26.20261109 — Atualização do agente a partir da consola
+- Corrigido: depois de atualizar, o agente relançava-se como `python …/__main__.py`, que falhava na importação relativa e deixava o agente desligado (sobretudo no Windows). Passa a relançar com `python -m omxpatch_agent` e o `__main__.py` também funciona como script (cobre agentes antigos a atualizar).
+- «Atualizar agente» na consola faz mesmo a atualização (descarga, verificação, autoteste, troca) e reporta o resultado verdadeiro, incluindo falhas; sem pacote assinado publicado diz-o.
+- A oferta de atualização é sempre publicada; `AGENT_AUTO_UPDATE` só controla a atualização automática (a manual da consola funciona na mesma).
+- Atenção: agentes anteriores à 1.20 não têm comandos da consola; nestes a atualização automática relança o agente de forma errada no Windows — reinicie-os uma vez (`schtasks /Run /TN OMXPatchAgent`) ou reinstale.
+
 ## 1.25.20261109 — Versão instalada visível
 - Consola: versão no topo e no rodapé; Sistema mostra «atualizada de X em data» e o histórico de versões (`<dados>/version.json`); `/healthz` devolve a versão em execução; Agentes mostra a versão da consola e marca os agentes desatualizados.
 - Scripts de instalação e de atualização (Ubuntu e Windows) mostram a versão instalada antes/depois e confirmam a versão em execução na consola.

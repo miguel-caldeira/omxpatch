@@ -20,7 +20,7 @@ from pathlib import Path
 
 import omxpatch_agent as pkg
 
-from . import __version__, config, trust
+from . import __version__, config, telemetry, trust
 from .versioning import compare
 
 log = logging.getLogger("omxpatch.agent.update")
@@ -50,7 +50,7 @@ def _safe_extract(data: bytes, dest: Path) -> None:
 def check(cfg: dict, trust_info: dict, manual: bool = False) -> dict | None:
     """Devolve a oferta de atualização se houver uma mais recente e **assinada**; senão None."""
     v, sha, sig = trust_info.get("agent_version"), trust_info.get("bundle_sha256"), trust_info.get("bundle_sig")
-    if not (v and sha and sig) or (not manual and not cfg.get("auto_update", True)):
+    if not (v and sha and sig) or (not manual and not (cfg.get("auto_update", True) and telemetry.runtime().get("auto_update", True))):
         return None
     if compare(str(v), __version__) <= 0:
         return None
@@ -111,9 +111,21 @@ def rollback() -> bool:
     return True
 
 
+def restart_argv() -> list:
+    """Comando para relançar o agente: sempre ``python -m omxpatch_agent <argumentos>`` (``sys.argv[0]`` é o caminho do __main__.py,
+    que não funciona como script nas versões antigas)."""
+    return [sys.executable, "-m", "omxpatch_agent"] + sys.argv[1:]
+
+
 def restart_self() -> None:
     """Relança o agente com o código novo (POSIX: exec no mesmo processo; Windows: novo processo e termina este)."""
+    argv = restart_argv()
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(p for p in (str(install_root()), os.environ.get("PYTHONPATH", "")) if p))
+    try:
+        os.chdir(str(install_root()))
+    except OSError:
+        pass
     if os.name != "nt":
-        os.execv(sys.executable, [sys.executable] + sys.argv)  # nosec B606
-    subprocess.Popen([sys.executable] + sys.argv, creationflags=0x00000208, close_fds=True)  # nosec B603 - DETACHED|NEW_GROUP
+        os.execve(sys.executable, argv, env)  # nosec B606
+    subprocess.Popen(argv, creationflags=0x00000208, close_fds=True, env=env)  # nosec B603 - DETACHED|NEW_GROUP
     os._exit(0)

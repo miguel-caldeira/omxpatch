@@ -224,8 +224,9 @@ def test_server_advertises_signed_bundle(app, tenant, enroll_token):
     assert trust.verify_with(t["task_keys"], "bundle", {"version": t["agent_version"], "sha256": t["bundle_sha256"]}, t["bundle_sig"])
     r = ag.c.get("/agent/v1/bundle", headers=ag.h)
     assert r.status_code == 200 and hashlib.sha256(r.data).hexdigest() == t["bundle_sha256"] == r.headers["X-Content-SHA256"]
-    app.config["AGENT_AUTO_UPDATE"] = False
-    assert "bundle_sig" not in ag.c.post("/agent/v1/poll", headers=ag.h, json={"version": "1"}).get_json()["trust"]
+    app.config["AGENT_AUTO_UPDATE"] = False                     # a oferta continua publicada (atualização manual); o agente é que não a aplica sozinho
+    j = ag.c.post("/agent/v1/poll", headers=ag.h, json={"version": "1"}).get_json()
+    assert "bundle_sig" in j["trust"] and j["agent_config"]["auto_update"] is False
 
 
 def test_signing_key_rotation_keeps_previous_published(app):

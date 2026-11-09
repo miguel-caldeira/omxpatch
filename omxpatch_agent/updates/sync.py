@@ -34,8 +34,14 @@ def _write(p, data) -> None:
     os.replace(tmp, p)
 
 
+RETRY_FAILED_MINUTES = 30
+
+
 def due(hours: float, now: float | None = None) -> bool:
-    return (now or time.time()) - float(_read(_state_path(), {}).get("last_scan", 0)) >= hours * 3600
+    """Nova descoberta quando passou o intervalo — ou em 30 min se a última teve origens com erro (não espera 6 h por uma correção)."""
+    st = _read(_state_path(), {})
+    wait = min(hours * 3600, RETRY_FAILED_MINUTES * 60) if st.get("had_errors") else hours * 3600
+    return (now or time.time()) - float(st.get("last_scan", 0)) >= wait
 
 
 def flush_pending(client) -> dict | None:
@@ -50,7 +56,8 @@ def flush_pending(client) -> dict | None:
             p.unlink()
         except OSError:
             pass
-        _write(_state_path(), {"last_scan": report.get("scanned_at", time.time()), "last_ack": time.time(), "scan_id": report.get("scan_id")})
+        _write(_state_path(), {"last_scan": report.get("scanned_at", time.time()), "last_ack": time.time(), "scan_id": report.get("scan_id"),
+                                 "had_errors": any(v.get("ok") is False for v in (report.get("sources") or {}).values())})
     return ack
 
 

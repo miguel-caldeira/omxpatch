@@ -535,3 +535,15 @@ def test_wua_large_output_is_not_truncated_and_long_urls_dropped(monkeypatch):
     monkeypatch.setattr(windows, "powershell", fake)
     out, _ = windows.scan_wua()
     assert len(out) == 400 and out[0]["download_url"] == "" and out[1]["download_url"].startswith("https://")
+
+
+def test_failed_sources_are_retried_in_30_minutes(tmp_path, monkeypatch):
+    import time as _t
+    from omxpatch_agent import config
+    from omxpatch_agent.updates import sync
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    now = _t.time()
+    sync._write(sync._state_path(), {"last_scan": now - 40 * 60, "had_errors": True})
+    assert sync.due(6, now)
+    sync._write(sync._state_path(), {"last_scan": now - 40 * 60, "had_errors": False})
+    assert not sync.due(6, now)

@@ -165,3 +165,45 @@ def test_reenroll_reuses_entry_and_delete_with_history(app, alpha_admin, ag):
     with app.app_context():
         assert db.session.get(Agent, aid) is None
         assert UpdateScan.query.filter_by(scan_id="s1").first() is not None
+
+
+def test_restart_command_and_main_as_script(monkeypatch):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    import omxpatch_agent
+    from omxpatch_agent import update
+    monkeypatch.setattr(sys, "argv", [str(Path(omxpatch_agent.__file__).parent / "__main__.py"), "run"])
+    assert update.restart_argv() == [sys.executable, "-m", "omxpatch_agent", "run"]
+    # o relançamento antigo (python …/__main__.py run) também tem de funcionar com o __main__ novo
+    main = Path(omxpatch_agent.__file__).parent / "__main__.py"
+    r = subprocess.run([sys.executable, str(main), "status"], capture_output=True, text=True, cwd="/tmp", env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"})
+    assert r.returncode == 0 and "Agente" in r.stdout, r.stderr
+
+
+def test_console_update_reports_real_outcome(tmp_path, monkeypatch):
+    from omxpatch_agent import config, executor, update
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    task = {"id": 9, "payload": {"action": "update"}}
+    executor.LAST_TRUST.clear()
+    executor.PENDING_ACTION.clear()
+    assert executor.HANDLERS["agent_ctl"](None, task)["status"] == "failed"                     # consola sem pacote assinado
+    executor.LAST_TRUST.update(bundle_sig="x")
+    monkeypatch.setattr(update, "check", lambda cfg, tr, manual=False: {"version": "9.9.9", "sha256": "a"})
+    monkeypatch.setattr(update, "apply", lambda c, o: (_ for _ in ()).throw(RuntimeError("autoteste falhou")))
+    r = executor.HANDLERS["agent_ctl"](None, task)
+    assert r["status"] == "failed" and "autoteste" in r["output"] and not executor.PENDING_ACTION
+    monkeypatch.setattr(update, "apply", lambda c, o: o["version"])
+    r = executor.HANDLERS["agent_ctl"](None, task)
+    assert r["status"] == "succeeded" and "9.9.9" in r["output"] and executor.PENDING_ACTION.get("restart")
+    executor.PENDING_ACTION.clear()
+
+
+def test_auto_update_flag_comes_from_console(tmp_path, monkeypatch):
+    from omxpatch_agent import config, telemetry, update
+    monkeypatch.setattr(config, "config_dir", lambda: tmp_path)
+    telemetry.adopt_server_config({"auto_update": False})
+    cfg = {"auto_update": True, "task_keys": []}
+    assert update.check(cfg, {"agent_version": "99.0.0", "bundle_sha256": "a" * 64, "bundle_sig": "00" * 64}) is None
+    assert telemetry.runtime()["auto_update"] is False

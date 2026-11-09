@@ -182,10 +182,18 @@ def _agent_ctl(client: Client, task: dict) -> dict:
     if action == "update":
         offer = update.check(agent_config.load(), LAST_TRUST, manual=True)
         if offer:
-            PENDING_ACTION["update"] = offer
-            return {"status": "succeeded", "output": f"A atualizar o agente para {offer['version']} (autoteste e reversão automática)."}
+            try:                                                   # descarrega, verifica, faz o autoteste e troca a pasta: o resultado é verdadeiro
+                new = update.apply(client, offer)
+            except Exception as exc:  # noqa: BLE001
+                telemetry.event("operation", "error", f"Atualização pedida pela consola falhou: {exc}")
+                return {"status": "failed", "output": f"Atualização para {offer['version']} falhou (mantém a versão atual): {exc}"[:2000]}
+            telemetry.audit("agent_update", f"atualizado para {new} (pedido pela consola)")
+            PENDING_ACTION["restart"] = True
+            return {"status": "succeeded", "output": f"Agente atualizado para {new}; reinicia-se a seguir a enviar este resultado."}
         ok, why = update.can_update()
         from . import __version__
+        if not LAST_TRUST.get("bundle_sig"):
+            return {"status": "failed", "output": "A consola não publicou nenhum pacote de agente assinado (chave de assinatura ou pacote em falta)."}
         if not ok:
             return {"status": "failed", "output": f"Atualização não aplicável: {why}"}
         return {"status": "succeeded", "output": f"O agente já está na versão mais recente publicada pela consola ({__version__})."}

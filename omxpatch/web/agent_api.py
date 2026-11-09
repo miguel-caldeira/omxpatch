@@ -36,7 +36,7 @@ def trust_block(agent=None) -> dict:
     out = {"task_keys": signing.public_keys(cfg), "pins": tls.agent_pins(cfg) if cfg["TLS_ENABLED"] else []}
     if agent is not None:
         out["agent_id"] = agent.id
-    if cfg.get("AGENT_AUTO_UPDATE", True):
+    if True:                                  # a oferta é sempre publicada; o agente só a aplica sozinho se AGENT_AUTO_UPDATE estiver ligado
         data, digest = bundle_bytes()
         import omxpatch_agent
         key = (omxpatch_agent.__version__, digest, out["task_keys"][0])      # a rotação da chave invalida a assinatura em cache

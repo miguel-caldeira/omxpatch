@@ -57,7 +57,7 @@ def agent_config(agent: Agent, now: datetime | None = None) -> dict:
     now = now or utcnow()
     secs = int((agent.debug_until - now).total_seconds()) if agent.debug_until and agent.debug_until > now else 0
     return {"giveup_minutes": int(cfg["AGENT_GIVEUP_MINUTES"]), "log_upload": bool(cfg["AGENT_LOG_UPLOAD"]), "log_level": str(cfg["AGENT_LOG_LEVEL"]),
-            "log_max_batch": int(cfg["AGENT_LOG_MAX_BATCH"]), "debug_seconds": secs}
+            "log_max_batch": int(cfg["AGENT_LOG_MAX_BATCH"]), "debug_seconds": secs, "auto_update": bool(cfg.get("AGENT_AUTO_UPDATE", True))}
 
 
 def ingest(agent: Agent, events: list) -> int:
