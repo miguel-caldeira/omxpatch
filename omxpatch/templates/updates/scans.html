@@ -3,5 +3,5 @@
 <p class="muted small">Cada linha prova que o relatório do agente <strong>chegou à consola</strong> (a consola confirma a receção ao agente; sem confirmação o agente reenvia).</p>
 <div class="panel"><table><tr><th>Recebida</th><th>No agente</th><th>Ativo</th><th>Total</th><th>Novas</th><th>Resolvidas</th><th>Origens</th></tr>
 {% for s in scans %}<tr><td>{{ s.received_at|dt }}</td><td class="small">{{ s.scanned_at|dt if s.scanned_at else '—' }}</td><td><a href="{{ url_for('updates.updates_list', asset_id=s.asset_id) }}">{{ s.asset.name }}</a></td><td>{{ s.total }}</td><td>{{ s.new }}</td><td>{{ s.resolved }}</td>
-<td class="small">{% for k, v in s.source_data.items() %}{{ k }}: {{ v.count }}{% if v.ok == false %} <span class="badge risk-high" title="{{ v.error }}">falhou</span>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
+<td class="small">{% for k, v in s.source_data.items() %}{{ k }}: {{ v.count }}{% if v.ok == false %} <span class="badge risk-high" title="{{ v.error }}">falhou</span> <span class="muted">{{ v.error }}</span>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</td></tr>
 {% else %}<tr><td colspan="7" class="muted">Sem descobertas.</td></tr>{% endfor %}</table></div>{% endblock %}

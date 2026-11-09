@@ -8,9 +8,15 @@ from ..runner import powershell, run
 
 WUA_SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
-$s = New-Object -ComObject Microsoft.Update.Session
-$se = $s.CreateUpdateSearcher()
-$r = $se.Search("IsInstalled=0 and IsHidden=0")
+try {
+  $s = New-Object -ComObject Microsoft.Update.Session
+  $se = $s.CreateUpdateSearcher()
+  $r = $se.Search("IsInstalled=0 and IsHidden=0")
+} catch {
+  $hr = if ($_.Exception.HResult) { '0x{0:X8}' -f $_.Exception.HResult } else { '?' }
+  Write-Output "WUA_ERROR $hr $($_.Exception.Message)"
+  exit 3
+}
 $out = @()
 foreach ($u in $r.Updates) {
   $urls = @(); try { foreach ($c in $u.DownloadContents) { if ($c.DownloadUrl) { $urls += $c.DownloadUrl } } } catch {}
@@ -41,10 +47,24 @@ def parse_wua_json(text: str) -> list[dict]:
     return out
 
 
+HINTS = {"0x8024402C": "sem acesso ao Windows Update/WSUS (rede, proxy ou DNS)", "0x80244022": "serviço Windows Update/WSUS indisponível (HTTP 503)",
+         "0x80240437": "chamada fora de uma sessão local", "0x80070005": "acesso negado: o agente tem de correr como SYSTEM/administrador",
+         "0x8024001E": "serviço Windows Update parado", "0x80072EE2": "tempo excedido na ligação ao Windows Update/WSUS",
+         "0x80072EE7": "nome do servidor Windows Update/WSUS não resolvido (DNS)", "0x8024401C": "tempo excedido na ligação ao WSUS"}
+
+
+def _wua_hint(out: str) -> str:
+    m = re.search(r"WUA_ERROR\s+(0x[0-9A-Fa-f]{8}|\?)\s*(.*)", out)
+    if not m:
+        return out.strip()[-250:]
+    code = m.group(1).upper().replace("0X", "0x")
+    return f"{code} — {HINTS.get(code, m.group(2).strip()[:180])}"
+
+
 def scan_wua(refresh: bool = True):
     r = powershell(WUA_SCRIPT, 1800)
     if not r.ok:
-        raise RuntimeError("Windows Update: " + r.out.strip()[-250:])
+        raise RuntimeError("Windows Update: " + _wua_hint(r.out))
     items = parse_wua_json(r.out)
     return items, f"{len(items)} atualização(ões) do Windows Update"
 

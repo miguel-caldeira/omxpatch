@@ -465,3 +465,17 @@ def test_diagnose_old_agent_and_no_scan(app):
         assert "anterior" in rows["h1"]["verdict"] and rows["h1"]["level"] == "high"
         assert "Ainda sem descoberta" in rows["h2"]["verdict"]
         assert timedelta
+
+
+def test_wua_error_hint_and_encoded_powershell():
+    from omxpatch_agent.updates import windows
+    assert "WSUS" in windows._wua_hint("WUA_ERROR 0x8024402C Exception from HRESULT")
+    assert windows._wua_hint("WUA_ERROR ? algo").startswith("? —")
+    import base64
+    from unittest import mock
+    from omxpatch_agent import runner
+    with mock.patch.object(runner, "run") as m:
+        runner.powershell('Write-Output "ação"')
+        cmd = m.call_args[0][0]
+        assert "-EncodedCommand" in cmd
+        assert "ação" in base64.b64decode(cmd[-1]).decode("utf-16-le")

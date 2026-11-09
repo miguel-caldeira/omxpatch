@@ -2,6 +2,10 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.19.20261109 — Windows Update (WUA) mais robusto
+- O PowerShell do agente passa a usar `-EncodedCommand` (sem problemas de aspas/acentos) e saída UTF-8.
+- A falha do WUA devolve o código HRESULT e uma explicação (rede/WSUS, acesso negado, serviço parado…), visível no Histórico de descobertas.
+
 ## 1.18.20261109 — Diagnóstico das atualizações
 - Atualizações: painel «Diagnóstico por agente» (agente antigo, sem contacto, sem descoberta, origens com erro) e comando `omxpatch-agent updates [--send]` para diagnosticar e enviar a descoberta a partir do equipamento.
 

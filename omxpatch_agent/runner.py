@@ -28,4 +28,9 @@ def run(cmd: list[str], timeout: int = 3600, input_text: str | None = None, env:
 
 
 def powershell(script: str, timeout: int = 3600) -> Result:
-    return run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], timeout)
+    """Executa o script com -EncodedCommand (UTF-16LE em base64): sem problemas de aspas/acentos na linha de comandos do Windows
+    e com a saída em UTF-8."""
+    import base64
+    pre = "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+    enc = base64.b64encode((pre + script).encode("utf-16-le")).decode("ascii")
+    return run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], timeout)
