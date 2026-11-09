@@ -4,7 +4,7 @@
 <dt>Ansible</dt><dd>{% if ansible %}<span class="ok">✔</span> {{ ansible_bin }}{% else %}<span class="bad">✘</span> ansible-playbook não encontrado (o modo sem agente e a descoberta Hyper-V ficam indisponíveis){% endif %}</dd>
 <dt>Playbooks</dt><dd><code>{{ ansible_dir }}</code></dd>
 <dt>Worker</dt><dd>{% if worker %}ativo — último ciclo {{ worker.last_tick|dt('%H:%M:%S') }}{% if worker.last_error %} <span class="bad">{{ worker.last_error }}</span>{% endif %}{% else %}não embebido (processo separado?){% endif %}</dd>
-<dt>OMXVuln</dt><dd>{{ cfg.OMXVULN_URL or 'por organização (Integrações)' }}</dd><dt>OMXGRC</dt><dd>{{ cfg.OMXGRC_URL or 'por organização (Integrações)' }}</dd>
+<dt>OMXVuln</dt><dd>{{ cfg.OMXVULN_URL or 'por tenant (Integrações)' }}</dd><dt>OMXGRC</dt><dd>{{ cfg.OMXGRC_URL or 'por tenant (Integrações)' }}</dd>
 <dt>IA generativa (opcional)</dt><dd>{{ 'ativa — ' ~ cfg.AI_MODEL if cfg.AI_ENABLED and cfg.AI_API_KEY else 'desativada (planeador determinístico)' }}</dd></dl></div>
 <div class="panel"><h2>Certificados TLS (autoassinados, 2 anos)</h2>{% for c in certs %}<dl class="kv"><dt>{{ c.profile }}</dt><dd>porta <b>{{ c.port }}</b> · {{ c.dns|join(', ') }}</dd><dt>Validade</dt><dd>{{ c.not_after.strftime('%Y-%m-%d') }} ({{ c.days_left }} dias)</dd><dt>SHA-256</dt><dd><code class="small">{{ c.sha256 }}</code></dd></dl>{% else %}<p class="muted">TLS desativado ou certificados ainda não gerados.</p>{% endfor %}</div>
 <div class="panel"><h2>Inteligência</h2><dl class="kv"><dt>CVE</dt><dd>{{ intel.total }}</dd><dt>KEV</dt><dd>{{ intel.kev }}</dd><dt>EPSS</dt><dd>{{ intel.with_epss }}</dd><dt>Ransomware</dt><dd>{{ intel.ransomware }}</dd></dl></div></div>{% endblock %}

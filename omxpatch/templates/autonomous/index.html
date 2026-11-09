@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% from "_macros.html" import csrf, st with context %}{% block title %}Remediação autónoma{% endblock %}
 {% block content %}<h1>Autonomous Remediation</h1>
 <p class="muted small">Novo CVE → descoberta → avaliação de risco → mapeamento dos ativos → procura de patch → teste automático (Ring 0) → ring deployment → validação → fecho automático → atualização da CMDB → reporte executivo.</p>
-<form method="post" class="panel">{{ csrf() }}<h2>Modo da organização</h2><div class="row">
+<form method="post" class="panel">{{ csrf() }}<h2>Modo do tenant</h2><div class="row">
 <div><label for="mode">Modo</label><select id="mode" name="mode" {{ 'disabled' if not current_user.can_manage }}>{% for k, v in AUTONOMOUS_MODES.items() %}<option value="{{ k }}" {{ 'selected' if tenant.autonomous_mode == k }}>{{ v }}</option>{% endfor %}</select></div>
 <div><label for="min_score">Risco mínimo para abrir fluxo (0–100)</label><input type="number" id="min_score" name="min_score" min="0" max="100" value="{{ tenant.autonomous_min_score }}"></div>
 <div><label class="chk"><input type="checkbox" name="kev_only" value="1" {{ 'checked' if tenant.autonomous_kev_only }}> Só CVE na lista KEV</label></div></div>

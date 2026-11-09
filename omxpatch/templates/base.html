@@ -37,7 +37,7 @@
     {% if current_user.has_role('admin') %}
     <a href="{{ url_for('admin.integrations') }}" class="{{ 'active' if ep.startswith('admin.integration') }}">Integrações</a>
     <a href="{{ url_for('admin.users') }}" class="{{ 'active' if ep.startswith('admin.user') }}">Utilizadores</a>
-    <a href="{{ url_for('admin.tenant_settings') }}" class="{{ 'active' if ep in ('admin.tenant_settings','admin.audit_log') }}">Organização</a>
+    <a href="{{ url_for('admin.tenant_settings') }}" class="{{ 'active' if ep in ('admin.tenant_settings','admin.audit_log') }}">Tenant</a>
     {% endif %}
     {% if current_user.is_superadmin %}
     <a href="{{ url_for('admin.tenants') }}" class="{{ 'active' if ep in ('admin.tenants','admin.tenant_new') }}">Tenants</a>
@@ -47,7 +47,7 @@
   <div class="userbox">
     {% if current_user.is_superadmin and all_tenants %}
     <form method="post" action="{{ url_for('auth.select_tenant') }}" class="inline">{{ csrf() }}
-      <select name="tenant_id" data-autosubmit aria-label="Organização">
+      <select name="tenant_id" data-autosubmit aria-label="Tenant">
         {% for t in all_tenants %}<option value="{{ t.id }}" {{ 'selected' if current_tenant and current_tenant.id == t.id }}>{{ t.name }}</option>{% endfor %}
       </select></form>
     {% elif current_tenant %}<span>{{ current_tenant.name }}</span>{% endif %}

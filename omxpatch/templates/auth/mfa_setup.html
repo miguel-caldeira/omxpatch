@@ -2,7 +2,7 @@
 {% block content %}
 <h1>Ativar autenticação multifator</h1>
 <div class="panel">
-{% if current_user.tenant and current_user.tenant.require_mfa and not current_user.mfa_enabled %}<div class="flash flash-warning">A sua organização exige MFA (NIS2, art. 21.º, n.º 2, al. j)).</div>{% endif %}
+{% if current_user.tenant and current_user.tenant.require_mfa and not current_user.mfa_enabled %}<div class="flash flash-warning">O seu tenant exige MFA (NIS2, art. 21.º, n.º 2, al. j)).</div>{% endif %}
 <p>Use uma aplicação autenticadora compatível com TOTP: <b>Google Authenticator</b>, <b>FreeOTP</b> / FreeOTP+, Microsoft Authenticator, Authy, 1Password ou Bitwarden.</p>
 <div class="grid2">
 <div><h3>1. Leia o QR code</h3>

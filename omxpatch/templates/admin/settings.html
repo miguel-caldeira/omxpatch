@@ -1,5 +1,5 @@
-{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Organização{% endblock %}
-{% block content %}{% set tenant = t %}{% set bp = branding.palette(tenant) %}<div class="actions"><h1>Organização — {{ t.name }}</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('admin.audit_log') }}">Auditoria</a></div>
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Tenant{% endblock %}
+{% block content %}{% set tenant = t %}{% set bp = branding.palette(tenant) %}<div class="actions"><h1>Tenant — {{ t.name }}</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('admin.audit_log') }}">Auditoria</a></div>
 <form method="post" class="panel">{{ csrf() }}<h2>SLA de remediação por categoria de risco (dias)</h2><div class="row">
 {% for k in ['emergency', 'critical', 'high', 'medium', 'low'] %}<div><label for="sla_{{ k }}">{{ RISK_LABELS[k] }}</label><input type="number" id="sla_{{ k }}" name="sla_{{ k }}" min="1" value="{{ t['sla_' ~ k] }}"></div>{% endfor %}</div>
 <h2>Notificações</h2><div class="row"><div><label for="notify_emails">E-mails (vírgulas)</label><input type="text" id="notify_emails" name="notify_emails" value="{{ t.notify_emails }}"></div>
@@ -9,7 +9,7 @@
 <div><label for="sector">Setor</label><input type="text" id="sector" name="sector" value="{{ t.sector }}"></div><div><label for="default_country">País por omissão dos ativos</label><input type="text" id="default_country" name="default_country" maxlength="2" value="{{ t.default_country }}"></div></div>
 <label class="chk"><input type="checkbox" name="require_mfa" value="1" {{ 'checked' if t.require_mfa }}> Exigir MFA a todos os utilizadores</label>
 <p><button class="btn">Guardar</button></p></form><div class="panel" id="identidade"><h2>Identidade visual</h2>
-<p class="muted">Logótipo e cores desta organização na interface, no painel e em todos os relatórios (HTML/PDF). As cores são ajustadas automaticamente quando necessário para manter o texto legível (contraste WCAG), também no modo escuro.</p>
+<p class="muted">Logótipo e cores deste tenant na interface, no painel e em todos os relatórios (HTML/PDF). As cores são ajustadas automaticamente quando necessário para manter o texto legível (contraste WCAG), também no modo escuro.</p>
 <form method="post" action="{{ url_for('branding.settings') }}" enctype="multipart/form-data">{{ csrf() }}
 <div class="row">
 <div><label for="b-logo">Logótipo (PNG, JPEG ou WebP, até 512 KB)</label><input type="file" id="b-logo" name="logo" accept="image/png,image/jpeg,image/webp">

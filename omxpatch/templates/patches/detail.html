@@ -16,7 +16,7 @@
 <div class="panel"><h2>Patch Intelligence</h2><p>{{ level(intel.level) }} · pontuação de segurança <b>{{ intel.score }}</b>/100</p>{{ bar(intel.score, 100, 'good' if intel.score >= 80 else '') }}
 <ul>{% for r in intel.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
 <dl class="kv"><dt>Taxa de sucesso (comunidade)</dt><dd>{{ ('%.1f %%' % intel.community.success_rate) if intel.community.success_rate is not none else 'n/d' }} ({{ intel.community.reports }} relatórios)</dd>
-<dt>Telemetria da organização</dt><dd>{{ intel.tenant.n }} aplicações · sucesso {{ intel.tenant.success_rate if intel.tenant.success_rate is not none else 'n/d' }} % · crash {{ intel.tenant.crash_rate if intel.tenant.crash_rate is not none else 'n/d' }} % · UX {{ intel.tenant.ux if intel.tenant.ux is not none else 'n/d' }}</dd>
+<dt>Telemetria do tenant</dt><dd>{{ intel.tenant.n }} aplicações · sucesso {{ intel.tenant.success_rate if intel.tenant.success_rate is not none else 'n/d' }} % · crash {{ intel.tenant.crash_rate if intel.tenant.crash_rate is not none else 'n/d' }} % · UX {{ intel.tenant.ux if intel.tenant.ux is not none else 'n/d' }}</dd>
 <dt>Rollbacks</dt><dd>{{ intel.tenant.rollbacks }}</dd><dt>Problemas reportados</dt><dd>{{ intel.reported_problems }}</dd><dt>Impacto operacional</dt><dd>{{ intel.impact }}{% if intel.reboot_required %} · exige reinício{% endif %}</dd>
 <dt>Incidentes do fabricante</dt><dd>{% for i in intel.known_issues %}{{ i.title }} <span class="chip">{{ i.severity }}</span> {% else %}nenhum{% endfor %}</dd></dl>
 {% if current_user.can_manage %}<details><summary>Atualizar dados da base comunitária / fabricante</summary><form method="post" action="{{ url_for('patching.patch_community', patch_id=p.id) }}" class="row">{{ csrf() }}

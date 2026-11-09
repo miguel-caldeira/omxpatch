@@ -4,7 +4,7 @@
 <div class="grid2">
 <div class="panel"><h2>Conta</h2>
 <dl class="kv"><dt>E-mail</dt><dd>{{ current_user.email }}</dd><dt>Perfil</dt><dd>{{ 'Super-administrador' if current_user.is_superadmin else ROLES[current_user.role] }}</dd>
-<dt>Organização</dt><dd>{{ current_user.tenant.name if current_user.tenant else '— (plataforma)' }}</dd><dt>Último acesso</dt><dd>{{ current_user.last_login|dt }}</dd>
+<dt>Tenant</dt><dd>{{ current_user.tenant.name if current_user.tenant else '— (plataforma)' }}</dd><dt>Último acesso</dt><dd>{{ current_user.last_login|dt }}</dd>
 <dt>MFA</dt><dd>{{ 'Ativo' if current_user.mfa_enabled else 'Inativo' }}</dd></dl>
 <p class="actions"><a class="btn sec" href="{{ url_for('auth.change_password') }}">Alterar password</a>
 {% if not current_user.mfa_enabled %}<a class="btn" href="{{ url_for('auth.mfa_setup') }}">Ativar MFA</a>{% endif %}</p>

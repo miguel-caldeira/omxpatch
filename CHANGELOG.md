@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.15.20261109 — Tenants em toda a interface
+- Todas as referências visíveis a «organização» (menu, seletor, títulos, tabelas) passam a **Tenant**.
+
 ## 1.14.20261109 — Menu Tenants
 - O menu e as páginas «Organizações» passam a **Tenants**, alinhado com o OMXVuln.
 
