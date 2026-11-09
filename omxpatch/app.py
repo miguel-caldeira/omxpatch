@@ -190,7 +190,9 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
 
     @app.route("/healthz")
     def health():
-        return {"status": "ok", "version": __version__}
+        from . import versioninfo
+        info = versioninfo.read(app.config)
+        return {"status": "ok", "version": __version__, "since": info.get("since", ""), "previous": info.get("previous", "")}
 
     def _error(code, default):
         def handler(e):
@@ -207,6 +209,8 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
         db.create_all()
         from .migrations import upgrade
         upgrade(backup_dir=None if app.config.get("TESTING") else Path(app.config["DATA_DIR"]) / "backups")
+        from . import versioninfo
+        versioninfo.record(app.config)
 
     if start_worker is None:
         start_worker = bool(app.config["EMBEDDED_WORKER"]) and not app.config.get("TESTING")

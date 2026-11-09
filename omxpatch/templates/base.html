@@ -45,6 +45,7 @@
     {% endif %}
   </nav>
   <div class="userbox">
+    <span class="small muted" title="Versão da consola instalada">v{{ version }}</span>
     {% if current_user.is_superadmin and all_tenants %}
     <form method="post" action="{{ url_for('auth.select_tenant') }}" class="inline">{{ csrf() }}
       <select name="tenant_id" data-autosubmit aria-label="Organização">
@@ -65,6 +66,6 @@
 {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}{% endwith %}
 {% block content %}{% endblock %}
 </main>
-<footer>OMXPatch {{ version }} · Ativo → Exposição → Risco → Mitigação → Patch → Validação → Monitorização contínua</footer>
+<footer>OMXPatch <b>v{{ version }}</b> · Ativo → Exposição → Risco → Mitigação → Patch → Validação → Monitorização contínua</footer>
 </body>
 </html>

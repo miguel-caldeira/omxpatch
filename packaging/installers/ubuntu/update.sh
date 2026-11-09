@@ -23,7 +23,7 @@ fi
 if [ -d /run/systemd/system ]; then
   systemctl restart omxpatch omxpatch-worker
   for i in $(seq 1 30); do curl -ksf "https://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break; sleep 1; done
-  curl -ksf "https://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && echo "Consola a responder em :$PORT" || echo "AVISO: a consola não responde: journalctl -u omxpatch" >&2
+  curl -ksf "https://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && echo "Consola a responder em :$PORT — versão em execução: $(curl -ksf "https://127.0.0.1:$PORT/healthz" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p')" || echo "AVISO: a consola não responde: journalctl -u omxpatch" >&2
 else
   echo "systemd indisponível: reinicie o serviço manualmente."
 fi

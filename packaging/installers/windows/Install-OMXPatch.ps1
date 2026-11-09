@@ -75,10 +75,14 @@ Write-Host "Python: $Py"
 
 Step 'Aplicação (ambiente virtual)'
 New-Item -ItemType Directory -Force -Path $App, $Data | Out-Null
-& $Py -m venv "$App\venv"
 $Pip = "$App\venv\Scripts\pip.exe"
+$Prev = if (Test-Path $Pip) { ((& $Pip show omxpatch 2>$null) | Where-Object { $_ -like 'Version:*' } | ForEach-Object { $_.Substring(8).Trim() }) } else { '' }
+$PkgVer = if (Test-Path "$Here\VERSION") { (Get-Content "$Here\VERSION" -Raw).Trim() } else { '?' }
+if ($Prev) { Write-Host "Versao instalada: $Prev  ->  versao do pacote: $PkgVer" } else { Write-Host "Instalacao nova (versao do pacote: $PkgVer)" }
+& $Py -m venv "$App\venv"
 & $Pip install --quiet --upgrade --no-index --find-links "$Here\wheels" omxpatch
 if ($LASTEXITCODE -ne 0) { Write-Warning 'Instalação offline incompatível; a usar o PyPI.'; & $Pip install --quiet --upgrade --find-links "$Here\wheels" omxpatch; if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar o OMXPatch' } }
+Write-Host ("Versao instalada agora: " + (((& $Pip show omxpatch) | Where-Object { $_ -like 'Version:*' } | ForEach-Object { $_.Substring(8).Trim() })))
 if ($WithAnsible) { & $Pip install --quiet pywinrm requests-credssp; Write-Warning 'O Ansible não corre nativamente no Windows: use WSL ou um controlador Linux para o modo sem agente.' }
 
 Step 'Configuração'
@@ -130,4 +134,10 @@ Step 'Super-administrador inicial'
 Start-Sleep -Seconds 5
 & "$App\venv\Scripts\omxpatch.exe" initial-password
 Write-Host "`nConcluído.`n  Consola:  https://${Hostname}:$Port/`n  Agentes:  https://${AgentHostname}:$AgentPort/  (scripts de instalação em «Agentes»)"
+try {
+  [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+  Start-Sleep -Seconds 5
+  $h = (New-Object Net.WebClient).DownloadString("https://127.0.0.1:$Port/healthz") | ConvertFrom-Json
+  Write-Host "Versao em execucao na consola: $($h.version)" -ForegroundColor Green
+} catch { Write-Warning "Nao foi possivel confirmar a versao em execucao na consola (ainda a arrancar?)." }
 Stop-Transcript | Out-Null

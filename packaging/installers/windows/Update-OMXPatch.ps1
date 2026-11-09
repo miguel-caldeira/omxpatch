@@ -27,3 +27,9 @@ foreach ($n in 'OMXPatch', 'OMXPatch-Worker') { schtasks /End /TN $n 2>$null | O
 Get-Process omxpatch -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 foreach ($n in 'OMXPatch', 'OMXPatch-Worker') { schtasks /Run /TN $n | Out-Null }
 Write-Host "OMXPatch atualizado: $Old -> $Cur" -ForegroundColor Green
+try {
+  [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+  Start-Sleep -Seconds 5
+  $h = (New-Object Net.WebClient).DownloadString("https://127.0.0.1:4434/healthz") | ConvertFrom-Json
+  Write-Host "Versao em execucao na consola: $($h.version)" -ForegroundColor Green
+} catch { Write-Warning "Nao foi possivel confirmar a versao em execucao na consola (ainda a arrancar?)." }

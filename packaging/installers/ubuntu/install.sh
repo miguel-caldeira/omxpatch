@@ -72,13 +72,16 @@ mkdir -p "$APP" "$ETC" "$DATA"
 chown -R "$SVC_USER":"$SVC_USER" "$DATA"; chmod 750 "$DATA"; chmod 755 "$APP"; chgrp "$SVC_USER" "$ETC"; chmod 750 "$ETC"
 
 step "Aplicação (ambiente virtual)"
+PREV="$("$APP/venv/bin/pip" show omxpatch 2>/dev/null | sed -n 's/^Version: //p' || true)"
 python3 -m venv "$APP/venv"
 PIP="$APP/venv/bin/pip"
+if [ -n "$PREV" ]; then echo "Versão instalada: $PREV  ->  versão do pacote: $(cat "$HERE/VERSION" 2>/dev/null || echo '?')"; else echo "Instalação nova (versão do pacote: $(cat "$HERE/VERSION" 2>/dev/null || echo '?'))"; fi
 "$PIP" install -q --upgrade pip >/dev/null 2>&1 || true
 if ! "$PIP" install -q --upgrade --no-index --find-links "$HERE/wheels" omxpatch; then
   warn "Instalação offline incompatível com este Python; a usar o PyPI."
   "$PIP" install -q --upgrade --find-links "$HERE/wheels" omxpatch
 fi
+echo "Versão instalada agora: $("$PIP" show omxpatch | sed -n 's/^Version: //p')"
 if [ "$WITH_ANSIBLE" = 1 ]; then
   step "Ansible (modo sem agente)"
   "$PIP" install -q ansible-core pywinrm requests-credssp jmespath
@@ -166,7 +169,7 @@ UNIT
   for i in $(seq 1 30); do
     curl -ksf "https://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break; sleep 1
   done
-  curl -ksf "https://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && echo "Consola a responder em :$PORT" || warn "A consola ainda não responde: journalctl -u omxpatch"
+  curl -ksf "https://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && echo "Consola a responder em :$PORT — versão em execução: $(curl -ksf "https://127.0.0.1:$PORT/healthz" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p')" || warn "A consola ainda não responde: journalctl -u omxpatch"
 else
   warn "systemd indisponível (ou --no-service): serviços não instalados. Arranque manual: OMXPATCH_CONFIG=$ETC/omxpatch.toml $APP/venv/bin/omxpatch serve"
 fi

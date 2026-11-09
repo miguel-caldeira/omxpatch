@@ -2,6 +2,10 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.25.20261109 — Versão instalada visível
+- Consola: versão no topo e no rodapé; Sistema mostra «atualizada de X em data» e o histórico de versões (`<dados>/version.json`); `/healthz` devolve a versão em execução; Agentes mostra a versão da consola e marca os agentes desatualizados.
+- Scripts de instalação e de atualização (Ubuntu e Windows) mostram a versão instalada antes/depois e confirmam a versão em execução na consola.
+
 ## 1.24.20261109 — Windows Update: causa real do erro
 - Causa: a saída do PowerShell com centenas de atualizações (URL assinados muito longos) excedia o limite de 30 000 caracteres do agente e chegava truncada. O resultado vai agora por ficheiro (sem limite) e só se guarda o primeiro URL de cada atualização (os com mais de 1000 caracteres são ignorados: o Windows instala pelo próprio Windows Update).
 

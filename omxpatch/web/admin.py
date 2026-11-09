@@ -10,7 +10,7 @@ from flask import Blueprint, abort, current_app, flash, jsonify, redirect, rende
 from flask_login import current_user, login_required
 
 from .. import branding as _branding
-from .. import installers, licensing, tls
+from .. import installers, licensing, tls, versioninfo
 from ..connectors import discovery, omxgrc, omxvuln, outbound, signals as signals_mod, sync
 from ..connectors import store as cstore
 from ..connectors.catalog import GROUPS, KINDS
@@ -221,7 +221,7 @@ def system():
     cfg = current_app.config
     return render_template("admin/system.html", ansible=ansible_runner.available(), ansible_bin=ansible_runner.binary(),
                            ansible_dir=cfg["ANSIBLE_DIR"], intel=intel.stats(), cfg=cfg, certs=_certs(cfg),
-                           worker=current_app.extensions.get("omxpatch_worker"))
+                           worker=current_app.extensions.get("omxpatch_worker"), vinfo=versioninfo.read(cfg))
 
 
 # --------------------------------------------------------------------------- capacidade, configuração e reinício
@@ -458,7 +458,7 @@ def agents():
                            new_token=session.pop("new_enroll", None), base_url=current_app.config["AGENT_BASE_URL"],
                            agent_pin=agent_pin(), agent_cert=agent_cert_info(), server_ip=current_app.config["AGENT_SERVER_IP"],
                            address_mode=current_app.config["AGENT_ADDRESS_MODE"],
-                           offline=current_app.config["AGENT_OFFLINE_MINUTES"], tenant=tenant)
+                           offline=current_app.config["AGENT_OFFLINE_MINUTES"], tenant=tenant, console_version=versioninfo.__version__)
 
 
 def agent_cert_info() -> dict:
