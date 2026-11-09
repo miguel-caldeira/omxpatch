@@ -19,7 +19,7 @@ try {
 }
 $out = @()
 foreach ($u in $r.Updates) {
-  $urls = @(); try { foreach ($c in $u.DownloadContents) { if ($c.DownloadUrl) { $urls += $c.DownloadUrl } } } catch {}
+  $urls = @(); try { foreach ($c in $u.DownloadContents) { if ($c.DownloadUrl -and $urls.Count -lt 1) { $urls += $c.DownloadUrl } } } catch {}
   $out += [pscustomobject]@{ id = $u.Identity.UpdateID; rev = $u.Identity.RevisionNumber; title = $u.Title; kb = (@($u.KBArticleIDs) -join ','); severity = "$($u.MsrcSeverity)";
     cves = @($u.CveIDs); size = [int64]$u.MaxDownloadSize; reboot = ($u.InstallationBehavior.RebootBehavior -ne 0); eula = [bool]$u.EulaAccepted;
     categories = @($u.Categories | ForEach-Object { $_.Name }); urls = $urls; released = "$($u.LastDeploymentChangeTime)" }
@@ -55,7 +55,7 @@ def parse_wua_json(text: str) -> list[dict]:
     out = []
     for u in data if isinstance(data, list) else [data]:
         kb = (u.get("kb") or "").split(",")[0].strip()
-        urls = [x for x in (u.get("urls") or []) if isinstance(x, str) and x.lower().startswith(("https://", "http://"))]
+        urls = [x for x in (u.get("urls") or []) if isinstance(x, str) and x.lower().startswith(("https://", "http://")) and len(x) <= 1000]
         cats = u.get("categories") or []
         out.append({"uid": (f"KB{kb}" if kb else u.get("id", ""))[:190], "name": u.get("title", "")[:255], "title": u.get("title", "")[:500], "kb": f"KB{kb}" if kb else "",
                     "current_version": "", "new_version": f"rev{u.get('rev', '')}", "severity": SEV.get(str(u.get("severity") or "").lower(), "medium"),

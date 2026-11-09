@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.24.20261109 — Windows Update: causa real do erro
+- Causa: a saída do PowerShell com centenas de atualizações (URL assinados muito longos) excedia o limite de 30 000 caracteres do agente e chegava truncada. O resultado vai agora por ficheiro (sem limite) e só se guarda o primeiro URL de cada atualização (os com mais de 1000 caracteres são ignorados: o Windows instala pelo próprio Windows Update).
+
 ## 1.23.20261109 — Windows Update por ficheiro
 - O resultado do WUA volta por um ficheiro temporário UTF-8 (não pela saída padrão do PowerShell); em caso de falha o erro mostra o início do conteúdo recebido para diagnóstico.
 

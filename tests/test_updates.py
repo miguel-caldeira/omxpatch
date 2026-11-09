@@ -517,3 +517,21 @@ def test_scan_wua_reads_json_from_file_and_reports_garbage(monkeypatch):
     monkeypatch.setattr(windows, "powershell", lambda s, t=0: fake(s, t, content="lixo"))
     with pytest.raises(RuntimeError, match="inesperada|inválido"):
         windows.scan_wua()
+
+
+def test_wua_large_output_is_not_truncated_and_long_urls_dropped(monkeypatch):
+    import json as _j
+    import re
+    from omxpatch_agent import runner
+    from omxpatch_agent.updates import windows
+    items = [{"id": f"i{n}", "rev": 1, "title": f"KB{n} t", "kb": str(n), "severity": "Important", "cves": [], "size": 5, "reboot": False, "eula": True, "categories": [],
+              "urls": ["https://x.example/" + "a" * (1500 if n == 0 else 100)]} for n in range(400)]
+    big = _j.dumps(items)
+    assert len(big) > 60000                                   # a saída padrão (limitada a 30000) truncaria isto; o ficheiro não
+
+    def fake(script, timeout=0):
+        open(re.search(r"\$OutFile = '([^']+)'", script).group(1), "w").write(big)
+        return runner.Result(0, "x" * 30000)
+    monkeypatch.setattr(windows, "powershell", fake)
+    out, _ = windows.scan_wua()
+    assert len(out) == 400 and out[0]["download_url"] == "" and out[1]["download_url"].startswith("https://")
