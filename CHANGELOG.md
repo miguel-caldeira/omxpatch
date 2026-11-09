@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.23.20261109 — Windows Update por ficheiro
+- O resultado do WUA volta por um ficheiro temporário UTF-8 (não pela saída padrão do PowerShell); em caso de falha o erro mostra o início do conteúdo recebido para diagnóstico.
+
 ## 1.22.20261109 — Agentes sem duplicados
 - Reinstalar um agente reutiliza a mesma entrada (chave nova, histórico mantido) em vez de criar uma duplicada.
 - Eliminar um agente já não dá erro interno (o histórico de descobertas fica, sem agente; os registos do agente saem).

@@ -494,3 +494,26 @@ def test_wua_json_tolerates_powershell_noise():
         windows.parse_wua_json('#< CLIXML\n<Objs><S S="Error">falhou_</S></Objs>')
     with pytest.raises(RuntimeError, match="inesperada"):
         windows.parse_wua_json("blá blá")
+
+
+def test_scan_wua_reads_json_from_file_and_reports_garbage(monkeypatch):
+    import re
+    import pytest
+    from omxpatch_agent import runner
+    from omxpatch_agent.updates import windows
+    good = '[{"id":"x","rev":1,"title":"KB9 t","kb":"9","severity":"Important","cves":[],"size":5,"reboot":false,"eula":true,"categories":[],"urls":[]}]'
+
+    def fake(script, timeout=0, content=good, out="#< CLIXML ruído [x]"):
+        path = re.search(r"\$OutFile = '([^']+)'", script).group(1)
+        if content is not None:
+            open(path, "wb").write(b"\xef\xbb\xbf" + content.encode())
+        return runner.Result(0, out)
+    monkeypatch.setattr(windows, "powershell", fake)
+    items, note = windows.scan_wua()
+    assert items[0]["kb"] == "KB9" and "1 atualiza" in note
+    monkeypatch.setattr(windows, "powershell", lambda s, t=0: fake(s, t, content=""))
+    with pytest.raises(RuntimeError, match="não devolveu"):
+        windows.scan_wua()
+    monkeypatch.setattr(windows, "powershell", lambda s, t=0: fake(s, t, content="lixo"))
+    with pytest.raises(RuntimeError, match="inesperada|inválido"):
+        windows.scan_wua()

@@ -2,4 +2,4 @@
 
 O agente só faz ligações de saída (HTTPS) ao centro de comando: regista-se com um token, envia inventário e
 executa as tarefas que *puxa* (patch, validação, simulação segura, controlos de firewall, Wake-on-LAN)."""
-__version__ = "1.22.20261109"
+__version__ = "1.23.20261109"

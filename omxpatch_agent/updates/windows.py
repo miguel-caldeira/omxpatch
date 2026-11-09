@@ -24,9 +24,9 @@ foreach ($u in $r.Updates) {
     cves = @($u.CveIDs); size = [int64]$u.MaxDownloadSize; reboot = ($u.InstallationBehavior.RebootBehavior -ne 0); eula = [bool]$u.EulaAccepted;
     categories = @($u.Categories | ForEach-Object { $_.Name }); urls = $urls; released = "$($u.LastDeploymentChangeTime)" }
 }
-Write-Output 'OMXJSON_BEGIN'
-ConvertTo-Json -InputObject @($out) -Compress -Depth 5
-Write-Output 'OMXJSON_END'
+$json = ConvertTo-Json -InputObject @($out) -Compress -Depth 5
+[System.IO.File]::WriteAllText($OutFile, $json, (New-Object System.Text.UTF8Encoding $false))
+Write-Output 'OMXJSON_DONE'
 """
 SEV = {"critical": "critical", "important": "high", "moderate": "medium", "low": "low", "": "medium", "unspecified": "medium"}
 
@@ -80,11 +80,32 @@ def _wua_hint(out: str) -> str:
 
 
 def scan_wua(refresh: bool = True):
-    r = powershell(WUA_SCRIPT, 1800)
-    if not r.ok:
-        raise RuntimeError("Windows Update: " + _wua_hint(r.out))
-    items = parse_wua_json(r.out)
-    return items, f"{len(items)} atualização(ões) do Windows Update"
+    """O JSON volta por um ficheiro temporário (UTF-8): imune ao ruído do PowerShell na saída padrão (CLIXML, avisos, codificação)."""
+    import os
+    import tempfile
+    fd, path = tempfile.mkstemp(prefix="omxwua-", suffix=".json")
+    os.close(fd)
+    try:
+        r = powershell(f"$OutFile = '{path}'\n" + WUA_SCRIPT, 1800)
+        if not r.ok:
+            raise RuntimeError("Windows Update: " + _wua_hint(r.out))
+        try:
+            with open(path, "rb") as fh:
+                raw = fh.read().decode("utf-8-sig", "replace")
+        except OSError:
+            raw = ""
+        if not raw.strip():
+            raise RuntimeError("Windows Update: o PowerShell não devolveu resultado. Saída: " + repr(r.out.strip()[:300]))
+        try:
+            items = parse_wua_json(raw)
+        except ValueError as exc:
+            raise RuntimeError(f"Windows Update: JSON inválido ({exc}). Início: {raw[:200]!r}") from exc
+        return items, f"{len(items)} atualização(ões) do Windows Update"
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 # --------------------------------------------------------------------------- winget
