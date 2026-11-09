@@ -109,7 +109,7 @@ def test_executor_unknown_and_failing_tasks_report_failure():
             raise RuntimeError("sem rede")
     assert executor.execute(C(), {"id": 1, "type": "xyz", "payload": {}})["status"] == "failed"
     rep = executor.execute(C(), {"id": 1, "type": "patch", "payload": {"installer": "apt", "package": "x; id", "patch_id": 1}})
-    assert rep["status"] == "failed" and "inválido" in rep["output"]
+    assert rep["status"] == "failed" and ("inválido" in rep["output"] or "não suportado" in rep["output"])        # no Windows o instalador apt é recusado antes de validar o nome
     wake = executor.execute(C(), {"id": 2, "type": "wake", "payload": {"mac": "zz"}})
     assert wake["status"] == "failed"
 

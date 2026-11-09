@@ -1,0 +1,41 @@
+# Histórico de versões
+
+A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
+
+## 1.13.20261108 — Manuais de Administração e de Utilização
+- **Manual de Utilização** e **Manual de Administração** (Markdown, Word e PDF, com capturas de ecrã) e **Referência técnica** gerada a partir do código (`docs/`).
+- CI: o relatório de validação em Windows/macOS reais passa a aparecer no registo; teste do agente deixa de depender do sistema operativo.
+
+## 1.12.20261108 — Validação em Windows e macOS reais
+- Comando `python -m omxpatch_agent validate` (níveis `read` e `lab`, isolamento opcional) com relatório Markdown/JSON e redação de dados.
+- Kit `omxpatch-validation-kit` (scripts Windows/macOS + checklist de laboratório) e job de CI `real-os-validation` em *runners* reais.
+- Corrigido o CI dos testes em Windows/macOS (instalação com hashes).
+
+## 1.11.20261108 — Fluxo Descoberta → Simulação → Remediação
+- Contexto do ativo recolhido pelo agente (processos, escutas, firewall, acessos); **simulação de exposição** e **prioridade por perda esperada** no servidor.
+- **Isolamento preventivo** do ativo; **linha de base** (gold images) com desvio e exportação; boas práticas `ssh_hardening` e `windows_hardening`.
+- **Governação ITSM** (ServiceNow, Jira, Freshservice) para planos e controlos — **desativada por omissão**.
+
+## 1.10.20261108 — Descoberta de atualizações instaláveis
+- Descoberta nos agentes (apt, dnf/yum, zypper, Windows Update, winget, Chocolatey, softwareupdate, brew) com envio confirmado e reenvio garantido; descarga proativa verificada (SHA-256, anti-SSRF); simulação e remediação a partir do servidor.
+
+## 1.9 / 1.8 — Pacotes reconstruídos; Centro de comando
+- Dashboard gráfico consolidado com ações rápidas de simulação e remediação (sempre com OK).
+
+## 1.7.20261108 — Endurecimento
+- Rotação do thumbprint do certificado dos agentes, tarefas e pacote **assinados** (Ed25519), atualização automática do agente, limitação de pedidos, migrações versionadas, cópias e retenção, versões fixas com hashes, CI multi-SO.
+
+## 1.6.20261108 — Capacidade, configuração e agentes multi-Python
+- Análise de carga e escalabilidade, alteração de configuração com reinício controlado, agente em Python 3.8–3.13 e comunicação **só por IP + thumbprint**.
+
+## 1.5.20261108 — Integração OMXVuln
+- Importação de ativos e vulnerabilidades com simulação prévia.
+
+## 1.4.20261108 — Windows Server 2012 R2
+- Instalador próprio (Python 3.11, verificações prévias).
+
+## 1.3 / 1.2 / 1.1 — Instaladores, Windows e boas práticas
+- Python/pip incluídos nos instaladores; instalação robusta do Python no Windows e BOM nos `.ps1`; boas práticas (TLS 1.2/1.3 em IIS, Apache, nginx) e planos de operações com simulação e OK; origens de atualização Windows e simulação prévia de patches.
+
+## 1.0 — Base
+- Centro de comando multi-organização (porta 4434) e agentes (porta 4444) com dois certificados autoassinados; 15 módulos (inventário/CMDB, inteligência, exposição multi-vendor, risco dinâmico, patching, anéis, controlos compensatórios, IA, validação em ciclo fechado, integrações, conformidade, painel executivo, BAS, remediação autónoma); Ansible; instaladores Ubuntu e Windows.

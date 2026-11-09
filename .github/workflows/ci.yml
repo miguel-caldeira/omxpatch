@@ -67,7 +67,7 @@ jobs:
         with: {python-version: "3.12"}
       - name: "Validação (nível lab, com alterações reversíveis em VM descartável)"
         shell: bash
-        run: python -m omxpatch_agent validate --level lab --yes-lab --report validation-report.md --json validation-report.json --quiet
+        run: python -m omxpatch_agent validate --level lab --yes-lab --report validation-report.md --json validation-report.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

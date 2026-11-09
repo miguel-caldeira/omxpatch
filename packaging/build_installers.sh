@@ -29,6 +29,7 @@ VER="$($PY -c "import re;print(re.search(r'__version__ = \"([^\"]+)\"', open('om
 DIST="$ROOT/dist"; STAGE="$(mktemp -d)"; rm -rf "$DIST"; mkdir -p "$DIST"
 trap 'rm -rf "$STAGE"' EXIT
 echo "OMXPatch $VER"
+copydocs() { mkdir -p "$1/docs"; cp "$ROOT"/docs/build/MANUAL-*-"$VER".pdf "$1/docs/" 2>/dev/null || true; }
 
 echo "==> wheel da aplicação"
 $PY -m pip wheel . --no-deps -q -w "$STAGE/app-wheel"
@@ -53,6 +54,7 @@ else
   echo "AVISO: construa num Ubuntu 24.04 para incluir os .deb offline (python3-venv, pip) em debs/"
 fi
 ls "$U/debs" | grep -q . || echo "AVISO: pacote Ubuntu sem .deb offline: o instalador precisará de acesso ao apt"
+copydocs "$U"
 tar -C "$STAGE" -czf "$DIST/omxpatch-ubuntu-$VER.tar.gz" "omxpatch-ubuntu-$VER"
 
 echo "==> Windows"
@@ -67,6 +69,7 @@ else curl -fsSL -m 300 -o "$W/python-installer.exe" "https://www.python.org/ftp/
 if [ -f "$W/python-installer.exe" ]; then sha256sum "$W/python-installer.exe" | cut -d' ' -f1 > "$W/python-installer.sha256"
 else echo "AVISO: instalador do Python não incluído (sem acesso a python.org): defina PYTHON_WIN_EXE=<python-3.12.x-amd64.exe>"; fi
 cp packaging/installers/windows/* "$W/"; echo "$VER" > "$W/VERSION"
+copydocs "$W"
 (cd "$STAGE" && mkzip "$DIST/omxpatch-windows-$VER.zip" "omxpatch-windows-$VER")
 
 echo "==> Windows Server 2012 R2 (Python 3.11)"
@@ -83,8 +86,10 @@ else curl -fsSL -m 300 -o "$W2/python-installer.exe" "https://www.python.org/ftp
 if [ -f "$W2/python-installer.exe" ]; then sha256sum "$W2/python-installer.exe" | cut -d' ' -f1 > "$W2/python-installer.sha256"
 else echo "AVISO: pacote 2012 R2 sem python-installer.exe (defina PYTHON_WIN2012_EXE=<python-3.11.x-amd64.exe>)"; fi
 for f in "$W2"/*.ps1; do head -c3 "$f" | grep -q $'\xef\xbb\xbf' || { printf '\xef\xbb\xbf' | cat - "$f" > "$f.n" && mv "$f.n" "$f"; }; done
+copydocs "$W2"
 (cd "$STAGE" && mkzip "$DIST/omxpatch-windows2012r2-$VER.zip" "omxpatch-windows2012r2-$VER")
 
+# Manuais (PDF) nos pacotes, se já foram gerados (sh docs/tools/build_docs.sh)
 echo "==> Kit de validação (Windows/macOS)"
 K="$STAGE/omxpatch-validation-kit-$VER"; mkdir -p "$K"
 cp -r omxpatch_agent "$K/"; find "$K" -name __pycache__ -prune -exec rm -rf {} +
