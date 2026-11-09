@@ -136,3 +136,32 @@ def test_run_loop_gives_up_after_two_hours(tmp_path, monkeypatch):
     assert telemetry.runtime().get("disconnected")
     evs, _ = telemetry.pending(50)
     assert any("agent_giveup" in e["msg"] for e in evs)
+
+
+def test_reenroll_reuses_entry_and_delete_with_history(app, alpha_admin, ag):
+    import json as _j
+    from omxpatch.models import EnrollmentToken, UpdateScan
+    from omxpatch.web.agent_api import _hash
+    with app.app_context():
+        agent = db.session.get(Agent, ag.id)
+        db.session.add(UpdateScan(tenant_id=agent.tenant_id, asset_id=agent.asset_id, agent_id=agent.id, scan_id="s1", total=1, sources="{}"))
+        agentops.record(agent, "audit", "x")
+        raw = "omxe_testtokentesttoken"
+        db.session.add(EnrollmentToken(tenant_id=agent.tenant_id, name="t", token_hash=_hash(raw), prefix=raw[:9], ring=4))
+        db.session.commit()
+        before = Agent.query.filter_by(tenant_id=agent.tenant_id).count()
+    c = alpha_admin.c
+    for _ in range(2):
+        r = c.post("/agent/v1/enroll", json={"token": raw, "hostname": "h-ops", "os_family": "linux"})
+        assert r.status_code == 201, r.data
+    with app.app_context():
+        assert Agent.query.filter_by(tenant_id=agent.tenant_id).count() <= before + 1       # sem duplicados por reinstalação
+    with app.app_context():
+        a = Agent.query.filter_by(hostname="h-ops").first()
+        a.revoked = True
+        db.session.commit()
+        aid = a.id
+    assert alpha_admin.post(f"/agents/{aid}/delete").status_code == 302                      # antes: erro interno (FK do histórico)
+    with app.app_context():
+        assert db.session.get(Agent, aid) is None
+        assert UpdateScan.query.filter_by(scan_id="s1").first() is not None

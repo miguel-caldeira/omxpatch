@@ -82,3 +82,12 @@ def ingest(agent: Agent, events: list) -> int:
         record(agent, kind, str(ev.get("msg", "")), level, "agent", data, ts)
         n += 1
     return n
+
+
+def delete_agent(agent: Agent) -> None:
+    """Elimina um agente sem violar chaves estrangeiras: o histórico de descobertas fica (sem agente) e os registos do agente saem."""
+    from ..models import UpdateScan
+    UpdateScan.query.filter_by(agent_id=agent.id).update({"agent_id": None}, synchronize_session=False)
+    AgentLog.query.filter_by(agent_id=agent.id).delete(synchronize_session=False)
+    db.session.flush()
+    db.session.delete(agent)

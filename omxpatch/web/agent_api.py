@@ -139,14 +139,19 @@ def enroll():
                                       source="agent")
     asset.ring = tok.ring if asset.ring == 4 else asset.ring
     asset.shadow_it = False
-    existing = Agent.query.filter_by(tenant_id=tenant.id, asset_id=asset.id, revoked=False).first()
+    existing = Agent.query.filter_by(tenant_id=tenant.id, asset_id=asset.id).order_by(Agent.revoked, Agent.id.desc()).first()
     key = "omxa_" + secrets.token_urlsafe(32)
     if existing is not None:
-        existing.revoked = True                     # reinstalação: a chave anterior deixa de valer
-    agent = Agent(tenant_id=tenant.id, asset_id=asset.id, key_hash=_hash(key), key_prefix=key[:10], hostname=host, machine_id=mid,
-                  os_family=os_family, version=str(data.get("version", ""))[:32], ip=(request.remote_addr or "")[:64], last_seen=utcnow())
+        # reinstalação: a mesma entrada é reutilizada com chave nova (a anterior deixa de valer) — sem entradas duplicadas e com o histórico
+        existing.key_hash, existing.key_prefix, existing.revoked = _hash(key), key[:10], False
+        existing.hostname, existing.machine_id, existing.os_family = host, mid, os_family
+        existing.version, existing.ip, existing.last_seen = str(data.get("version", ""))[:32], (request.remote_addr or "")[:64], utcnow()
+        agent = existing
+    else:
+        agent = Agent(tenant_id=tenant.id, asset_id=asset.id, key_hash=_hash(key), key_prefix=key[:10], hostname=host, machine_id=mid,
+                      os_family=os_family, version=str(data.get("version", ""))[:32], ip=(request.remote_addr or "")[:64], last_seen=utcnow())
+        db.session.add(agent)
     tok.uses += 1
-    db.session.add(agent)
     from ..security import audit
     audit("agent_enrolled", f"{host} ({os_family})", tenant_id=tenant.id)
     db.session.commit()

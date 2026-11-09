@@ -287,6 +287,8 @@ O isolamento (controlo `isolate_host`) exige **aprovação** e um agente instala
 
 # 15. Operação e resolução de problemas
 
+Reinstalar um agente reutiliza a mesma entrada (chave nova, histórico mantido). As entradas revogadas antigas eliminam-se uma a uma ou todas de uma vez com **Eliminar revogados**.
+
 ## Operação remota e registos dos agentes
 Em **Agentes → Detalhe** (um agente) o administrador pode, a partir da consola:
 - **Ativar/desativar a depuração completa** (validade em minutos; desliga-se sozinha). Em depuração o agente regista também os pedidos à consola, os comandos executados e os tempos de cada contacto, e envia-os como registos de «depuração».

@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.21.20261109
+# Referência técnica — OMXPatch 1.22.20261109
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
@@ -281,6 +281,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | admin | `/agents/<int:agent_id>` | GET | admin/auditor/user |
 | admin | `/agents/<int:agent_id>/command` | POST | admin |
 | admin | `/agents/<int:agent_id>/logs.csv` | GET | admin/auditor |
+| admin | `/agents/purge-revoked` | POST | admin |
 | auth | `/login` | GET,POST | qualquer utilizador autenticado |
 | auth | `/mfa` | GET,POST | qualquer utilizador autenticado |
 | auth | `/mfa/setup` | GET,POST | qualquer utilizador autenticado |

@@ -532,7 +532,7 @@ def agent_uninstall_script(os_kind: str):
 def agent_delete(agent_id: int):
     ag = get_scoped_or_404(Agent, agent_id)
     audit("agent_deleted", ag.hostname)
-    db.session.delete(ag)
+    agentops.delete_agent(ag)
     db.session.commit()
     flash("Agente eliminado (o equipamento fica livre para ser registado noutra organização).", "info")
     return redirect(url_for("admin.agents"))
@@ -637,3 +637,17 @@ def agent_logs_csv(agent_id: int):
     audit("agent_logs_export", ag.hostname)
     db.session.commit()
     return Response(buf.getvalue(), mimetype="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="agente-{ag.hostname}-registos.csv"'})
+
+
+@bp.route("/agents/purge-revoked", methods=["POST"])
+@login_required
+@roles_required("admin")
+def agents_purge_revoked():
+    """Elimina as entradas de agentes revogados (p.ex. as antigas, de reinstalações anteriores à 1.22)."""
+    rows = scoped(Agent).filter(Agent.revoked.is_(True)).all()
+    for ag in rows:
+        agentops.delete_agent(ag)
+    audit("agents_purged", f"{len(rows)} agente(s) revogado(s)")
+    db.session.commit()
+    flash(f"{len(rows)} entrada(s) de agentes revogados eliminada(s).", "info")
+    return redirect(url_for("admin.agents"))

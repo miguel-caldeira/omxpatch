@@ -2,6 +2,11 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.22.20261109 — Agentes sem duplicados
+- Reinstalar um agente reutiliza a mesma entrada (chave nova, histórico mantido) em vez de criar uma duplicada.
+- Eliminar um agente já não dá erro interno (o histórico de descobertas fica, sem agente; os registos do agente saem).
+- Novo botão «Eliminar revogados» em Agentes para limpar as entradas antigas.
+
 ## 1.21.20261109 — Correção do Windows Update e menu
 - WUA: o JSON é extraído entre marcadores, ignorando o ruído do PowerShell (CLIXML); erros do PowerShell passam a ser mostrados em vez de «JSONDecodeError».
 - Menu: «Organização» (definições do tenant atual) e «Tenants» (lista, super-administrador).
