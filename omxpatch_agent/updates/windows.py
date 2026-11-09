@@ -24,16 +24,34 @@ foreach ($u in $r.Updates) {
     cves = @($u.CveIDs); size = [int64]$u.MaxDownloadSize; reboot = ($u.InstallationBehavior.RebootBehavior -ne 0); eula = [bool]$u.EulaAccepted;
     categories = @($u.Categories | ForEach-Object { $_.Name }); urls = $urls; released = "$($u.LastDeploymentChangeTime)" }
 }
+Write-Output 'OMXJSON_BEGIN'
 ConvertTo-Json -InputObject @($out) -Compress -Depth 5
+Write-Output 'OMXJSON_END'
 """
 SEV = {"critical": "critical", "important": "high", "moderate": "medium", "low": "low", "": "medium", "unspecified": "medium"}
 
 
+def _extract_json(text: str) -> str:
+    """Isola o JSON entre marcadores, ignorando o ruído do PowerShell (CLIXML de progresso/erros, avisos, BOM)."""
+    m = re.search(r"OMXJSON_BEGIN\s*(.*?)\s*OMXJSON_END", text, re.S)
+    if m:
+        return m.group(1).strip().lstrip("\ufeff")
+    t = text.strip().lstrip("\ufeff")
+    if t.startswith("#< CLIXML") or "<Objs" in t[:200]:
+        raise RuntimeError("Windows Update: o PowerShell devolveu um erro em vez do resultado: " + re.sub(r"<[^>]+>", " ", t)[:250].strip())
+    if not t:
+        return ""
+    i = min([k for k in (t.find("["), t.find("{")) if k >= 0], default=-1)
+    if i < 0:
+        raise RuntimeError("Windows Update: resposta inesperada: " + t[:200])
+    return t[i:]
+
+
 def parse_wua_json(text: str) -> list[dict]:
-    text = text.strip()
+    text = _extract_json(text)
     if not text:
         return []
-    data = json.loads(text[text.index("["):] if "[" in text else text)
+    data = json.loads(text)
     out = []
     for u in data if isinstance(data, list) else [data]:
         kb = (u.get("kb") or "").split(",")[0].strip()

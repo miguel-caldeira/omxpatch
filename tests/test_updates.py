@@ -479,3 +479,18 @@ def test_wua_error_hint_and_encoded_powershell():
         cmd = m.call_args[0][0]
         assert "-EncodedCommand" in cmd
         assert "ação" in base64.b64decode(cmd[-1]).decode("utf-16-le")
+
+
+def test_wua_json_tolerates_powershell_noise():
+    import pytest
+    from omxpatch_agent.updates import windows
+    good = '[{"id":"x","rev":1,"title":"KB1 t","kb":"123","severity":"Critical","cves":[],"size":5,"reboot":true,"eula":true,"categories":["Security Updates"],"urls":[]}]'
+    noisy = '#< CLIXML\n<Objs Version="1.1.0.1"><S S="progress">x</S></Objs>\nOMXJSON_BEGIN\n' + good + '\nOMXJSON_END\n'
+    assert windows.parse_wua_json(noisy)[0]["kb"] == "KB123"
+    assert windows.parse_wua_json("﻿OMXJSON_BEGIN\n[]\nOMXJSON_END") == []
+    assert windows.parse_wua_json("") == []
+    assert windows.parse_wua_json(good)[0]["category"] == "security"       # compatível com saída sem marcadores
+    with pytest.raises(RuntimeError, match="erro"):
+        windows.parse_wua_json('#< CLIXML\n<Objs><S S="Error">falhou_</S></Objs>')
+    with pytest.raises(RuntimeError, match="inesperada"):
+        windows.parse_wua_json("blá blá")

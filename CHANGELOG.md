@@ -2,6 +2,10 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.21.20261109 — Correção do Windows Update e menu
+- WUA: o JSON é extraído entre marcadores, ignorando o ruído do PowerShell (CLIXML); erros do PowerShell passam a ser mostrados em vez de «JSONDecodeError».
+- Menu: «Organização» (definições do tenant atual) e «Tenants» (lista, super-administrador).
+
 ## 1.20.20261109 — Operação remota e registos dos agentes
 - Página de detalhe do agente: registos de operação, auditoria e depuração (filtros, CSV), estado reportado, comandos recentes.
 - Ações a partir da consola: depuração completa com validade, reiniciar, atualizar e pedir registos (tarefas assinadas; contacto de 5 em 5 min).
