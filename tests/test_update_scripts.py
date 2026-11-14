@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 R = Path(__file__).resolve().parents[1] / "packaging" / "installers"
 
 
@@ -51,7 +53,7 @@ def test_update_enables_ansible_in_config(tmp_path):
         assert "enabled = true" in out and "enabled = false" not in out and "port = 4434" in out or "enabled = true" in out
         assert expect is None or expect in out
         assert "[server]" not in out or out.index("[server]") < out.index("[ansible]")
-    import tomllib
+    tomllib = pytest.importorskip("tomllib")                                  # Python ≥ 3.11
     tomllib.loads(f.read_text())                                            # o resultado continua a ser TOML válido
 
 

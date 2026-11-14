@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.33.20261114 — CI
+- Teste do `update.sh` compatível com Python 3.9.
+
 ## 1.32.20261114 — Ansible instalado e ativo por omissão
 - Sistema mostrava «ansible-playbook não encontrado»: o Ansible só era instalado com `--with-ansible`, e mesmo instalado o serviço não o encontrava (o venv não está no PATH do systemd).
 - `install.sh` instala agora o Ansible por omissão (wheels incluídos no pacote, offline; coleções do Galaxy se houver rede); `--no-ansible` para o saltar.
