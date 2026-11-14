@@ -1,6 +1,8 @@
 """Corre os playbooks Windows e CyberArk de ponta a ponta contra módulos *simulados* (colecção ansible.windows de teste): exercita toda a lógica
 Jinja, o encadeamento de tarefas, a verificação do SHA-256, a reposição dos serviços em caso de falha e o JSON final — sem precisar de um Windows.
 Não substitui o teste em equipamentos reais."""
+from __future__ import annotations
+
 import json
 import os
 import shutil

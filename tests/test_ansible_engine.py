@@ -1,4 +1,6 @@
 """Motor Ansible sem agente: atualização completa, CyberArk (ordem e pré-condições) e avaliação de rede."""
+from __future__ import annotations
+
 import json
 import os
 import shutil
@@ -267,7 +269,7 @@ def _stub_collections(tmp: Path) -> str:
     """Módulos de colecções que não estão instaladas (a Galaxy pode estar inacessível): ficheiros vazios chegam ao --syntax-check."""
     import re
     mods = set()
-    for f in list(ANS.glob("*.yml")) + list((ANS / "tasks").glob("*.yml")):
+    for f in ANS.rglob("*.yml"):
         mods |= set(re.findall(r"\b((?:ansible\.windows|community\.windows|community\.general|ansible\.netcommon|ansible\.posix)\.\w+)\b", f.read_text(encoding="utf-8")))
     for m in mods:
         ns, coll, name = m.split(".")

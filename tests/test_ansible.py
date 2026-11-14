@@ -84,13 +84,16 @@ def test_all_playbooks_syntax_check(tmp_path):
         assert p.returncode == 0, (pb.name, p.stdout[-800:], p.stderr[-800:])
 
 
-@pytest.mark.skipif(not shutil.which("ansible-playbook") or not shutil.which("dpkg-query") or __import__("os").geteuid() != 0, reason="requer ansible, Debian/Ubuntu e root")
+@pytest.mark.skipif(not shutil.which("ansible-playbook") or not shutil.which("dpkg-query"), reason="requer ansible e Debian/Ubuntu")
 def test_real_inventory_and_validation_run_on_localhost(app, tenant):
     app.config.update(ANSIBLE_ENABLED=True, ANSIBLE_PLAYBOOK=shutil.which("ansible-playbook"), ANSIBLE_DIR=str(ANSIBLE_DIR))
     py = next((p for p in ("/usr/bin/python3.12", "/usr/bin/python3") if Path(p).exists() and
                subprocess.run([p, "-c", "import apt_pkg"], capture_output=True).returncode == 0), None)
     if py is None:
         pytest.skip("python3-apt indisponível")
+    have = subprocess.run(["ansible-galaxy", "collection", "list", "community.general"], capture_output=True, text=True)
+    if "community.general" not in have.stdout:
+        pytest.skip("colecção community.general não instalada (ansible-galaxy collection install -r ansible/requirements.yml)")
     inv = {"all": {"hosts": {"asset1": {"ansible_connection": "local", "ansible_python_interpreter": py}}}, "linux": {"hosts": {"asset1": {}}}}
     r = ar.run_playbook("inventory_linux.yml", inv, {}, limit="asset1", timeout_minutes=5)
     assert r["rc"] == 0 and r["result"]["status"] == "succeeded" and len(r["result"]["software"]) > 10

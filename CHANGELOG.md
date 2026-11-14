@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.30.20261114 — CI verde
+- Testes compatíveis com Python 3.9; verificação de sintaxe cobre também os papéis (`roles/`); o teste real do inventário Linux só corre com a colecção `community.general` instalada.
+
 ## 1.29.20261114 — Correções do CI
 - Agente: a consola do Windows (cp1252) fazia falhar a impressão do relatório de validação; a saída passa a tolerar caracteres não representáveis.
 - Removidas duas importações não usadas (ruff).
