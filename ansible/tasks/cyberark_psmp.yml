@@ -1,0 +1,80 @@
+---
+# CyberArk PSMP (Linux): rpm CARKpsmp + serviço psmpsrv.
+- ansible.builtin.assert:
+    that: omx_mode in ['assess', 'apply']
+- ansible.builtin.set_fact:
+    psmp: "{{ cyberark_psmp }}"
+    cyb_stamp: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+
+- name: Versão instalada, serviço e espaço
+  ansible.builtin.shell: |
+    echo "version=$(rpm -q --qf '%{VERSION}-%{RELEASE}' {{ psmp.package }} 2>/dev/null || true)"
+    echo "service=$(systemctl is-active {{ psmp.service }} 2>/dev/null || true)"
+    echo "free_kb=$(df -Pk /opt | awk 'NR==2{print $4}')"
+  register: cyb_raw
+  changed_when: false
+- ansible.builtin.set_fact:
+    cyb_kv: "{{ dict(cyb_raw.stdout_lines | map('split', '=', 1) | list) }}"
+- ansible.builtin.set_fact:
+    cyb_version: "{{ cyb_kv.version if 'package' not in cyb_kv.version else '' }}"
+    cyb_ok_precheck: "{{ (cyb_kv.version | length) > 0 and 'not installed' not in cyb_kv.version and (cyb_kv.free_kb | int) > 2097152 }}"
+
+- name: Apply — pré-condições
+  when: omx_mode == 'apply'
+  ansible.builtin.assert:
+    that:
+      - cyb_ok_precheck | bool
+      - cyberark_media_src is defined and cyberark_media_src | length > 0
+      - cyberark_media_sha256 is defined and cyberark_media_sha256 | length == 64
+      - cyberark_target_version is defined and cyberark_target_version | length > 0
+
+- name: Atualizar o PSMP
+  when: omx_mode == 'apply'
+  vars:
+    omx_media_file: "/var/tmp/omx-cyberark/{{ cyberark_media_src | basename }}"
+  block:
+    - ansible.builtin.file: {path: /var/tmp/omx-cyberark, state: directory, mode: "0700"}
+    - ansible.builtin.copy: {src: "{{ cyberark_media_src }}", dest: "{{ omx_media_file }}", mode: "0600"}
+    - name: Verificar o SHA-256 do pacote
+      ansible.builtin.stat: {path: "{{ omx_media_file }}", checksum_algorithm: sha256}
+      register: cyb_pkg
+      failed_when: cyb_pkg.stat.checksum | lower != cyberark_media_sha256 | lower
+    - name: Cópia de segurança da configuração
+      ansible.builtin.shell: "mkdir -p /var/lib/omxpatch-cyberark && tar czf /var/lib/omxpatch-cyberark/psmp-{{ cyb_stamp }}.tgz {{ psmp.backup_paths | select('match', '^/') | join(' ') }} 2>/dev/null; ls -l /var/lib/omxpatch-cyberark/psmp-{{ cyb_stamp }}.tgz"
+      changed_when: true
+    - name: Parar o serviço
+      ansible.builtin.command: "systemctl stop {{ psmp.service }}"
+    - name: Executar a atualização (rpm -U ou o comando do fabricante)
+      ansible.builtin.shell: "{{ (cyberark_upgrade_cmd | default('', true)) or ('rpm -Uvh --test ' ~ omx_media_file ~ ' && rpm -Uvh ' ~ omx_media_file) }}"
+      register: cyb_run
+    - ansible.builtin.shell: "{{ cyberark_post_cmd }}"
+      when: cyberark_post_cmd is defined and cyberark_post_cmd | length > 0
+    - name: Arrancar o serviço
+      ansible.builtin.command: "systemctl start {{ psmp.service }}"
+    - ansible.builtin.command: "rpm -q --qf '%{VERSION}-%{RELEASE}' {{ psmp.package }}"
+      register: cyb_after
+      changed_when: false
+    - ansible.builtin.assert:
+        that: cyberark_target_version in cyb_after.stdout
+        fail_msg: "A versão final ({{ cyb_after.stdout }}) não é a esperada ({{ cyberark_target_version }})"
+    - ansible.builtin.set_fact:
+        cyb_result: {status: succeeded, version_before: "{{ cyb_version }}", version_after: "{{ cyb_after.stdout }}"}
+  rescue:
+    - name: Repor o serviço
+      ansible.builtin.command: "systemctl start {{ psmp.service }}"
+      failed_when: false
+    - ansible.builtin.set_fact:
+        cyb_result:
+          status: failed
+          version_before: "{{ cyb_version }}"
+          error: "{{ ansible_failed_result.msg | default('falha') }}"
+          note: "Serviço reposto. Cópia de segurança em /var/lib/omxpatch-cyberark/psmp-{{ cyb_stamp }}.tgz."
+  always:
+    - ansible.builtin.file: {path: /var/tmp/omx-cyberark, state: absent}
+      failed_when: false
+
+- name: Resultado
+  ansible.builtin.debug:
+    msg: >-
+      OMXPATCH_RESULT={{ ((cyb_result | default({'status': ('succeeded' if cyb_ok_precheck | bool else 'failed')}))
+      | combine({'mode': omx_mode, 'component': 'psmp', 'version': cyb_version, 'service': cyb_kv.service, 'precheck_ok': cyb_ok_precheck | bool})) | to_json }}

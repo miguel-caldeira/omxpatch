@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "${{ matrix.python-version }}"}
-      - run: pip install --require-hashes -r requirements.lock && pip install pytest coverage
+      - run: pip install --require-hashes -r requirements.lock && pip install pytest coverage ansible-core PyYAML
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq openssl
       - run: coverage run --source=omxpatch,omxpatch_agent -m pytest -q
       - run: coverage report --fail-under=65
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install --require-hashes -r requirements.lock
-      - run: pip install pytest
+      - run: pip install pytest ansible-core PyYAML
       - run: python -m pytest -q tests/test_platforms.py tests/test_agent.py tests/test_scale_compat.py -k "not openssl and not real_tls"
 
   real-os-validation:          # o agente num Windows e num macOS REAIS (runners descartáveis): leitura + alterações reversíveis

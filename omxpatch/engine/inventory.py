@@ -55,7 +55,7 @@ def upsert_asset(tenant: Tenant, data: dict, source: str = "manual") -> tuple[As
     changes = []
     for field in ("name", "fqdn", "ip", "mac", "kind", "os_family", "os_name", "os_version", "primary_user", "owner",
                   "department", "criticality", "internet_exposed", "country", "city", "cloud_provider", "cloud_id",
-                  "cluster", "tags", "open_ports", "connection", "ansible_user", "maintenance_group", "cmdb_ref"):
+                  "cluster", "tags", "open_ports", "connection", "ansible_user", "maintenance_group", "cmdb_ref", "platform", "cyberark_role"):
         if field in data and data[field] not in (None, ""):
             value = data[field]
             if field == "kind" and value not in ASSET_KINDS:
@@ -74,7 +74,7 @@ def upsert_asset(tenant: Tenant, data: dict, source: str = "manual") -> tuple[As
                 setattr(asset, field, value)
                 if field in TRACKED and not created:
                     changes.append((field, str(old or ""), str(value)))
-    for field in ("business_value", "ring", "ansible_port"):
+    for field in ("business_value", "ring", "ansible_port", "credential_id"):
         if data.get(field) not in (None, ""):
             try:
                 setattr(asset, field, int(data[field]))

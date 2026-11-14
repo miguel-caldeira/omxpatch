@@ -1,0 +1,112 @@
+---
+# Motor sem agente — atualização COMPLETA de macOS (SSH): sistema (softwareupdate) e software (Homebrew, Mac App Store via mas).
+# Variáveis (da tarefa): omx_mode = assess | apply ; omx_scope = os | software | all ; reboot_policy = never | if_needed | force
+# Nota (Apple Silicon): algumas atualizações do sistema exigem credenciais de um utilizador com token seguro; sem elas o softwareupdate recusa.
+- name: OMXPatch — atualizar macOS (SO e software)
+  hosts: macos
+  gather_facts: true
+  vars:
+    omx_mode: assess
+    omx_scope: all
+    reboot_policy: if_needed
+    omx_pending: []
+    omx_reboot: false
+    brew_prefixes: ['/opt/homebrew/bin', '/usr/local/bin']
+  tasks:
+    - name: Validar parâmetros
+      ansible.builtin.assert:
+        that:
+          - omx_mode in ['assess', 'apply']
+          - omx_scope in ['os', 'software', 'all']
+          - reboot_policy in ['never', 'if_needed', 'force']
+
+    # ------------------------------------------------------------------ sistema
+    - name: softwareupdate — o que há por atualizar
+      ansible.builtin.command: softwareupdate --list
+      become: true
+      register: omx_su_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['os', 'all']
+    - name: softwareupdate — lista normalizada (etiqueta, título, versão)
+      ansible.builtin.set_fact:
+        omx_pending: "{{ omx_pending + [{'name': item[1], 'package': item[0], 'current_version': '', 'new_version': item[2], 'source': 'softwareupdate',
+          'reboot': ('Action: restart' in item[3]), 'security': (item[1] is search('(?i)macos|security|safari|xprotect'))}] }}"
+      loop: "{{ (omx_su_list.stdout | default('')) | regex_findall('(?m)^\\* Label: (.+)\\n\\s*Title: (.+?), Version: ([^,]+),([^\\n]*)') }}"
+      loop_control: {label: "{{ item[0] }}"}
+      when: omx_scope in ['os', 'all'] and omx_su_list.stdout is defined
+    - ansible.builtin.set_fact:
+        omx_reboot: "{{ omx_reboot or ('restart' in ((omx_su_list.stdout | default('')) | lower)) }}"
+      when: omx_scope in ['os', 'all']
+
+    - name: softwareupdate — instalar tudo
+      ansible.builtin.command: "softwareupdate --install --all --agree-to-license {{ '--restart' if reboot_policy == 'force' else '' }}"
+      become: true
+      register: omx_su_up
+      changed_when: "'No updates are available' not in omx_su_up.stdout"
+      failed_when: false
+      when: omx_mode == 'apply' and omx_scope in ['os', 'all']
+
+    # ------------------------------------------------------------------ software
+    - name: Localizar o Homebrew e o mas
+      ansible.builtin.shell: |
+        for p in {{ brew_prefixes | join(' ') }}; do [ -x "$p/brew" ] && echo "brew=$p/brew"; [ -x "$p/mas" ] && echo "mas=$p/mas"; done; true
+      register: omx_tools_raw
+      changed_when: false
+      when: omx_scope in ['software', 'all']
+    - ansible.builtin.set_fact:
+        omx_brew: "{{ (omx_tools_raw.stdout_lines | default([]) | select('match', '^brew=') | map('regex_replace', '^brew=', '') | list | first) | default('') }}"
+        omx_mas: "{{ (omx_tools_raw.stdout_lines | default([]) | select('match', '^mas=') | map('regex_replace', '^mas=', '') | list | first) | default('') }}"
+      when: omx_scope in ['software', 'all']
+
+    - name: Homebrew — o que há por atualizar (como o utilizador, nunca root)
+      ansible.builtin.command: "{{ omx_brew }} outdated --json=v2"
+      register: omx_brew_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['software', 'all'] and omx_brew | length > 0
+    - name: Homebrew — lista normalizada
+      ansible.builtin.set_fact:
+        omx_pending: >-
+          {{ omx_pending + [{'name': item.name, 'current_version': ((item.installed_versions if item.installed_versions is string else (item.installed_versions | default([]) | first | default(''))) if item.installed_versions is defined else ''),
+          'new_version': item.current_version | default(''), 'source': 'brew'}] }}
+      loop: "{{ ((omx_brew_list.stdout | default('{}') | from_json).formulae | default([])) + ((omx_brew_list.stdout | default('{}') | from_json).casks | default([])) }}"
+      loop_control: {label: "{{ item.name }}"}
+      when: omx_scope in ['software', 'all'] and omx_brew | length > 0 and (omx_brew_list.stdout | default('')) | length > 0
+
+    - name: Mac App Store — o que há por atualizar
+      ansible.builtin.command: "{{ omx_mas }} outdated"
+      register: omx_mas_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['software', 'all'] and omx_mas | length > 0
+    - name: Mac App Store — lista normalizada
+      ansible.builtin.set_fact:
+        omx_pending: "{{ omx_pending + [{'name': (item | regex_replace('^\\d+\\s+', '') | regex_replace('\\s+\\(.*$', '')), 'current_version': ((item | regex_search('\\(([^ )]*)\\s*->', '\\1')) or [''])[0], 'new_version': ((item | regex_search('->\\s*([^)]*)\\)', '\\1')) or [''])[0], 'source': 'mas'}] }}"
+      loop: "{{ omx_mas_list.stdout_lines | default([]) }}"
+      when: omx_scope in ['software', 'all'] and omx_mas | length > 0
+
+    - name: Homebrew — atualizar tudo
+      ansible.builtin.shell: "{{ omx_brew }} update && {{ omx_brew }} upgrade && {{ omx_brew }} upgrade --cask --greedy"
+      register: omx_brew_up
+      failed_when: false
+      when: omx_mode == 'apply' and omx_scope in ['software', 'all'] and omx_brew | length > 0
+    - name: Mac App Store — atualizar tudo
+      ansible.builtin.command: "{{ omx_mas }} upgrade"
+      register: omx_mas_up
+      failed_when: false
+      when: omx_mode == 'apply' and omx_scope in ['software', 'all'] and omx_mas | length > 0
+
+    - name: Reiniciar conforme a política
+      ansible.builtin.reboot:
+        reboot_timeout: 1800
+      become: true
+      when: omx_mode == 'apply' and reboot_policy == 'if_needed' and omx_reboot
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: >-
+          OMXPATCH_RESULT={{ {'status': ('failed' if (omx_su_up.rc | default(0)) != 0 else 'succeeded'), 'mode': omx_mode, 'scope': omx_scope,
+          'pending': (omx_pending if omx_mode == 'assess' else []), 'applied': (omx_pending if omx_mode == 'apply' else []), 'pending_count': omx_pending | length,
+          'reboot_pending': omx_reboot,
+          'software_errors': ([('brew rc=' ~ omx_brew_up.rc)] if (omx_brew_up.rc | default(0)) != 0 else []) + ([('mas rc=' ~ omx_mas_up.rc)] if (omx_mas_up.rc | default(0)) != 0 else [])} | to_json }}

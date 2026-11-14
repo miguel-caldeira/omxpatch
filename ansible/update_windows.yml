@@ -1,0 +1,104 @@
+---
+# Motor sem agente — atualização COMPLETA de Windows (WinRM): sistema operativo (Windows Update/WSUS) e software (winget, Chocolatey).
+# Variáveis (da tarefa): omx_mode = assess | apply ; omx_scope = os | software | all ; reboot_policy = never | if_needed | force
+#   os        → Windows Update (segurança, críticas, rollups, drivers excluídos, definições)
+#   software  → winget upgrade --all e choco upgrade all (se existirem no equipamento)
+- name: OMXPatch — atualizar Windows (SO e software)
+  hosts: windows
+  gather_facts: false
+  vars:
+    omx_mode: assess
+    omx_scope: all
+    reboot_policy: if_needed
+    omx_wua_categories: [SecurityUpdates, CriticalUpdates, UpdateRollups, Updates, DefinitionUpdates]
+    omx_pending: []
+    omx_reboot: false
+  tasks:
+    - name: Validar parâmetros
+      ansible.builtin.assert:
+        that:
+          - omx_mode in ['assess', 'apply']
+          - omx_scope in ['os', 'software', 'all']
+          - reboot_policy in ['never', 'if_needed', 'force']
+
+    # ------------------------------------------------------------------ sistema operativo (Windows Update)
+    - name: Windows Update — procurar
+      ansible.windows.win_updates:
+        category_names: "{{ omx_wua_categories }}"
+        state: searched
+      register: omx_wua_search
+      when: omx_scope in ['os', 'all']
+
+    - name: Windows Update — lista normalizada
+      ansible.builtin.set_fact:
+        omx_pending: >-
+          {{ omx_pending + [{'name': item.value.title, 'current_version': '', 'new_version': (item.value.kb | default([]) | first | default('') | string | regex_replace('(?i)^KB', '')),
+          'kb': ('KB' ~ (item.value.kb | default([]) | first | string | regex_replace('(?i)^KB', ''))) if (item.value.kb | default([]) | length) > 0 else '', 'source': 'wua',
+          'severity': ('critical' if 'Critical' in (item.value.categories | default([]) | join(',')) else 'high' if 'Security' in (item.value.categories | default([]) | join(',')) else 'medium'),
+          'reboot': item.value.reboot_required | default(false)}] }}
+      loop: "{{ omx_wua_search.updates | default({}) | dict2items }}"
+      loop_control: {label: "{{ item.value.title | default('') }}"}
+      when: omx_scope in ['os', 'all']
+
+    - name: Windows Update — instalar
+      ansible.windows.win_updates:
+        category_names: "{{ omx_wua_categories }}"
+        state: installed
+        reboot: "{{ reboot_policy == 'force' }}"
+        reboot_timeout: 1800
+      register: omx_wua
+      when: omx_mode == 'apply' and omx_scope in ['os', 'all']
+    - ansible.builtin.set_fact:
+        omx_reboot: "{{ omx_reboot or (omx_wua.reboot_required | default(false)) }}"
+      when: omx_mode == 'apply' and omx_scope in ['os', 'all']
+
+    # ------------------------------------------------------------------ software (winget / Chocolatey)
+    - name: Procurar o winget e o Chocolatey
+      ansible.windows.win_shell: |
+        $w = Get-Command winget.exe -ErrorAction SilentlyContinue
+        if (-not $w) { $c = Get-ChildItem "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller_*\winget.exe" -ErrorAction SilentlyContinue | Sort-Object FullName | Select-Object -Last 1; if ($c) { $w = $c } }
+        $ch = Get-Command choco.exe -ErrorAction SilentlyContinue
+        @{ winget = $(if ($w) { $w.Source + $w.FullName } else { '' }); choco = $(if ($ch) { $ch.Source } else { '' }) } | ConvertTo-Json -Compress
+      register: omx_tools_raw
+      changed_when: false
+      when: omx_scope in ['software', 'all']
+    - ansible.builtin.set_fact:
+        omx_tools: "{{ omx_tools_raw.stdout | default('{}') | from_json }}"
+      when: omx_scope in ['software', 'all']
+
+    - name: winget — o que há por atualizar
+      ansible.windows.win_command: '"{{ omx_tools.winget }}" upgrade --include-unknown --accept-source-agreements --disable-interactivity'
+      register: omx_winget_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['software', 'all'] and (omx_tools.winget | default('')) | length > 0
+    - name: choco — o que há por atualizar
+      ansible.windows.win_command: '"{{ omx_tools.choco }}" outdated -r --no-progress'
+      register: omx_choco_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['software', 'all'] and (omx_tools.choco | default('')) | length > 0
+    - name: winget — atualizar tudo
+      ansible.windows.win_command: '"{{ omx_tools.winget }}" upgrade --all --include-unknown --silent --accept-source-agreements --accept-package-agreements --disable-interactivity'
+      register: omx_winget_up
+      failed_when: false
+      when: omx_mode == 'apply' and omx_scope in ['software', 'all'] and (omx_tools.winget | default('')) | length > 0
+    - name: choco — atualizar tudo
+      ansible.windows.win_command: '"{{ omx_tools.choco }}" upgrade all -y --no-progress'
+      register: omx_choco_up
+      failed_when: false
+      when: omx_mode == 'apply' and omx_scope in ['software', 'all'] and (omx_tools.choco | default('')) | length > 0
+
+    - name: Reiniciar conforme a política
+      ansible.windows.win_reboot:
+        reboot_timeout: 1800
+      when: omx_mode == 'apply' and reboot_policy != 'never' and (reboot_policy == 'force' or omx_reboot)
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: >-
+          OMXPATCH_RESULT={{ {'status': ('failed' if (omx_wua.failed | default(false)) else 'succeeded'), 'mode': omx_mode, 'scope': omx_scope,
+          'pending': (omx_pending if omx_mode == 'assess' else []), 'applied': (omx_pending if omx_mode == 'apply' else []), 'pending_count': omx_pending | length,
+          'reboot_pending': omx_reboot, 'raw_winget': (omx_winget_list.stdout | default('')), 'raw_choco': (omx_choco_list.stdout | default('')),
+          'software_errors': ([('winget rc=' ~ omx_winget_up.rc)] if (omx_winget_up.rc | default(0)) not in [0, -1979842517, 0] else [])
+              + ([('choco rc=' ~ omx_choco_up.rc)] if (omx_choco_up.rc | default(0)) != 0 else [])} | to_json }}

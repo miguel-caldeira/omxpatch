@@ -1,0 +1,19 @@
+---
+# Valores por omissão do motor CyberArk (podem ser substituídos por tarefa). São EXPRESSÕES REGULARES / caminhos habituais: confirme-os no seu ambiente.
+cyberark_defaults:
+  vault:
+    product_regex: '(?i)(Cyber-?Ark.*(Vault|Digital)|PrivateArk.*Server)'
+    services_regex: '(?i)(PrivateArk|Cyber-?Ark.*(Vault|Logic|Event))'
+    backup_paths: ['C:\Program Files (x86)\PrivateArk\Server\Conf', 'C:\Program Files (x86)\PrivateArk\Server\DBParm.ini']
+  cpm:
+    product_regex: '(?i)Cyber-?Ark.*(Password Manager|Central Policy Manager|CPM)'
+    services_regex: '(?i)(Cyber-?Ark.*(Password Manager|Central Policy Manager|Scanner))'
+    backup_paths: ['C:\Program Files (x86)\CyberArk\Password Manager\Vault', 'C:\Program Files (x86)\CyberArk\Password Manager\bin\Vault.ini', 'C:\Program Files (x86)\CyberArk\Password Manager\Policies']
+  psm:
+    product_regex: '(?i)Cyber-?Ark.*(Privileged Session Manager|PSM)'
+    services_regex: '(?i)(Cyber-?Ark.*(Privileged Session Manager|PSM))'
+    backup_paths: ['C:\Program Files (x86)\CyberArk\PSM\Vault', 'C:\Program Files (x86)\CyberArk\PSM\Hardening', 'C:\Program Files (x86)\CyberArk\PSM\Temp\PSMConfigureAppLocker.xml']
+cyberark_psmp:
+  package: CARKpsmp
+  service: psmpsrv
+  backup_paths: ['/etc/opt/CARKpsmp', '/opt/CARKpsmp/env', '/opt/CARKpsmp/temp/vault.ini']

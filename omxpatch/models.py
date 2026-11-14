@@ -59,11 +59,12 @@ CAMPAIGN_STATUSES = {"draft": "Rascunho", "scheduled": "Agendada", "running": "E
 TASK_TYPES = {"update_scan": "Descobrir atualizações", "practice_sim": "Simulação de boa prática", "practice_apply": "Aplicar boa prática", "practice_rollback": "Reverter boa prática",
               "simulate": "Simulação prévia", "inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
               "control": "Controlo compensatório", "rollback": "Reverter patch", "wake": "Wake-on-LAN",
-              "agent_ctl": "Comando ao agente"}
+              "agent_ctl": "Comando ao agente", "os_update": "Atualização do SO (Ansible)", "sw_update": "Atualização de software (Ansible)",
+              "cyb_upgrade": "Atualização CyberArk (Ansible)", "net_assess": "Avaliação de equipamento de rede"}
 TASK_STATUSES = {"pending": "Pendente", "waiting_window": "À espera da janela", "waking": "Wake-on-LAN",
                  "queued": "Em fila", "sent": "Enviada ao agente", "running": "Em execução",
                  "succeeded": "Concluída", "failed": "Falhou", "rolled_back": "Revertida",
-                 "skipped": "Ignorada", "cancelled": "Cancelada"}
+                 "skipped": "Ignorada", "cancelled": "Cancelada", "waiting_dep": "À espera da etapa anterior"}
 TASK_FINAL = ("succeeded", "failed", "rolled_back", "skipped", "cancelled")
 
 RINGS = {0: "Ring 0 — Laboratório", 1: "Ring 1 — TI", 2: "Ring 2 — Power Users",
@@ -302,6 +303,9 @@ class Asset(TimestampMixin, db.Model):
     connection = db.Column(db.String(8), default="agent")       # agent | ansible
     ansible_user = db.Column(db.String(120), default="")
     ansible_port = db.Column(db.Integer, default=0)
+    platform = db.Column(db.String(16), default="")             # equipamentos de rede (checkpoint, fortios, panos, cisco_ios, cisco_nxos, junos, eos)
+    cyberark_role = db.Column(db.String(8), default="")         # componente CyberArk: vault | cpm | psm | psmp
+    credential_id = db.Column(db.Integer, db.ForeignKey("ansible_credentials.id"), nullable=True)   # credencial usada pelo motor Ansible
     maintenance_group = db.Column(db.String(120), default="")
     cmdb_ref = db.Column(db.String(190), default="")            # ID na CMDB externa (ServiceNow, etc.)
     cmdb_synced_at = db.Column(db.DateTime, nullable=True)
@@ -928,6 +932,62 @@ class AutonomousRun(TimestampMixin, db.Model):
     @property
     def report_data(self) -> dict:
         return jloads(self.report, {})
+
+
+class AnsibleCredential(TimestampMixin, db.Model):
+    """Credencial do motor Ansible (sem agente): palavra-passe, chave SSH ou token de API; cifrada com a chave dos conectores."""
+    __tablename__ = "ansible_credentials"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    kind = db.Column(db.String(12), nullable=False)           # password | ssh_key | api_token
+    username = db.Column(db.String(120), default="")
+    secret = db.Column(db.Text, default="")                   # JSON cifrado (Fernet)
+    become_password = db.Column(db.Boolean, default=False)    # a palavra-passe serve também para sudo/enable
+
+
+CREDENTIAL_KINDS = {"password": "Utilizador + palavra-passe", "ssh_key": "Utilizador + chave SSH privada", "api_token": "Token / chave de API"}
+NET_PLATFORMS = {"checkpoint": "Check Point (Gaia)", "fortios": "Fortinet FortiGate (FortiOS)", "panos": "Palo Alto (PAN-OS)",
+                 "cisco_ios": "Cisco IOS / IOS-XE", "cisco_nxos": "Cisco NX-OS", "junos": "Juniper Junos", "eos": "Arista EOS"}
+CYBERARK_ROLES = {"vault": "Cofre (Vault)", "cpm": "CPM", "psm": "PSM", "psmp": "PSMP"}
+
+
+class NetworkAssessment(db.Model):
+    """Resultado da avaliação de atualizações de um equipamento de rede/firewall (somente leitura no equipamento)."""
+    __tablename__ = "network_assessments"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("assets.id"), nullable=False, index=True)
+    task_id = db.Column(db.Integer, nullable=True)
+    assessed_at = db.Column(db.DateTime, default=utcnow, nullable=False, index=True)
+    platform = db.Column(db.String(16), default="")
+    model = db.Column(db.String(120), default="")
+    version = db.Column(db.String(120), default="")
+    verdict = db.Column(db.String(16), default="unknown")     # current | update | below_min | eol | vulnerable | unknown
+    recommended = db.Column(db.String(120), default="")
+    detail = db.Column(db.Text, default="{}")                 # JSON: motivos, versões disponíveis, CVE
+    asset = db.relationship("Asset")
+
+    @property
+    def data(self) -> dict:
+        return jloads(self.detail, {})
+
+
+NET_VERDICTS = {"current": "Atualizado", "update": "Atualização disponível", "below_min": "Abaixo do mínimo da política", "eol": "Fim de suporte",
+                "vulnerable": "Versão com vulnerabilidades conhecidas", "unknown": "Indeterminado"}
+
+
+class NetBaseline(TimestampMixin, db.Model):
+    """Política de versões por plataforma/modelo (definida pelo administrador): mínima, recomendada e versões em fim de suporte."""
+    __tablename__ = "net_baselines"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    platform = db.Column(db.String(16), nullable=False)
+    model_glob = db.Column(db.String(120), default="*")       # ex.: FortiGate-60*, PA-4*, *
+    min_version = db.Column(db.String(60), default="")
+    recommended = db.Column(db.String(60), default="")
+    eol_below = db.Column(db.String(60), default="")          # versões anteriores a esta estão em fim de suporte
+    notes = db.Column(db.String(500), default="")
 
 
 class Connector(TimestampMixin, db.Model):

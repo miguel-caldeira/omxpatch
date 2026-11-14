@@ -345,6 +345,45 @@ O **kit de validação** (`omxpatch-validation-kit-<versão>.zip`) traz o agente
 
 O Ansible é **opcional** e articula o modo sem agente: `ansible/` contém 19 *playbooks* e os papéis `omxpatch_server` e `omxpatch_agent`. Em **Sistema** vê se o `ansible-playbook` está disponível. `omxpatch ansible-vars --tenant <slug>` gera as variáveis (inclui um token de registo). Os resultados são lidos do marcador `OMXPATCH_RESULT=` do *callback* JSON.
 
+# 19. Motor Ansible: atualização completa, CyberArk e equipamentos de rede (sem agente)
+
+## 19.1 Análise dos scripts que já existiam
+Antes desta versão os playbooks (`patch_*.yml`) aplicavam **um único pacote ou KB** por tarefa, escolhido a partir de uma vulnerabilidade, em Linux, Windows e macOS. Não faziam: atualização completa do sistema, atualização de todo o software instalado, nenhuma operação sobre CyberArk, nenhuma avaliação de equipamentos de rede, nem guardavam credenciais (assumiam chaves SSH do controlador). Os `patch_*.yml` mantêm-se para o fluxo «patch de uma vulnerabilidade»; o motor novo acrescenta o que faltava.
+
+## 19.2 O que o motor faz
+| Operação | O que faz | Playbook |
+|---|---|---|
+| Sistema operativo | Windows Update/WSUS; apt, dnf/yum, zypper (com «só segurança»); softwareupdate | `update_windows.yml`, `update_linux.yml`, `update_macos.yml` |
+| Software e aplicações | winget e Chocolatey; snap e flatpak; Homebrew e Mac App Store | os mesmos (parâmetro `omx_scope`) |
+| Tudo | sistema operativo e software | os mesmos |
+| CyberArk | Cofre (Vault), CPM, PSM (Windows/WinRM) e PSMP (Linux/SSH), por esta ordem | `cyberark_upgrade.yml` |
+| Rede e firewalls | **Avaliação só de leitura** de Check Point, FortiGate, Palo Alto, Cisco IOS/IOS-XE e NX-OS, Juniper Junos, Arista EOS | `net_assess.yml` |
+
+**Fluxo:** *Avaliar* (só leitura: lista o que há por atualizar) → **OK explícito do administrador** → *Aplicar*. Aplicar exige uma avaliação bem-sucedida das últimas 24 h de cada ativo. Os resultados das avaliações de SO/software entram em **Atualizações disponíveis**. Os componentes CyberArk respeitam a ordem **Vault → CPM → PSM → PSMP**: cada etapa só arranca se a anterior terminou com sucesso (senão é cancelada).
+
+## 19.3 Preparar
+1. No controlador (servidor OMXPatch): Ansible instalado (`install.sh --with-ansible`) e as coleções: `ansible-galaxy collection install -r ansible/requirements.yml`. Ativar em `[ansible] enabled = true`.
+2. Alvos: Linux/macOS por SSH com sudo; Windows por WinRM (HTTPS, certificado válido). macOS: o Homebrew corre como o utilizador do ativo, nunca como root; em Apple Silicon algumas atualizações do sistema exigem um utilizador com token seguro.
+3. **Menu Motor Ansible → Credenciais**: palavra-passe, chave SSH ou token de API. Ficam cifradas (Fernet), nunca aparecem na interface nem na auditoria e seguem para o Ansible num ficheiro temporário 0600 apagado no fim.
+4. Em cada **ativo**: ligação «Sem agente (Ansible)», a credencial, e (conforme o caso) a **plataforma de rede** ou o **componente CyberArk**.
+
+## 19.4 CyberArk (Vault, CPM, PSM, PSMP)
+O motor trata do que é comum e seguro: pré-verificações (componente e serviços encontrados, ≥ 5 GB livres), **integridade do pacote** (SHA-256 obrigatório), **cópia de segurança** da configuração, paragem e arranque ordenados dos serviços, execução do **comando de atualização do fabricante**, **confirmação da versão final** e **reposição dos serviços** se algo falhar (o resultado diz onde está a cópia de segurança para o restauro manual).
+
+O pacote do fabricante tem de estar no controlador (caminho absoluto) e o administrador indica o SHA-256, a versão alvo e escreve «ATUALIZAR» para confirmar. **O comando de atualização dos componentes Windows não vem fixo**: depende da versão (scripts «InstallationAutomation» ou o instalador do pacote) e tem de ser fornecido por si e **validado primeiro em laboratório**; o PSMP usa por omissão `rpm -Uvh` (com `--test` antes). As expressões regulares dos serviços e os caminhos de cópia de segurança estão em `ansible/group_vars/cyberark.yml` e podem ser ajustados. Siga também o procedimento de atualização do fabricante para a sua versão (janela de manutenção, cópia de segurança do Cofre, ordem dos componentes).
+
+## 19.5 Switches, routers e firewalls
+A avaliação **não altera nada no equipamento**.
+- **FortiGate:** API REST (token de API só de leitura) — versão, modelo e firmware disponível indicado pelo FortiGuard.
+- **Palo Alto:** API XML (chave de API de um perfil só de leitura) — versão, modelo e versões listadas por `request system software check`.
+- **Check Point (Gaia):** SSH, `clish -c "show version all"` (o utilizador deve ter shell expert/bash por omissão para o Ansible).
+- **Cisco IOS/IOS-XE, NX-OS, Juniper, Arista:** `show version` por `network_cli`.
+
+A consola extrai versão e modelo, aplica a **política de versões** (menu *Avaliação de rede*: mínima, recomendada e «fim de suporte antes de», por plataforma e modelo — definida por si a partir dos avisos do fabricante; **não há catálogo embutido** para nunca recomendar versões desatualizadas) e cruza com os CVE conhecidos (correspondência aproximada: confirmar no aviso do fabricante). Veredictos: atualizado, atualização disponível, abaixo do mínimo, fim de suporte, vulnerável, indeterminado. **A atualização do firmware destes equipamentos continua a ser feita pelo procedimento do fabricante**; o motor diz o que atualizar e para que versão.
+
+## 19.6 O que foi e o que não foi validado
+Validado por testes automáticos: o Linux (avaliação real no próprio servidor de testes), a leitura de saídas reais de `softwareupdate`, `brew` e `mas` (macOS) com executáveis simulados, e os playbooks Windows, CyberArk (Windows e PSMP) e rede (FortiGate, Palo Alto, Check Point) contra módulos, APIs e comandos **simulados**. **Não foi testado** em Windows, macOS, CyberArk nem equipamentos de rede reais: valide em laboratório antes de produção, sobretudo a atualização CyberArk e as plataformas Cisco/Juniper/Arista (só verificadas na sintaxe). A integração com ITSM (ServiceNow, etc.) não cobre ainda estas operações: o OK é o do administrador na consola.
+
 # 18. Referência rápida
 
 - **Referência técnica completa** (parâmetros, comandos, rotas e perfis, API, integrações, boas práticas, tipos de tarefa): `REFERENCIA.md`, gerada a partir do código.

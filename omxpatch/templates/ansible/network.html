@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Avaliação de rede{% endblock %}
+{% block content %}<div class="actions"><h1>Avaliação de atualizações — rede e firewalls</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('ansible_ops.index') }}">Motor Ansible</a></div>
+<p class="muted small">Check Point, FortiGate, Palo Alto, Cisco IOS/NX-OS, Juniper e Arista. A avaliação é <strong>só de leitura</strong>: lê a versão e o modelo, as versões disponíveis (FortiGate e Palo Alto indicam-nas), aplica a <strong>política de versões</strong> abaixo e cruza com os CVE conhecidos. Para avaliar, crie o ativo com ligação «Sem agente (Ansible)», plataforma e credencial, e use «Avaliar» no Motor Ansible.</p>
+<div class="panel"><h2>Equipamentos</h2><table><tr><th>Equipamento</th><th>Plataforma</th><th>Modelo</th><th>Versão</th><th>Veredicto</th><th>Recomendada</th><th>Motivos</th><th>Avaliado</th></tr>
+{% for d in devices %}{% set a = last.get(d.id) %}<tr><td>{{ d.name }}</td><td class="small">{{ platforms.get(d.platform, d.platform) }}</td><td class="small">{{ a.model if a else '' }}</td><td>{{ a.version if a else '—' }}</td>
+<td>{% if a %}<span class="badge {{ 'risk-low' if a.verdict == 'current' else ('risk-high' if a.verdict in ('eol', 'vulnerable', 'below_min') else 'risk-medium') }}">{{ NET_VERDICTS[a.verdict] }}</span>{% else %}—{% endif %}</td>
+<td>{{ a.recommended if a else '' }}</td><td class="small">{% if a %}{{ a.data.reasons|join(' ') }}{% if a.data.cves %} <br>CVE: {{ a.data.cves[:5]|join(', ') }}{{ ' …' if a.data.cves|length > 5 }}{% endif %}{% endif %}</td><td class="small">{{ a.assessed_at|dt if a else '—' }}</td></tr>
+{% else %}<tr><td colspan="8" class="muted">Sem equipamentos de rede (ativos com plataforma definida).</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Política de versões</h2><p class="muted small">Definida pelo administrador a partir dos avisos e do ciclo de vida do fabricante (não há catálogo embutido, para nunca recomendar versões desatualizadas). O modelo aceita padrões, ex.: <code>FortiGate-60*</code>, <code>PA-4*</code>, <code>*</code>.</p>
+<table><tr><th>Plataforma</th><th>Modelo</th><th>Mínima</th><th>Recomendada</th><th>Fim de suporte antes de</th><th>Notas</th><th></th></tr>
+{% for b in baselines %}<tr><td>{{ platforms.get(b.platform, b.platform) }}</td><td>{{ b.model_glob }}</td><td>{{ b.min_version }}</td><td>{{ b.recommended }}</td><td>{{ b.eol_below }}</td><td class="small">{{ b.notes }}</td>
+<td>{% if current_user.can_manage %}<form method="post" action="{{ url_for('ansible_ops.baseline_delete', bid=b.id) }}" class="inline">{{ csrf() }}<button class="btn sm danger">Eliminar</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem política definida.</td></tr>{% endfor %}</table>
+{% if current_user.can_manage %}<form method="post" action="{{ url_for('ansible_ops.baseline_save') }}" class="row mt">{{ csrf() }}
+<div><label for="platform">Plataforma</label><select id="platform" name="platform">{% for k, v in platforms.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+<div><label for="model_glob">Modelo</label><input id="model_glob" name="model_glob" value="*"></div><div><label for="min_version">Mínima</label><input id="min_version" name="min_version"></div>
+<div><label for="recommended">Recomendada</label><input id="recommended" name="recommended"></div><div><label for="eol_below">Fim de suporte antes de</label><input id="eol_below" name="eol_below"></div>
+<div><label for="notes">Notas</label><input id="notes" name="notes"></div><div><label>&nbsp;</label><button class="btn">Adicionar</button></div></form>{% endif %}</div>{% endblock %}

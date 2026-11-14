@@ -83,8 +83,8 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
     if app.config["URL_PREFIX"]:
         app.wsgi_app = PrefixMiddleware(app.wsgi_app, app.config["URL_PREFIX"])
 
-    from .web import admin, agent_api, api, auth, branding, main, patching, plans, secops, updates, baseline
-    for bp in (auth.bp, main.bp, patching.bp, secops.bp, admin.bp, api.bp, agent_api.bp, branding.bp, plans.bp, updates.bp, baseline.bp):
+    from .web import admin, agent_api, ansible_ops, api, auth, branding, main, patching, plans, secops, updates, baseline
+    for bp in (auth.bp, main.bp, patching.bp, secops.bp, admin.bp, api.bp, agent_api.bp, branding.bp, plans.bp, updates.bp, baseline.bp, ansible_ops.bp):
         app.register_blueprint(bp)
 
     @login_manager.user_loader
@@ -169,7 +169,8 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
             "CONTROL_STATUSES": m.CONTROL_STATUSES, "SIGNAL_KINDS": m.SIGNAL_KINDS, "SIMULATIONS": m.SIMULATIONS,
             "AUTONOMOUS_MODES": m.AUTONOMOUS_MODES, "AUTONOMOUS_STAGES": m.AUTONOMOUS_STAGES,
             "AUTONOMOUS_STAGE_LABELS": m.AUTONOMOUS_STAGE_LABELS, "EXPLOIT_MATURITY": m.EXPLOIT_MATURITY,
-            "now": m.utcnow(), "version": __version__,
+            "now": m.utcnow(), "version": __version__, "NET_PLATFORMS": m.NET_PLATFORMS, "CYBERARK_ROLES": m.CYBERARK_ROLES, "CREDENTIAL_KINDS": m.CREDENTIAL_KINDS,
+            "NET_VERDICTS": m.NET_VERDICTS,
             "all_tenants": (m.Tenant.query.order_by(m.Tenant.name).all()
                             if current_user.is_authenticated and current_user.is_superadmin else []),
             "license_banner": _license_banner(),

@@ -1,0 +1,115 @@
+---
+# Componente CyberArk em Windows (Vault, CPM, PSM). Usa cyberark_defaults[omx_component] de group_vars/cyberark.yml.
+- name: Validar parâmetros
+  ansible.builtin.assert:
+    that:
+      - omx_mode in ['assess', 'apply']
+      - omx_component in ['vault', 'cpm', 'psm']
+    fail_msg: "Componente ou modo inválido"
+- ansible.builtin.set_fact:
+    cyb: "{{ cyberark_defaults[omx_component] }}"
+    cyb_stamp: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+    cyb_svc_regex: "{{ cyberark_services_regex | default(cyberark_defaults[omx_component].services_regex) }}"
+
+- name: Versão instalada e serviços do componente
+  ansible.windows.win_shell: |
+    $apps = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+      Where-Object { $_.DisplayName -match '{{ cyb.product_regex }}' } | Select-Object DisplayName, DisplayVersion
+    $svc = Get-Service | Where-Object { $_.DisplayName -match '{{ cyb_svc_regex }}' -or $_.Name -match '{{ cyb_svc_regex }}' } | Select-Object Name, DisplayName, @{n='Status';e={"$($_.Status)"}}
+    $disk = (Get-PSDrive -Name C).Free
+    @{ products = @($apps); services = @($svc); free_bytes = $disk } | ConvertTo-Json -Compress -Depth 4
+  register: cyb_state_raw
+  changed_when: false
+- ansible.builtin.set_fact:
+    cyb_state: "{{ cyb_state_raw.stdout | from_json }}"
+- ansible.builtin.set_fact:
+    cyb_version: "{{ (cyb_state.products | first).DisplayVersion | default('') if (cyb_state.products | length) > 0 else '' }}"
+    cyb_ok_precheck: "{{ (cyb_state.products | length) > 0 and (cyb_state.services | length) > 0 and (cyb_state.free_bytes | int) > 5368709120 }}"
+
+- name: Apply — pré-condições
+  when: omx_mode == 'apply'
+  ansible.builtin.assert:
+    that:
+      - cyb_ok_precheck | bool
+      - cyberark_media_src is defined and cyberark_media_src | length > 0
+      - cyberark_media_sha256 is defined and cyberark_media_sha256 | length == 64
+      - cyberark_upgrade_cmd is defined and cyberark_upgrade_cmd | length > 0
+      - cyberark_target_version is defined and cyberark_target_version | length > 0
+    fail_msg: >-
+      Pré-condições não cumpridas: componente instalado e com serviços, ≥5 GB livres em C:, pacote do fabricante (cyberark_media_src + SHA-256),
+      comando de atualização do fabricante (cyberark_upgrade_cmd) e versão alvo.
+
+- name: Atualizar (com cópia de segurança e reposição em caso de falha)
+  when: omx_mode == 'apply'
+  vars:
+    omx_media_dir: 'C:\Windows\Temp\omx-cyberark-{{ omx_component }}'
+  block:
+    - name: Pasta de trabalho e de cópia de segurança
+      ansible.windows.win_file: {path: "{{ item }}", state: directory}
+      loop: ['{{ omx_media_dir }}', 'C:\ProgramData\OMXPatch\cyberark-backup\{{ omx_component }}-{{ cyb_stamp }}']
+    - name: Copiar o pacote do fabricante
+      ansible.windows.win_copy:
+        src: "{{ cyberark_media_src }}"
+        dest: '{{ omx_media_dir }}\package.zip'
+    - name: Verificar o SHA-256 do pacote
+      ansible.windows.win_stat:
+        path: '{{ omx_media_dir }}\package.zip'
+        checksum_algorithm: sha256
+      register: cyb_pkg
+      failed_when: cyb_pkg.stat.checksum | lower != cyberark_media_sha256 | lower
+    - name: Extrair o pacote
+      ansible.windows.win_shell: "Expand-Archive -Path '{{ omx_media_dir }}\\package.zip' -DestinationPath '{{ omx_media_dir }}\\media' -Force"
+    - name: Cópia de segurança da configuração
+      ansible.windows.win_shell: |
+        $dest = 'C:\ProgramData\OMXPatch\cyberark-backup\{{ omx_component }}-{{ cyb_stamp }}'
+        foreach ($p in @({% for p in cyb.backup_paths %}'{{ p }}'{{ ',' if not loop.last }}{% endfor %})) { if (Test-Path $p) { Copy-Item -Path $p -Destination $dest -Recurse -Force } }
+        (Get-ChildItem $dest -Recurse -File | Measure-Object).Count
+      register: cyb_backup
+    - name: Parar os serviços do componente
+      ansible.windows.win_shell: |
+        Get-Service | Where-Object { $_.DisplayName -match '{{ cyb_svc_regex }}' -or $_.Name -match '{{ cyb_svc_regex }}' } | Where-Object { $_.Status -ne 'Stopped' } | Stop-Service -Force -ErrorAction Stop
+    - name: Executar o comando de atualização do fabricante
+      ansible.windows.win_shell: "{{ cyberark_upgrade_cmd }}"
+      args: {chdir: '{{ omx_media_dir }}\media'}
+      register: cyb_run
+    - name: Comando pós-atualização (opcional)
+      ansible.windows.win_shell: "{{ cyberark_post_cmd }}"
+      args: {chdir: '{{ omx_media_dir }}\media'}
+      when: cyberark_post_cmd is defined and cyberark_post_cmd | length > 0
+    - name: Arrancar os serviços do componente
+      ansible.windows.win_shell: |
+        Get-Service | Where-Object { $_.DisplayName -match '{{ cyb_svc_regex }}' -or $_.Name -match '{{ cyb_svc_regex }}' } | Where-Object { $_.StartType -ne 'Disabled' } | Start-Service -ErrorAction Stop
+    - name: Versão depois da atualização
+      ansible.windows.win_shell: |
+        (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+          Where-Object { $_.DisplayName -match '{{ cyb.product_regex }}' } | Select-Object -First 1).DisplayVersion
+      register: cyb_after
+      changed_when: false
+    - name: Confirmar a versão alvo
+      ansible.builtin.assert:
+        that: cyb_after.stdout | trim is match('^' ~ (cyberark_target_version | regex_escape) ~ '.*') or (cyberark_target_version in (cyb_after.stdout | trim))
+        fail_msg: "A versão final ({{ cyb_after.stdout | trim }}) não é a esperada ({{ cyberark_target_version }})"
+    - ansible.builtin.set_fact:
+        cyb_result: {status: succeeded, version_before: "{{ cyb_version }}", version_after: "{{ cyb_after.stdout | trim }}", backup_files: "{{ cyb_backup.stdout | trim }}"}
+  rescue:
+    - name: Repor os serviços (o comando do fabricante falhou ou a versão não confere)
+      ansible.windows.win_shell: |
+        Get-Service | Where-Object { $_.DisplayName -match '{{ cyb_svc_regex }}' -or $_.Name -match '{{ cyb_svc_regex }}' } | Where-Object { $_.StartType -ne 'Disabled' -and $_.Status -ne 'Running' } | Start-Service -ErrorAction SilentlyContinue
+      failed_when: false
+    - ansible.builtin.set_fact:
+        cyb_result:
+          status: failed
+          version_before: "{{ cyb_version }}"
+          error: "{{ ansible_failed_result.msg | default('falha') }}"
+          note: "Serviços repostos. Restauro manual a partir de C:\\ProgramData\\OMXPatch\\cyberark-backup\\{{ omx_component }}-{{ cyb_stamp }} (ver o procedimento do fabricante)."
+  always:
+    - name: Limpar a pasta de trabalho
+      ansible.windows.win_file: {path: '{{ omx_media_dir }}', state: absent}
+      failed_when: false
+
+- name: Resultado
+  ansible.builtin.debug:
+    msg: >-
+      OMXPATCH_RESULT={{ ((cyb_result | default({'status': ('succeeded' if cyb_ok_precheck | bool else 'failed')}))
+      | combine({'mode': omx_mode, 'component': omx_component, 'version': cyb_version, 'services': cyb_state.services, 'free_gb': ((cyb_state.free_bytes | int) / 1073741824) | round(1),
+      'precheck_ok': cyb_ok_precheck | bool})) | to_json }}

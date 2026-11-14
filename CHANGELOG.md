@@ -2,6 +2,14 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.28.20261113 — Motor Ansible: atualização completa, CyberArk e equipamentos de rede
+- **Motor Ansible sem agente** (menu «Motor Ansible»): atualiza o sistema operativo **e todo o software** em Windows (Windows Update, winget, Chocolatey), Linux (apt, dnf/yum, zypper, snap, flatpak) e macOS (softwareupdate, Homebrew, Mac App Store). Fluxo avaliar (só leitura) → OK do administrador → aplicar (avaliação das últimas 24 h obrigatória). As avaliações alimentam «Atualizações disponíveis».
+- **CyberArk**: Vault, CPM, PSM (Windows) e PSMP (Linux) com pré-verificações, SHA-256 do pacote, cópia de segurança, ordem Vault → CPM → PSM → PSMP imposta, versão final confirmada e reposição dos serviços em caso de falha. O comando de atualização dos componentes Windows é fornecido pelo administrador (a validar em laboratório).
+- **Switches, routers e firewalls** (Check Point, FortiGate, Palo Alto, Cisco IOS/NX-OS, Juniper, Arista): avaliação só de leitura, política de versões editável («Avaliação de rede»), versões disponíveis lidas do FortiGate/Palo Alto e cruzamento com CVE.
+- Credenciais cifradas do motor (palavra-passe, chave SSH, token de API); ativos com plataforma de rede, componente CyberArk e credencial.
+- Testes: playbooks verificados na sintaxe, Linux real no próprio servidor, macOS com executáveis simulados, e Windows/CyberArk/rede contra módulos, APIs e comandos simulados. Sem testes em equipamentos reais.
+- Corrigido: nos testes, a criação das etapas CyberArk encadeava as dependências todas; agora cada etapa depende só da anterior.
+
 ## 1.27.20261109 — Windows Update: resolução definitiva
 - O WUA deixa de pedir URL de transferência (inúteis: o Windows instala pelo Windows Update); a resposta passa de centenas de KB para poucos KB e cada atualização é lida de forma isolada.
 - Depois de uma atualização do agente, a descoberta repete-se logo (no agente e por pedido da consola ao detetar a nova versão): deixam de ficar erros de versões anteriores no diagnóstico.

@@ -1,0 +1,131 @@
+---
+# Motor sem agente — AVALIAÇÃO de atualizações em equipamentos de rede e firewalls (SOMENTE LEITURA: nada é alterado no equipamento).
+# Recolhe a saída bruta de comandos/APIs de consulta; a análise (versão, modelo, versões disponíveis, política, CVE) faz-se na consola.
+#   Check Point Gaia  → SSH: clish «show version all»
+#   Fortinet FortiGate→ API REST: /api/v2/monitor/system/status e /system/firmware (token de API; só leitura)
+#   Palo Alto PAN-OS  → API XML: show system info + request system software check/info (chave de API; só leitura)
+#   Cisco IOS/IOS-XE, NX-OS, Juniper Junos, Arista EOS → «show version» via network_cli
+# Variáveis por equipamento (inventário gerado pela consola): omx_api_token, omx_validate_certs, ansible_host, ansible_port.
+- name: OMXPatch — avaliar Check Point (Gaia)
+  hosts: net_checkpoint
+  gather_facts: false
+  tasks:
+    - name: Versão (clish)
+      ansible.builtin.raw: 'clish -c "show version all"'
+      register: omx_raw
+      changed_when: false
+    - ansible.builtin.set_fact:
+        omx_net: {platform: checkpoint, raw: {version: "{{ omx_raw.stdout | default('') }}"}}
+
+- name: OMXPatch — avaliar FortiGate (FortiOS)
+  hosts: net_fortios
+  connection: local
+  gather_facts: false
+  vars:
+    omx_base: "https://{{ ansible_host }}{{ (':' ~ ansible_port) if ansible_port is defined else '' }}"
+  tasks:
+    - name: Estado do sistema
+      ansible.builtin.uri:
+        url: "{{ omx_base }}/api/v2/monitor/system/status"
+        headers: {Authorization: "Bearer {{ omx_api_token }}"}
+        validate_certs: "{{ omx_validate_certs | default(true) | bool }}"
+        return_content: true
+        timeout: 60
+      register: omx_status
+      no_log: true
+    - name: Firmware atual e disponível (FortiGuard)
+      ansible.builtin.uri:
+        url: "{{ omx_base }}/api/v2/monitor/system/firmware"
+        headers: {Authorization: "Bearer {{ omx_api_token }}"}
+        validate_certs: "{{ omx_validate_certs | default(true) | bool }}"
+        return_content: true
+        timeout: 90
+      register: omx_fw
+      failed_when: false
+      no_log: true
+    - ansible.builtin.set_fact:
+        omx_net: {platform: fortios, raw: {status: "{{ omx_status.content | default('') }}", firmware: "{{ omx_fw.content | default('') }}"}}
+
+- name: OMXPatch — avaliar Palo Alto (PAN-OS)
+  hosts: net_panos
+  connection: local
+  gather_facts: false
+  vars:
+    omx_base: "https://{{ ansible_host }}{{ (':' ~ ansible_port) if ansible_port is defined else '' }}/api/"
+  tasks:
+    - name: show system info
+      ansible.builtin.uri:
+        url: "{{ omx_base }}?type=op&cmd={{ '<show><system><info></info></system></show>' | urlencode }}"
+        headers: {X-PAN-KEY: "{{ omx_api_token }}"}
+        validate_certs: "{{ omx_validate_certs | default(true) | bool }}"
+        return_content: true
+        timeout: 60
+      register: omx_info
+      no_log: true
+    - name: Pedir a verificação de versões disponíveis (só consulta o servidor de atualizações)
+      ansible.builtin.uri:
+        url: "{{ omx_base }}?type=op&cmd={{ '<request><system><software><check></check></software></system></request>' | urlencode }}"
+        headers: {X-PAN-KEY: "{{ omx_api_token }}"}
+        validate_certs: "{{ omx_validate_certs | default(true) | bool }}"
+        return_content: true
+        timeout: 120
+      register: omx_check
+      failed_when: false
+      no_log: true
+    - name: Versões de software conhecidas
+      ansible.builtin.uri:
+        url: "{{ omx_base }}?type=op&cmd={{ '<request><system><software><info></info></software></system></request>' | urlencode }}"
+        headers: {X-PAN-KEY: "{{ omx_api_token }}"}
+        validate_certs: "{{ omx_validate_certs | default(true) | bool }}"
+        return_content: true
+        timeout: 60
+      register: omx_sw
+      failed_when: false
+      no_log: true
+    - ansible.builtin.set_fact:
+        omx_net: {platform: panos, raw: {info: "{{ omx_info.content | default('') }}", software: "{{ omx_sw.content | default('') }}"}}
+
+- name: OMXPatch — avaliar Cisco IOS / IOS-XE
+  hosts: net_cisco_ios
+  gather_facts: false
+  tasks:
+    - ansible.netcommon.cli_command: {command: show version}
+      register: omx_raw
+    - ansible.builtin.set_fact:
+        omx_net: {platform: cisco_ios, raw: {version: "{{ omx_raw.stdout | default('') }}"}}
+
+- name: OMXPatch — avaliar Cisco NX-OS
+  hosts: net_cisco_nxos
+  gather_facts: false
+  tasks:
+    - ansible.netcommon.cli_command: {command: show version}
+      register: omx_raw
+    - ansible.builtin.set_fact:
+        omx_net: {platform: cisco_nxos, raw: {version: "{{ omx_raw.stdout | default('') }}"}}
+
+- name: OMXPatch — avaliar Juniper Junos
+  hosts: net_junos
+  gather_facts: false
+  tasks:
+    - ansible.netcommon.cli_command: {command: show version}
+      register: omx_raw
+    - ansible.builtin.set_fact:
+        omx_net: {platform: junos, raw: {version: "{{ omx_raw.stdout | default('') }}"}}
+
+- name: OMXPatch — avaliar Arista EOS
+  hosts: net_eos
+  gather_facts: false
+  tasks:
+    - ansible.netcommon.cli_command: {command: show version}
+      register: omx_raw
+    - ansible.builtin.set_fact:
+        omx_net: {platform: eos, raw: {version: "{{ omx_raw.stdout | default('') }}"}}
+
+- name: Resultado (um por equipamento)
+  hosts: all
+  gather_facts: false
+  connection: local
+  tasks:
+    - ansible.builtin.debug:
+        msg: "OMXPATCH_RESULT={{ ({'status': 'succeeded', 'asset': omx_asset_id | default(0)} | combine(omx_net | default({}))) | to_json }}"
+      when: omx_net is defined

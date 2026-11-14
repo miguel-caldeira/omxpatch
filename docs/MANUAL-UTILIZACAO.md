@@ -324,3 +324,7 @@ A lista completa está na *Referência técnica* (`REFERENCIA.md`). A API respei
 
 # Anexo — Operar e acompanhar um agente
 Em **Agentes**, o botão **Detalhe** mostra o estado de cada agente (online/offline, versão, depuração) e os seus registos de operação, auditoria e depuração, com filtros e exportação CSV. O administrador pode ainda reiniciar ou atualizar o agente, e ativar a depuração completa por um tempo limitado. Os comandos são aplicados no contacto seguinte do agente (de 5 em 5 minutos). Um agente que fique 2 horas sem conseguir falar com a consola desliga-se sozinho; veja no Manual de Administração como o reativar.
+
+
+# Anexo — Motor Ansible (sem agente)
+Em **Motor Ansible** escolhe a operação (atualizar o sistema, o software, tudo, componentes CyberArk, ou avaliar equipamentos de rede), os ativos (ligação «Sem agente (Ansible)») e o modo. **Avaliar** só lê e mostra o que há por atualizar; **Aplicar** exige o OK do administrador e uma avaliação das últimas 24 h. Em **Trabalhos recentes** vê o estado e o detalhe de cada tarefa. Os resultados da avaliação de sistemas e software aparecem também em **Atualizações**. Em **Avaliação de rede** vê, por equipamento, a versão, o veredicto e a versão recomendada. Detalhes e limites: Manual de Administração, capítulo 19.

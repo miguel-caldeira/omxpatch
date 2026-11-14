@@ -135,11 +135,16 @@ def asset_new():
             asset, _ = inventory.upsert_asset(tenant, _asset_form(), source="manual")
         except ValueError as exc:
             flash(str(exc), "danger")
-            return render_template("assets/form.html", asset=None, form=request.form), 400
+            return render_template("assets/form.html", asset=None, form=request.form, credentials=_credentials()), 400
         audit("asset_created", asset.name)
         db.session.commit()
         return redirect(url_for("main.asset_detail", asset_id=asset.id))
-    return render_template("assets/form.html", asset=None, form={})
+    return render_template("assets/form.html", asset=None, form={}, credentials=_credentials())
+
+
+def _credentials():
+    from ..models import AnsibleCredential
+    return scoped(AnsibleCredential).order_by(AnsibleCredential.name).all()
 
 
 def _asset_form() -> dict:
@@ -148,8 +153,16 @@ def _asset_form() -> dict:
                                                "primary_user", "owner", "department", "criticality", "internet_exposed",
                                                "country", "city", "tags", "open_ports", "connection", "ansible_user",
                                                "maintenance_group", "cmdb_ref", "business_value", "ring", "ansible_port",
-                                               "latitude", "longitude")}
+                                               "latitude", "longitude", "platform", "cyberark_role", "credential_id")}
     data["managed"] = bool(f.get("managed")) or data.get("connection") == "ansible"
+    if data.get("credential_id") and not str(data["credential_id"]).isdigit():
+        data.pop("credential_id")
+    if data.get("credential_id") and int(data["credential_id"]) not in {c.id for c in _credentials()}:
+        data.pop("credential_id")                                # só credenciais do próprio tenant
+    if data.get("platform") and data["platform"] not in __import__("omxpatch.models", fromlist=["NET_PLATFORMS"]).NET_PLATFORMS:
+        data.pop("platform")
+    if data.get("cyberark_role") and data["cyberark_role"] not in __import__("omxpatch.models", fromlist=["CYBERARK_ROLES"]).CYBERARK_ROLES:
+        data.pop("cyberark_role")
     return {k: v for k, v in data.items() if v != ""} | {"managed": data["managed"]}
 
 
@@ -186,7 +199,7 @@ def asset_edit(asset_id: int):
         db.session.commit()
         flash("Ativo atualizado.", "success")
         return redirect(url_for("main.asset_detail", asset_id=asset.id))
-    return render_template("assets/form.html", asset=asset, form={})
+    return render_template("assets/form.html", asset=asset, form={}, credentials=_credentials())
 
 
 @bp.route("/assets/<int:asset_id>/delete", methods=["POST"])

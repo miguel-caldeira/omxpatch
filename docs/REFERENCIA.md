@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.27.20261109
+# Referência técnica — OMXPatch 1.28.20261113
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
@@ -200,6 +200,10 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `rollback` | Reverter patch |
 | `wake` | Wake-on-LAN |
 | `agent_ctl` | Comando ao agente |
+| `os_update` | Atualização do SO (Ansible) |
+| `sw_update` | Atualização de software (Ansible) |
+| `cyb_upgrade` | Atualização CyberArk (Ansible) |
+| `net_assess` | Avaliação de equipamento de rede |
 
 ## Boas práticas
 
@@ -282,6 +286,15 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | admin | `/agents/<int:agent_id>/command` | POST | admin |
 | admin | `/agents/<int:agent_id>/logs.csv` | GET | admin/auditor |
 | admin | `/agents/purge-revoked` | POST | admin |
+| ansible_ops | `/ansible` | GET | qualquer utilizador autenticado |
+| ansible_ops | `/ansible/run` | POST | admin/user |
+| ansible_ops | `/ansible/jobs/<int:task_id>` | GET | qualquer utilizador autenticado |
+| ansible_ops | `/ansible/jobs/<int:task_id>/cancel` | POST | admin |
+| ansible_ops | `/ansible/credentials` | GET,POST | admin |
+| ansible_ops | `/ansible/credentials/<int:cid>/delete` | POST | admin |
+| ansible_ops | `/network` | GET | qualquer utilizador autenticado |
+| ansible_ops | `/network/baseline` | POST | admin |
+| ansible_ops | `/network/baseline/<int:bid>/delete` | POST | admin |
 | auth | `/login` | GET,POST | qualquer utilizador autenticado |
 | auth | `/mfa` | GET,POST | qualquer utilizador autenticado |
 | auth | `/mfa/setup` | GET,POST | qualquer utilizador autenticado |

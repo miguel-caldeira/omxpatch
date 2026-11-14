@@ -1,0 +1,30 @@
+---
+# Motor sem agente — atualização dos componentes CyberArk PAM: Cofre (Vault), CPM, PSM (Windows/WinRM) e PSMP (Linux/SSH).
+#
+# O motor orquestra o que é comum e seguro: pré-verificações, integridade do pacote, cópia de segurança da configuração, paragem e arranque
+# ordenados dos serviços, execução do comando de atualização do FABRICANTE, verificação da versão final e reposição dos serviços se falhar.
+# O comando de atualização dos componentes Windows NÃO é fixo aqui (depende da versão: scripts «InstallationAutomation»/instalador do pacote
+# do fabricante) — é fornecido pelo administrador em cyberark_upgrade_cmd e validado primeiro em laboratório. PSMP usa «rpm -U» por omissão.
+#
+# Variáveis (da tarefa): omx_mode = assess | apply ; cyberark_target_version ; cyberark_media_src (ficheiro no controlador, .zip/.rpm) ;
+#   cyberark_media_sha256 ; cyberark_upgrade_cmd (usa {{ omx_media_dir }}) ; cyberark_post_cmd (opcional) ; cyberark_services_regex (opcional)
+# Ordem recomendada pelo fabricante (e imposta pela consola): Vault → CPM → PSM → PSMP.
+
+- name: "OMXPatch — CyberArk (componentes Windows: Vault, CPM, PSM)"
+  hosts: cyberark_vault:cyberark_cpm:cyberark_psm
+  gather_facts: false
+  vars_files: [group_vars/cyberark.yml]
+  vars:
+    omx_mode: assess
+  tasks:
+    - ansible.builtin.include_tasks: tasks/cyberark_windows.yml
+
+- name: OMXPatch — CyberArk (PSMP, Linux)
+  hosts: cyberark_psmp
+  become: true
+  gather_facts: false
+  vars_files: [group_vars/cyberark.yml]
+  vars:
+    omx_mode: assess
+  tasks:
+    - ansible.builtin.include_tasks: tasks/cyberark_psmp.yml

@@ -1,0 +1,156 @@
+---
+# Motor sem agente — atualização COMPLETA de Linux (sistema operativo + software instalado).
+# Variáveis (vêm da tarefa): omx_mode = assess | apply ; omx_scope = os | software | all ; security_only (bool) ; reboot_policy = never | if_needed | force
+#   assess  → só lista o que há por atualizar (não altera nada)
+#   apply   → atualiza e devolve o que foi atualizado
+#   os        = gestor de pacotes do sistema (apt / dnf / yum / zypper), incl. kernel e bibliotecas
+#   software  = gestores de aplicações adicionais: snap, flatpak
+- name: OMXPatch — atualizar Linux (SO e software)
+  hosts: linux
+  become: true
+  gather_facts: true
+  vars:
+    omx_mode: assess
+    omx_scope: all
+    security_only: false
+    reboot_policy: if_needed
+    omx_pending: []
+    omx_done: []
+  tasks:
+    - name: Validar parâmetros
+      ansible.builtin.assert:
+        that:
+          - omx_mode in ['assess', 'apply']
+          - omx_scope in ['os', 'software', 'all']
+          - reboot_policy in ['never', 'if_needed', 'force']
+
+    # ------------------------------------------------------------------ o que há por atualizar
+    - name: Listar atualizações do SO (apt)
+      ansible.builtin.shell: |
+        set -o pipefail
+        apt-get update -qq >/dev/null 2>&1 || true
+        apt-get -s -o Debug::NoLocking=1 upgrade | awk '/^Inst /{print}'
+      args: {executable: /bin/bash}
+      register: omx_apt_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['os', 'all'] and ansible_facts['pkg_mgr'] == 'apt'
+
+    - name: Listar atualizações do SO (dnf/yum)
+      ansible.builtin.shell: |
+        {{ 'dnf' if ansible_facts['pkg_mgr'] in ['dnf', 'dnf5'] else 'yum' }} -q check-update {{ '--security' if security_only else '' }} 2>/dev/null | awk 'NF==3 && $1 ~ /\./ {print $1" "$2}'
+        true
+      args: {executable: /bin/bash}
+      register: omx_rpm_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['os', 'all'] and ansible_facts['pkg_mgr'] in ['dnf', 'dnf5', 'yum']
+
+    - name: Listar atualizações do SO (zypper)
+      ansible.builtin.shell: zypper -q --non-interactive list-updates {{ '--category security' if security_only else '' }} | awk -F'|' '/^v/{gsub(/ /,"",$3);gsub(/ /,"",$4);gsub(/ /,"",$5);print $3" "$4" "$5}'
+      args: {executable: /bin/bash}
+      register: omx_zyp_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['os', 'all'] and ansible_facts['pkg_mgr'] == 'zypper'
+
+    - name: Listar atualizações snap
+      ansible.builtin.shell: command -v snap >/dev/null 2>&1 && snap refresh --list 2>/dev/null | awk 'NR>1{print $1" "$2}' || true
+      args: {executable: /bin/bash}
+      register: omx_snap_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['software', 'all']
+
+    - name: Listar atualizações flatpak
+      ansible.builtin.shell: command -v flatpak >/dev/null 2>&1 && flatpak remote-ls --updates --columns=application,version 2>/dev/null | awk '{print $1" "$2}' || true
+      args: {executable: /bin/bash}
+      register: omx_flat_list
+      changed_when: false
+      failed_when: false
+      when: omx_scope in ['software', 'all']
+
+    - name: Normalizar apt
+      ansible.builtin.set_fact:
+        omx_pending: "{{ omx_pending + [{'name': item | regex_replace('^Inst (\\S+) .*$', '\\1'), 'current_version': ((item | regex_search('\\[([^\\]]+)\\]', '\\1')) or [''])[0],
+          'new_version': ((item | regex_search('\\((\\S+) ', '\\1')) or [''])[0], 'source': 'apt', 'security': (item is search('-security'))}] }}"
+      loop: "{{ omx_apt_list.stdout_lines | default([]) }}"
+      when: omx_apt_list.stdout_lines is defined
+
+    - name: Normalizar dnf/yum
+      ansible.builtin.set_fact:
+        omx_pending: "{{ omx_pending + [{'name': item.split(' ')[0], 'current_version': '', 'new_version': item.split(' ')[1], 'source': 'dnf'}] }}"
+      loop: "{{ omx_rpm_list.stdout_lines | default([]) }}"
+
+    - name: Normalizar zypper
+      ansible.builtin.set_fact:
+        omx_pending: "{{ omx_pending + [{'name': item.split(' ')[0], 'current_version': item.split(' ')[1], 'new_version': item.split(' ')[2], 'source': 'zypper'}] }}"
+      loop: "{{ omx_zyp_list.stdout_lines | default([]) }}"
+
+    - name: Normalizar snap
+      ansible.builtin.set_fact:
+        omx_pending: "{{ omx_pending + [{'name': item.split(' ')[0], 'current_version': '', 'new_version': item.split(' ')[1], 'source': 'snap'}] }}"
+      loop: "{{ omx_snap_list.stdout_lines | default([]) }}"
+
+    - name: Normalizar flatpak
+      ansible.builtin.set_fact:
+        omx_pending: "{{ omx_pending + [{'name': item.split(' ')[0], 'current_version': '', 'new_version': (item.split(' ')[1:] | join(' ')), 'source': 'flatpak'}] }}"
+      loop: "{{ omx_flat_list.stdout_lines | default([]) }}"
+
+    # ------------------------------------------------------------------ aplicar
+    - name: Atualizar o SO (apt)
+      ansible.builtin.apt:
+        upgrade: "{{ 'dist' if not security_only else 'safe' }}"
+        update_cache: true
+        autoremove: false
+      when: omx_mode == 'apply' and omx_scope in ['os', 'all'] and ansible_facts['pkg_mgr'] == 'apt'
+      register: omx_apt
+    - name: Atualizar o SO (dnf/yum)
+      ansible.builtin.dnf:
+        name: '*'
+        state: latest
+        security: "{{ security_only }}"
+        update_cache: true
+      when: omx_mode == 'apply' and omx_scope in ['os', 'all'] and ansible_facts['pkg_mgr'] in ['dnf', 'dnf5', 'yum']
+      register: omx_dnf
+    - name: Atualizar o SO (zypper)
+      ansible.builtin.command: "zypper --non-interactive {{ 'patch --category security' if security_only else 'update' }}"
+      when: omx_mode == 'apply' and omx_scope in ['os', 'all'] and ansible_facts['pkg_mgr'] == 'zypper'
+      register: omx_zyp
+      changed_when: "'Nothing to do' not in omx_zyp.stdout"
+    - name: Atualizar snap
+      ansible.builtin.shell: command -v snap >/dev/null 2>&1 && snap refresh || true
+      args: {executable: /bin/bash}
+      when: omx_mode == 'apply' and omx_scope in ['software', 'all']
+      register: omx_snap
+      changed_when: "'refreshed' in omx_snap.stdout"
+    - name: Atualizar flatpak
+      ansible.builtin.shell: command -v flatpak >/dev/null 2>&1 && flatpak update -y --noninteractive || true
+      args: {executable: /bin/bash}
+      when: omx_mode == 'apply' and omx_scope in ['software', 'all']
+      register: omx_flat
+      changed_when: "'Updating' in omx_flat.stdout"
+
+    # ------------------------------------------------------------------ reinício
+    - name: Reinício necessário (Debian)
+      ansible.builtin.stat: {path: /var/run/reboot-required}
+      register: omx_reboot_file
+    - name: Reinício necessário (RHEL)
+      ansible.builtin.command: needs-restarting -r
+      register: omx_needs_restart
+      failed_when: false
+      changed_when: false
+      when: ansible_facts['os_family'] == 'RedHat'
+    - ansible.builtin.set_fact:
+        omx_reboot: "{{ omx_reboot_file.stat.exists or (omx_needs_restart.rc | default(0)) == 1 }}"
+    - name: Reiniciar conforme a política
+      ansible.builtin.reboot:
+        reboot_timeout: 1200
+      when: omx_mode == 'apply' and (reboot_policy == 'force' or (reboot_policy == 'if_needed' and omx_reboot))
+
+    - name: Resultado
+      ansible.builtin.debug:
+        msg: >-
+          OMXPATCH_RESULT={{ {'status': 'succeeded', 'mode': omx_mode, 'scope': omx_scope, 'pending': (omx_pending if omx_mode == 'assess' else []),
+          'applied': (omx_pending if omx_mode == 'apply' else []), 'pending_count': omx_pending | length, 'reboot_pending': (omx_reboot and omx_mode == 'assess'),
+          'os': ansible_facts['distribution'] ~ ' ' ~ ansible_facts['distribution_version']} | to_json }}

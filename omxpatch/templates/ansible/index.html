@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Motor Ansible{% endblock %}
+{% block content %}<div class="actions"><h1>Motor Ansible (sem agente)</h1><span class="spacer"></span>
+<a class="btn sec" href="{{ url_for('ansible_ops.network') }}">Avaliação de rede</a>{% if current_user.can_manage %}<a class="btn sec" href="{{ url_for('ansible_ops.credentials') }}">Credenciais</a>{% endif %}</div>
+<p class="muted small">Atualiza o sistema operativo e todo o software (Windows, Linux, macOS), os componentes CyberArk (Vault, CPM, PSM, PSMP) e avalia atualizações de switches, routers e firewalls (Check Point, FortiGate, Palo Alto, Cisco, Juniper, Arista), sem instalar agente. Fluxo: <strong>avaliar</strong> (só leitura) → <strong>OK do administrador</strong> → <strong>aplicar</strong> (exige avaliação das últimas {{ now_fresh.total_seconds() // 3600 | int }} h).</p>
+{% if not available %}<div class="flash flash-warning">O Ansible não está disponível neste servidor (ansible-playbook não encontrado ou [ansible] enabled = false): as tarefas ficam em fila.</div>{% endif %}
+{% if current_user.can_write %}<form method="post" action="{{ url_for('ansible_ops.run') }}" class="panel"><h2>Nova operação</h2>{{ csrf() }}
+<div class="row"><div><label for="op">Operação</label><select id="op" name="op">{% for k, o in ops.items() %}<option value="{{ k }}">{{ o.label }}</option>{% endfor %}</select></div>
+<div><label for="mode">Modo</label><select id="mode" name="mode"><option value="assess">Avaliar (só leitura)</option>{% if current_user.can_manage %}<option value="apply">Aplicar (exige OK)</option>{% endif %}</select></div>
+<div><label for="reboot_policy">Reinício</label><select id="reboot_policy" name="reboot_policy"><option value="if_needed">Se necessário</option><option value="never">Nunca</option><option value="force">Forçar</option></select></div>
+<div><label><input type="checkbox" name="security_only"> Só segurança (Linux)</label></div></div>
+<div class="muted small">Ativos elegíveis (ligação «Sem agente (Ansible)»; defina a plataforma de rede ou o componente CyberArk no ativo):</div>
+<table><tr><th></th><th>Ativo</th><th>SO / plataforma</th><th>Tipo</th></tr>
+{% for a in assets %}<tr><td><input type="checkbox" name="asset_ids" value="{{ a.id }}" aria-label="{{ a.name }}"></td><td>{{ a.name }}</td><td class="small">{{ a.platform or a.os_family or '—' }}</td>
+<td class="small">{% if a.platform %}rede/firewall{% elif a.cyberark_role %}CyberArk {{ a.cyberark_role }}{% else %}sistema{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="muted">Sem ativos «Sem agente (Ansible)». Crie-os em Ativos (ligação Ansible, credencial, plataforma).</td></tr>{% endfor %}</table>
+{% if current_user.can_manage %}<details class="mt"><summary><strong>Aplicar</strong> — confirmação e parâmetros</summary>
+<div class="row"><div><label><input type="checkbox" name="confirm_ok"> OK do administrador: aplicar (depois de ver a avaliação)</label></div></div>
+<h3>CyberArk (só para a operação CyberArk)</h3>
+<div class="row"><div><label for="target_version">Versão alvo</label><input id="target_version" name="target_version" placeholder="14.2"></div>
+<div><label for="media_src">Pacote do fabricante (caminho no controlador)</label><input id="media_src" name="media_src" placeholder="/var/lib/omxpatch/cyberark/CPM-14.2.zip"></div>
+<div><label for="media_sha256">SHA-256 do pacote</label><input id="media_sha256" name="media_sha256" maxlength="64"></div></div>
+<div class="row"><div><label for="upgrade_cmd">Comando de atualização do fabricante (Windows: obrigatório; PSMP: omissão rpm -U)</label><input id="upgrade_cmd" name="upgrade_cmd" placeholder="exemplo — confirme na documentação da sua versão"></div>
+<div><label for="post_cmd">Comando pós-atualização (opcional)</label><input id="post_cmd" name="post_cmd"></div>
+<div><label for="confirm_word">Escreva «{{ word }}» para confirmar (CyberArk)</label><input id="confirm_word" name="confirm_word" autocomplete="off"></div></div></details>{% endif %}
+<p class="actions"><button class="btn">Criar tarefas</button></p></form>{% endif %}
+<div class="panel"><h2>Trabalhos recentes</h2><table><tr><th>#</th><th>Quando</th><th>Operação</th><th>Ativo</th><th>Modo</th><th>Estado</th><th></th></tr>
+{% for t in jobs %}{% set p = t.payload_data %}<tr><td><a href="{{ url_for('ansible_ops.job', task_id=t.id) }}">{{ t.id }}</a></td><td class="small">{{ t.created_at|dt }}</td><td>{{ ops[p.op].label.split(' (')[0] if p.op in ops else t.type }}</td><td>{{ t.asset.name }}</td>
+<td>{{ 'aplicar' if p.mode == 'apply' else 'avaliar' }}</td><td>{{ TASK_STATUSES.get(t.status, t.status) }}</td>
+<td>{% if current_user.can_manage and t.status in ('queued', 'waiting_dep', 'pending') %}<form method="post" action="{{ url_for('ansible_ops.job_cancel', task_id=t.id) }}" class="inline">{{ csrf() }}<button class="btn sm sec">Cancelar</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem trabalhos.</td></tr>{% endfor %}</table></div>{% endblock %}

@@ -105,6 +105,22 @@ def parse_result(output: str) -> dict | None:
     return None
 
 
+def _materialize_keys(inventory: dict, tmp: Path) -> dict:
+    """Chaves SSH privadas vindas das credenciais: ficheiro 0600 na pasta temporária (apagada no fim) em vez de seguirem na linha de comandos."""
+    hosts = (inventory.get("all") or {}).get("hosts") or {}
+    for name, v in hosts.items():
+        key = v.pop("__ssh_key__", None)
+        if key:
+            kdir = tmp / "keys"
+            kdir.mkdir(mode=0o700, exist_ok=True)
+            path = kdir / re.sub(r"[^A-Za-z0-9_.-]", "_", name)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(key.rstrip("\n") + "\n")
+            v["ansible_ssh_private_key_file"] = str(path)
+    return inventory
+
+
 def run_playbook(playbook: str, inventory: dict, extra_vars: dict | None = None, limit: str = "",
                  timeout_minutes: int | None = None, check: bool = False) -> dict:
     """Executa ``ansible/<playbook>``; devolve {rc, output, result}."""
@@ -118,6 +134,7 @@ def run_playbook(playbook: str, inventory: dict, extra_vars: dict | None = None,
     timeout = int(timeout_minutes or current_app.config["ANSIBLE_TIMEOUT_MINUTES"]) * 60
     with tempfile.TemporaryDirectory(prefix="omxpatch-ansible-") as tmp:
         inv_path, vars_path = Path(tmp) / "inventory.json", Path(tmp) / "vars.json"
+        inventory = _materialize_keys(inventory, Path(tmp))
         for path, data in ((inv_path, inventory), (vars_path, extra_vars or {})):
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -139,6 +156,9 @@ def run_playbook(playbook: str, inventory: dict, extra_vars: dict | None = None,
 
 def run_task(task: Task) -> dict:
     """Executa uma tarefa em modo sem agente. Devolve o relatório normalizado (como o enviado por um agente)."""
+    from . import ansible_engine
+    if task.type in ansible_engine.TASK_TYPES:                    # atualização completa, CyberArk, rede
+        return ansible_engine.run_task(task)
     asset = task.asset
     pb = playbook_for(task.type, asset.os_family)
     if pb is None:

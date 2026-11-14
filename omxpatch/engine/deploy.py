@@ -394,6 +394,9 @@ def complete_task(task: Task, report: dict) -> Task:
     elif task.type == "simulate":
         from . import preflight
         preflight.on_report(task, report)
+    elif task.type in ("os_update", "sw_update", "cyb_upgrade", "net_assess"):
+        from . import ansible_engine
+        ansible_engine.on_result(task, report)
     elif task.type == "practice_sim":
         from . import plans
         plans.on_sim_report(task, report)

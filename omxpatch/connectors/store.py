@@ -30,6 +30,19 @@ def _fernet() -> Fernet:
     return Fernet(key)
 
 
+def encrypt_json(values: dict) -> str:
+    return _fernet().encrypt(json.dumps(values).encode()).decode()
+
+
+def decrypt_json(token: str) -> dict:
+    if not token:
+        return {}
+    try:
+        return json.loads(_fernet().decrypt(token.encode()).decode())
+    except (InvalidToken, ValueError) as exc:
+        raise ConnectorError("Não foi possível decifrar a credencial (chave connectors.key alterada?). Introduza-a de novo.") from exc
+
+
 def get_secrets(c: Connector) -> dict:
     if not c.secret:
         return {}

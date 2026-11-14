@@ -4,3 +4,9 @@ collections:
   - name: community.general
   - name: ansible.windows
   - name: community.windows
+  # equipamentos de rede (avaliação de atualizações): ligação network_cli e cliconf de cada plataforma
+  - name: ansible.netcommon
+  - name: cisco.ios
+  - name: cisco.nxos
+  - name: junipernetworks.junos
+  - name: arista.eos

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omxpatch"
-version = "1.27.20261109"
+version = "1.28.20261113"
 description = "OMXPatch - centro de comando de gestão de patches e remediação contínua (Ativo → Exposição → Risco → Mitigação → Patch → Validação), com agentes Windows/Linux/macOS e Ansible"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -48,6 +48,7 @@ testpaths = ["tests"]
 # Playbooks Ansible instalados em <prefixo>/share/omxpatch/ansible (o servidor procura-os aí quando instalado por pip)
 [tool.setuptools.data-files]
 "share/omxpatch/ansible" = ["ansible/*.yml", "ansible/ansible.cfg", "ansible/inventory.example.ini"]
+"share/omxpatch/ansible/tasks" = ["ansible/tasks/*.yml"]
 "share/omxpatch/ansible/group_vars" = ["ansible/group_vars/*.yml"]
 "share/omxpatch/ansible/roles/omxpatch_server/tasks" = ["ansible/roles/omxpatch_server/tasks/*.yml"]
 "share/omxpatch/ansible/roles/omxpatch_server/handlers" = ["ansible/roles/omxpatch_server/handlers/*.yml"]
