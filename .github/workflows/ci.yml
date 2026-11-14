@@ -10,7 +10,7 @@ on:
 
 jobs:
   test:                       # servidor + agente, com o ficheiro de versões fixas
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
         exclude:
           - {os: macos-latest, python-version: "3.8"}     # o runner macOS (arm64) não tem Python 3.8
@@ -75,7 +75,7 @@ jobs:
           path: validation-report.*
 
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
