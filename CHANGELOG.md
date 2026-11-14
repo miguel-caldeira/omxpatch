@@ -2,6 +2,9 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.31.20261114 — FortiGate com Ansible antigo
+- Avaliação de rede: as versões antigas do Ansible (2.15, habitual nas distribuições) entregam a resposta JSON do FortiGate já convertida em estrutura e a versão ficava vazia; o leitor aceita agora texto ou estrutura. Detetado pelo CI em Python 3.9.
+
 ## 1.30.20261114 — CI verde
 - Testes compatíveis com Python 3.9; verificação de sintaxe cobre também os papéis (`roles/`); o teste real do inventário Linux só corre com a colecção `community.general` instalada.
 

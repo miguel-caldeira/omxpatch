@@ -39,20 +39,27 @@ def _first(pattern: str, text: str, flags: int = re.I | re.M) -> str:
 # --------------------------------------------------------------------------- extração por plataforma
 
 
+def _json(value) -> dict:
+    """Texto JSON ou já um dicionário: versões antigas do Ansible convertem sozinhas o texto JSON em estrutura."""
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return {}
+    try:
+        data = json.loads(_clip(value))
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def parse_fortios(raw: dict) -> dict:
     out = {"version": "", "model": "", "hostname": "", "serial": "", "available": []}
-    try:
-        st = json.loads(_clip(raw.get("status"))) if raw.get("status") else {}
-    except ValueError:
-        st = {}
+    st = _json(raw.get("status"))
     res = st.get("results") if isinstance(st.get("results"), dict) else {}
     out["version"] = str(st.get("version") or res.get("version") or "").lstrip("v")
     out["model"] = str(res.get("model_name", "") + " " + res.get("model_number", "")).strip() or str(res.get("model", ""))
     out["hostname"], out["serial"] = str(res.get("hostname", "")), str(st.get("serial", ""))
-    try:
-        fw = json.loads(_clip(raw.get("firmware"))) if raw.get("firmware") else {}
-    except ValueError:
-        fw = {}
+    fw = _json(raw.get("firmware"))
     r = fw.get("results") if isinstance(fw.get("results"), dict) else {}
     cur = r.get("current") if isinstance(r.get("current"), dict) else {}
     if not out["version"] and cur.get("version"):

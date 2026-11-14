@@ -177,6 +177,8 @@ def test_parsers_for_every_platform():
     assert netassess.parse_eos({"version": EOS})["version"] == "4.28.3M"
     assert netassess.parse_panos({"info": "<!DOCTYPE x [<!ENTITY a 'b'>]><r/>"})["version"] == ""          # XML com DOCTYPE/ENTIDADES é recusado
     assert netassess.parse_fortios({"status": "isto não é json"})["version"] == ""
+    # o Ansible antigo entrega o JSON já convertido em dicionário: tem de dar o mesmo resultado
+    assert netassess.parse_fortios({"status": json.loads(FGT_STATUS), "firmware": json.loads(FGT_FW)}) == f
 
 
 def test_evaluation_with_vendor_versions_and_policy(app, tenant):
