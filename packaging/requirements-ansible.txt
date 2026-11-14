@@ -1,0 +1,5 @@
+# Motor Ansible (modo sem agente) — incluído no pacote Ubuntu para instalação offline
+ansible-core>=2.15
+pywinrm>=0.4
+requests-credssp
+jmespath

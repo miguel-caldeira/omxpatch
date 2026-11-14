@@ -2,6 +2,12 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.32.20261114 — Ansible instalado e ativo por omissão
+- Sistema mostrava «ansible-playbook não encontrado»: o Ansible só era instalado com `--with-ansible`, e mesmo instalado o serviço não o encontrava (o venv não está no PATH do systemd).
+- `install.sh` instala agora o Ansible por omissão (wheels incluídos no pacote, offline; coleções do Galaxy se houver rede); `--no-ansible` para o saltar.
+- `update.sh` instala o Ansible se faltar e ativa-o na configuração (`[ansible] enabled/playbook`).
+- O servidor encontra o `ansible-playbook` também na pasta do próprio ambiente virtual; a mensagem do menu Sistema indica o comando de correção.
+
 ## 1.31.20261114 — FortiGate com Ansible antigo
 - Avaliação de rede: as versões antigas do Ansible (2.15, habitual nas distribuições) entregam a resposta JSON do FortiGate já convertida em estrutura e a versão ficava vazia; o leitor aceita agora texto ou estrutura. Detetado pelo CI em Python 3.9.
 

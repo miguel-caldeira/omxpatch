@@ -30,3 +30,45 @@ def test_console_shows_version(app, alpha_admin):
     assert alpha_admin.c.get("/healthz").get_json()["version"] == __version__
     from omxpatch import versioninfo
     assert versioninfo.read(app.config)["current"] == __version__
+
+
+def _toml_editor():
+    import re
+    t = (R / "ubuntu/update.sh").read_text()
+    return re.search(r"<<'PY'\n(.*?)\nPY\n", t, re.S).group(1)
+
+
+def test_update_enables_ansible_in_config(tmp_path):
+    import subprocess
+    import sys
+    code = _toml_editor()
+    for before, expect in (("[server]\nport = 4434\n\n[ansible]\nenabled = false\nplaybook = \"/x/ap\"\n", None),
+                           ("[server]\nport = 4434\n", "[ansible]"), ("[ansible]\nenabled = false\n", "playbook")):
+        f = tmp_path / "o.toml"
+        f.write_text(before)
+        subprocess.run([sys.executable, "-c", code, str(f), "/opt/omxpatch/venv/bin/ansible-playbook"], check=True, capture_output=True)
+        out = f.read_text()
+        assert "enabled = true" in out and "enabled = false" not in out and "port = 4434" in out or "enabled = true" in out
+        assert expect is None or expect in out
+        assert "[server]" not in out or out.index("[server]") < out.index("[ansible]")
+    import tomllib
+    tomllib.loads(f.read_text())                                            # o resultado continua a ser TOML válido
+
+
+def test_ansible_binary_is_found_next_to_the_python_of_the_venv(app, tmp_path, monkeypatch):
+    import os
+    import sys
+    from omxpatch.engine import ansible_runner as ar
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    exe = fake / "ansible-playbook"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    monkeypatch.setattr(sys, "executable", str(fake / "python"))
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / "nada"))
+    monkeypatch.setenv("PATH", "/usr/bin-inexistente")
+    app.config["ANSIBLE_PLAYBOOK"] = "ansible-playbook"
+    with app.app_context():
+        assert ar.binary() == str(exe)
+        app.config["ANSIBLE_PLAYBOOK"] = "ansible-inexistente"
+        assert ar.binary() is None

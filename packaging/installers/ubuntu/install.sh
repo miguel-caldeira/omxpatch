@@ -10,14 +10,14 @@
 #  Uso (como root, na pasta extraída do pacote):
 #    sudo ./install.sh
 #    sudo ./install.sh --hostname omxpatch.empresa.pt --agent-hostname omxpatchcli.empresa.pt --server-ip 10.0.0.5
-#    sudo ./install.sh --with-ansible            # ansible-core + WinRM (modo sem agente, descoberta Hyper-V)
+#    sudo ./install.sh --no-ansible              # sem Ansible (por omissão é instalado: ansible-core + WinRM, modo sem agente)
 #  Pode ser executado de novo para atualizar: a configuração e os dados são mantidos.
 #  Registo: /var/log/omxpatch-install.log
 # =====================================================================================================
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FQDN="omxpatch.oramix.local"; AGENT_FQDN="omxpatchcli.oramix.local"; SERVER_IP=""
-PORT=4434; AGENT_PORT=4444; WITH_ANSIBLE=0; FIREWALL=1
+PORT=4434; AGENT_PORT=4444; WITH_ANSIBLE=1; FIREWALL=1
 APP="${OMXPATCH_APP:-/opt/omxpatch}"; ETC="${OMXPATCH_ETC:-/etc/omxpatch}"; DATA="${OMXPATCH_DATA:-/var/lib/omxpatch}"
 UNITDIR="${OMXPATCH_UNITDIR:-/etc/systemd/system}"; SVC_USER=omxpatch; LOG="${OMXPATCH_LOG:-/var/log/omxpatch-install.log}"
 NO_SERVICE=0; NO_APT=0
@@ -30,6 +30,7 @@ while [ $# -gt 0 ]; do
     --port) PORT="$2"; shift 2 ;;
     --agent-port) AGENT_PORT="$2"; shift 2 ;;
     --with-ansible) WITH_ANSIBLE=1; shift ;;
+    --no-ansible) WITH_ANSIBLE=0; shift ;;
     --no-firewall) FIREWALL=0; shift ;;
     --no-service) NO_SERVICE=1; shift ;;      # testes / contentores
     --no-apt) NO_APT=1; shift ;;
@@ -84,9 +85,14 @@ fi
 echo "Versão instalada agora: $("$PIP" show omxpatch | sed -n 's/^Version: //p')"
 if [ "$WITH_ANSIBLE" = 1 ]; then
   step "Ansible (modo sem agente)"
-  "$PIP" install -q ansible-core pywinrm requests-credssp jmespath
-  "$APP/venv/bin/ansible-galaxy" collection install ansible.posix community.general ansible.windows community.windows \
-      -p "$APP/venv/share/omxpatch/ansible/collections" || warn "Coleções Ansible não instaladas (sem acesso ao Galaxy?)."
+  if ls "$HERE"/wheels-ansible/ansible_core-*.whl >/dev/null 2>&1 && "$PIP" install -q --upgrade --no-index --find-links "$HERE/wheels-ansible" -r "$HERE/requirements-ansible.txt"; then
+    echo "Ansible instalado a partir do pacote (offline)."
+  else
+    "$PIP" install -q --upgrade -r "$HERE/requirements-ansible.txt" || warn "Ansible não instalado (sem acesso ao PyPI?)."
+  fi
+  "$APP/venv/bin/ansible-galaxy" collection install -r "$HERE/requirements-collections.yml" \
+      -p "$APP/venv/share/omxpatch/ansible/collections" || warn "Coleções Ansible não instaladas (sem acesso ao Galaxy?). Repita mais tarde: sudo $APP/venv/bin/ansible-galaxy collection install -r $HERE/requirements-collections.yml -p $APP/venv/share/omxpatch/ansible/collections"
+  [ -x "$APP/venv/bin/ansible-playbook" ] && echo "ansible-playbook: $APP/venv/bin/ansible-playbook" || warn "ansible-playbook não ficou instalado."
 fi
 
 step "Configuração"

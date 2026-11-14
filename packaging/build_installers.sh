@@ -43,8 +43,13 @@ echo "==> Ubuntu"
 U="$STAGE/omxpatch-ubuntu-$VER"; mkdir -p "$U/wheels"
 cp "$STAGE"/app-wheel/*.whl "$U/wheels/"
 for arch in manylinux2014_x86_64 manylinux2014_aarch64; do for pv in 3.12 3.13; do dl "$U/wheels" "$arch" "$pv"; done; done
+mkdir -p "$U/wheels-ansible"      # Ansible offline (a instalar por omissão); as colecções vêm do Galaxy
+for arch in manylinux2014_x86_64 manylinux2014_aarch64; do for pv in 3.12 3.13; do
+  $PY -m pip download -q -r packaging/requirements-ansible.txt --only-binary=:all: --platform "$arch" --python-version "$pv" --implementation cp -d "$U/wheels-ansible" 2>&1 | tail -2 || true
+done; done
+ls "$U/wheels-ansible" | grep -qi ansible_core || echo "AVISO: wheels do Ansible não incluídos (o instalador usará o PyPI)"
 $PY -m pip download -q "tomli>=2.0" --only-binary=:all: --python-version 3.9 --platform manylinux2014_x86_64 --implementation cp -d "$U/wheels" 2>/dev/null || true
-cp packaging/installers/ubuntu/* "$U/"; echo "$VER" > "$U/VERSION"
+cp packaging/installers/ubuntu/* "$U/"; cp packaging/requirements-ansible.txt "$U/"; cp ansible/requirements.yml "$U/requirements-collections.yml"; echo "$VER" > "$U/VERSION"
 # Python/pip/venv offline (Ubuntu 24.04 amd64): .deb usados pelo instalador se o apt não tiver acesso à rede
 DEBS="python3.12-venv python3-venv python3-pip python3-pip-whl python3-setuptools python3-setuptools-whl python3-pkg-resources python3-wheel sshpass openssh-client libfido2-1 libcbor0.10 libedit2"
 mkdir -p "$U/debs"

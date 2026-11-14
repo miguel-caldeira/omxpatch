@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import subprocess  # nosec B404
+import sys
 import tempfile
 from pathlib import Path
 
@@ -45,7 +46,15 @@ def ansible_dir() -> Path:
 
 
 def binary() -> str | None:
-    return shutil.which(str(current_app.config["ANSIBLE_PLAYBOOK"]))
+    """ansible-playbook configurado, no PATH ou na pasta do próprio ambiente virtual (o serviço systemd não tem o venv no PATH)."""
+    name = str(current_app.config["ANSIBLE_PLAYBOOK"])
+    found = shutil.which(name)
+    if found:
+        return found
+    for cand in (Path(sys.executable).parent / Path(name).name, Path(sys.prefix) / "bin" / Path(name).name, Path(sys.prefix) / "Scripts" / (Path(name).name + ".exe")):
+        if cand.is_file() and os.access(cand, os.X_OK):
+            return str(cand)
+    return None
 
 
 def available() -> bool:

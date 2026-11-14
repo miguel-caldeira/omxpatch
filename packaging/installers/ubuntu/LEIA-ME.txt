@@ -7,7 +7,7 @@ OMXPatch — instalação em Ubuntu Server 24.04 / 26.04 (ou Debian)
 4. Em «Organizações» crie a organização; em «Agentes» gere os scripts de auto-instalação (Windows/Linux/macOS).
 
 Portas:  4434 = consola de gestão · 4444 = agentes → consola (cada uma com o seu certificado autoassinado de 2 anos).
-Opções:  --with-ansible (modo sem agente) · --no-firewall · --port · --agent-port
+Opções:  --no-ansible (por omissão o Ansible é instalado: modo sem agente) · --no-firewall · --port · --agent-port
 Atualizar: extraia a nova versão e execute ./install.sh outra vez (dados e configuração mantidos).
 Remover:   sudo /opt/omxpatch/uninstall.sh [--purge]
 Registo:   /var/log/omxpatch-install.log

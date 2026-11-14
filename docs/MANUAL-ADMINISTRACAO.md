@@ -61,7 +61,7 @@ sudo ./install.sh --hostname omxpatch.empresa.pt --agent-hostname omxpatchcli.em
 
 O instalador: instala Python/venv/pip (via apt, ou dos `.deb` incluídos se não houver rede), cria o utilizador `omxpatch`, instala a aplicação em `/opt/omxpatch`, a configuração em `/etc/omxpatch/omxpatch.toml` e os dados em `/var/lib/omxpatch`, gera os **dois certificados**, cria os serviços systemd **`omxpatch`** (web) e **`omxpatch-worker`** (ambos com `Restart=always`), abre 4434/4444 no `ufw` e mostra a **palavra-passe inicial**.
 
-Opções: `--with-ansible` (modo sem agente), `--no-firewall`, `--port`, `--agent-port`, `--no-apt`, `--no-service`. Para atualizar, extraia a nova versão e execute `./install.sh` outra vez (dados e configuração mantidos). Remover: `sudo /opt/omxpatch/uninstall.sh [--purge]`. Registo: `/var/log/omxpatch-install.log`.
+Opções: `--no-ansible` (por omissão o Ansible é instalado: ansible-core, WinRM e as coleções, para o modo sem agente e o motor Ansible), `--no-firewall`, `--port`, `--agent-port`, `--no-apt`, `--no-service`. Para atualizar, extraia a nova versão e execute `./install.sh` outra vez (dados e configuração mantidos). Remover: `sudo /opt/omxpatch/uninstall.sh [--purge]`. Registo: `/var/log/omxpatch-install.log`.
 
 ## 3.2 Windows Server / Windows 10/11
 
@@ -362,7 +362,7 @@ Antes desta versão os playbooks (`patch_*.yml`) aplicavam **um único pacote ou
 **Fluxo:** *Avaliar* (só leitura: lista o que há por atualizar) → **OK explícito do administrador** → *Aplicar*. Aplicar exige uma avaliação bem-sucedida das últimas 24 h de cada ativo. Os resultados das avaliações de SO/software entram em **Atualizações disponíveis**. Os componentes CyberArk respeitam a ordem **Vault → CPM → PSM → PSMP**: cada etapa só arranca se a anterior terminou com sucesso (senão é cancelada).
 
 ## 19.3 Preparar
-1. No controlador (servidor OMXPatch): Ansible instalado (`install.sh --with-ansible`) e as coleções: `ansible-galaxy collection install -r ansible/requirements.yml`. Ativar em `[ansible] enabled = true`.
+1. No controlador (servidor OMXPatch): Ansible instalado (o `install.sh` e o `update.sh` já o instalam e ativam; se o menu Sistema disser «ansible-playbook não encontrado», execute `sudo ./update.sh` da versão atual) e as coleções (`ansible-galaxy collection install -r ansible/requirements.yml -p /opt/omxpatch/venv/share/omxpatch/ansible/collections`; precisam de acesso ao Galaxy). Em `[ansible] enabled = true`.
 2. Alvos: Linux/macOS por SSH com sudo; Windows por WinRM (HTTPS, certificado válido). macOS: o Homebrew corre como o utilizador do ativo, nunca como root; em Apple Silicon algumas atualizações do sistema exigem um utilizador com token seguro.
 3. **Menu Motor Ansible → Credenciais**: palavra-passe, chave SSH ou token de API. Ficam cifradas (Fernet), nunca aparecem na interface nem na auditoria e seguem para o Ansible num ficheiro temporário 0600 apagado no fim.
 4. Em cada **ativo**: ligação «Sem agente (Ansible)», a credencial, e (conforme o caso) a **plataforma de rede** ou o **componente CyberArk**.
