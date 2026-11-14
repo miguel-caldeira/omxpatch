@@ -2,6 +2,11 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.29.20261114 — Correções do CI
+- Agente: a consola do Windows (cp1252) fazia falhar a impressão do relatório de validação; a saída passa a tolerar caracteres não representáveis.
+- Removidas duas importações não usadas (ruff).
+- Testes: o agente nunca escreve em `/etc/omxpatch-agent` durante os testes; a verificação de sintaxe dos playbooks usa colecções simuladas; os testes que precisam de root só correm como root.
+
 ## 1.28.20261113 — Motor Ansible: atualização completa, CyberArk e equipamentos de rede
 - **Motor Ansible sem agente** (menu «Motor Ansible»): atualiza o sistema operativo **e todo o software** em Windows (Windows Update, winget, Chocolatey), Linux (apt, dnf/yum, zypper, snap, flatpak) e macOS (softwareupdate, Homebrew, Mac App Store). Fluxo avaliar (só leitura) → OK do administrador → aplicar (avaliação das últimas 24 h obrigatória). As avaliações alimentam «Atualizações disponíveis».
 - **CyberArk**: Vault, CPM, PSM (Windows) e PSMP (Linux) com pré-verificações, SHA-256 do pacote, cópia de segurança, ordem Vault → CPM → PSM → PSMP imposta, versão final confirmada e reposição dos serviços em caso de falha. O comando de atualização dos componentes Windows é fornecido pelo administrador (a validar em laboratório).

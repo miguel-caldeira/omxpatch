@@ -308,7 +308,17 @@ def cmd_status(args) -> int:
     return 0
 
 
+def _safe_stdio() -> None:
+    """Consolas Windows (cp1252/cp850) não representam todos os caracteres dos relatórios: nunca falhar por causa disso."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv=None) -> int:
+    _safe_stdio()
     p = argparse.ArgumentParser(prog="omxpatch-agent")
     sub = p.add_subparsers(dest="cmd")
     e = sub.add_parser("enroll"); e.add_argument("--server", required=True); e.add_argument("--token", required=True)

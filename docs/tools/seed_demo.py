@@ -70,7 +70,7 @@ def main() -> None:
             db.session.flush()
             for n, v in sw:
                 db.session.add(AssetSoftware(tenant_id=t.id, asset_id=a.id, name=n, version=v))
-            db.session.add(Agent(tenant_id=t.id, asset_id=a.id, key_hash=f"demo{i}", key_prefix="omxa_demo", hostname=name, os_family=fam, version="1.28.20261113",
+            db.session.add(Agent(tenant_id=t.id, asset_id=a.id, key_hash=f"demo{i}", key_prefix="omxa_demo", hostname=name, os_family=fam, version="1.29.20261114",
                                  last_seen=utcnow() - timedelta(minutes=3 if i != 7 else 400)))
         db.session.flush()
         for a in Asset.query.filter_by(tenant_id=t.id):

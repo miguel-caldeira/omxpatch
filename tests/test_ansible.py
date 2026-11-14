@@ -72,16 +72,19 @@ def test_role_covers_all_three_operating_systems():
 
 
 @pytest.mark.skipif(not shutil.which("ansible-playbook"), reason="ansible-playbook não instalado")
-def test_all_playbooks_syntax_check():
+def test_all_playbooks_syntax_check(tmp_path):
+    import os
+    from tests.test_ansible_engine import _stub_collections          # colecções simuladas: a Galaxy pode não estar acessível
+    env = dict(os.environ, ANSIBLE_COLLECTIONS_PATH=_stub_collections(tmp_path / "coll"), ANSIBLE_LOCAL_TEMP=str(tmp_path / "tmp"), ANSIBLE_DEPRECATION_WARNINGS="False")
     for pb in sorted(ANSIBLE_DIR.glob("*.yml")):
         if pb.name == "requirements.yml":
             continue
         p = subprocess.run(["ansible-playbook", "-i", str(ANSIBLE_DIR / "inventory.example.ini"), "--syntax-check", str(pb)],
-                           capture_output=True, text=True, cwd=ANSIBLE_DIR, timeout=180)
+                           capture_output=True, text=True, cwd=ANSIBLE_DIR, timeout=180, env=env)
         assert p.returncode == 0, (pb.name, p.stdout[-800:], p.stderr[-800:])
 
 
-@pytest.mark.skipif(not shutil.which("ansible-playbook") or not shutil.which("dpkg-query"), reason="requer ansible e Debian/Ubuntu")
+@pytest.mark.skipif(not shutil.which("ansible-playbook") or not shutil.which("dpkg-query") or __import__("os").geteuid() != 0, reason="requer ansible, Debian/Ubuntu e root")
 def test_real_inventory_and_validation_run_on_localhost(app, tenant):
     app.config.update(ANSIBLE_ENABLED=True, ANSIBLE_PLAYBOOK=shutil.which("ansible-playbook"), ANSIBLE_DIR=str(ANSIBLE_DIR))
     py = next((p for p in ("/usr/bin/python3.12", "/usr/bin/python3") if Path(p).exists() and

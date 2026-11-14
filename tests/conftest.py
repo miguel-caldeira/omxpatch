@@ -10,6 +10,12 @@ from omxpatch.extensions import db
 from omxpatch.models import Asset, AssetSoftware, CveIntel, Tenant, User, utcnow
 
 
+@pytest.fixture(autouse=True)
+def _agent_dir(tmp_path, monkeypatch):
+    """O agente nunca escreve em /etc/omxpatch-agent durante os testes (falharia sem root, p.ex. no CI)."""
+    monkeypatch.setenv("OMXPATCH_AGENT_DIR", str(tmp_path / "agent-cfg"))
+
+
 @pytest.fixture()
 def app(tmp_path, monkeypatch):
     monkeypatch.delenv("OMXPATCH_CONFIG", raising=False)

@@ -97,7 +97,7 @@ def _net(host_group: str, host: str) -> str:
 def _run(tmp: Path, playbook: str, groups: str, fake: dict, extra: dict, host_vars: str = "") -> tuple[dict | None, str, list]:
     _write_modules(tmp / "coll")
     inv = tmp / "inv.ini"
-    inv.write_text(groups + f"\n[all:vars]\nansible_connection=local\nansible_python_interpreter={os.environ.get('PYTHON', sys.executable)}\n" + host_vars)
+    inv.write_text(groups + f"\n[all:vars]\nansible_connection=local\nansible_become=false\nansible_python_interpreter={os.environ.get('PYTHON', sys.executable)}\n" + host_vars)
     fakef, logf = tmp / "fake.json", tmp / "fake.log"
     fakef.write_text(json.dumps(fake))
     vars_f = tmp / "vars.json"
@@ -207,6 +207,7 @@ def _fake_bin(tmp: Path, state: Path, fail_rpm=False, after="14.2.0-9"):
     return b
 
 
+@pytest.mark.skipif(os.geteuid() != 0, reason="o playbook PSMP escreve em /var/lib e /var/tmp (precisa de root)")
 def test_psmp_simulated(tmp_path):
     import hashlib
     media = tmp_path / "CARKpsmp-14.2.rpm"

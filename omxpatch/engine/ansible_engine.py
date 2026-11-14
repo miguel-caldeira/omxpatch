@@ -11,7 +11,7 @@ import re
 from datetime import timedelta
 
 from ..extensions import db
-from ..models import NET_PLATFORMS, Asset, Task, Tenant, utcnow
+from ..models import Asset, Task, Tenant, utcnow
 
 OPERATIONS = {
     "os": {"label": "Sistema operativo (Windows Update / apt / dnf / zypper / softwareupdate)", "task": "os_update", "scope": "os", "kinds": ("windows", "linux", "macos")},

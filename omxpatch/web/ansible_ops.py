@@ -1,8 +1,6 @@
 """Motor Ansible sem agente: atualização completa de SO e software, CyberArk e avaliação de equipamentos de rede."""
 from __future__ import annotations
 
-import json
-
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
