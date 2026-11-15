@@ -2,6 +2,12 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.34.20261115 — Instaladores compiláveis nos SO de origem
+- Novos construtores nativos: `packaging/build/linux/build.sh` (`.tar.gz`, `.deb` do servidor e do agente, `.rpm` do agente), `packaging/build/windows/build.ps1` (`.zip` e `.exe` Inno Setup do servidor, do servidor 2012 R2 e do agente) e `packaging/build/macos/build.sh` (`.pkg` do agente, com assinatura/notarização opcionais).
+- Workflow `installers.yml`: compila cada instalador no seu SO, testa-os (instala o agente `.deb`/`.pkg`/`.exe`), junta tudo e pode criar uma Release ou guardar os ficheiros em `releases/`.
+- Agente: inscrição automática por ficheiro (`enroll.env`) em Linux, macOS e Windows (MDM/GPO); novo `Install-OMXPatchAgent.ps1`.
+- `build_installers.sh` aceita alvos (`ubuntu windows windows2012r2 kit agent`).
+
 ## 1.33.20261114 — CI
 - Teste do `update.sh` compatível com Python 3.9.
 

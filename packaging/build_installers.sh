@@ -5,7 +5,9 @@
 #   omxpatch-windows2012r2-<versão>.zip centro de comando para Windows Server 2012 R2 (Python 3.11, cp311 win_amd64)
 #   omxpatch-agent-<versão>.zip       agente (só biblioteca padrão) para instalação manual/offline
 #   SHA256SUMS
-# Requer: python3 com pip e tar (zip é opcional). Uso: packaging/build_installers.sh
+# Requer: python3 com pip e tar (zip é opcional).
+# Uso: packaging/build_installers.sh [alvos…]   alvos: ubuntu windows windows2012r2 kit agent (omissão: todos, construídos a partir de Linux)
+#      Para compilar cada instalador no seu SO de origem (e gerar .deb/.rpm, .pkg, .exe) veja packaging/build/README.md
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 PY="${PYTHON:-python3}"
@@ -26,19 +28,26 @@ PYZIP
   fi
 }
 VER="$($PY -c "import re;print(re.search(r'__version__ = \"([^\"]+)\"', open('omxpatch/__init__.py').read()).group(1))")"
-DIST="$ROOT/dist"; STAGE="$(mktemp -d)"; rm -rf "$DIST"; mkdir -p "$DIST"
+TARGETS="${*:-all}"
+want() { [ "$TARGETS" = all ] || case " $TARGETS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+DIST="${DIST:-$ROOT/dist}"; STAGE="$(mktemp -d)"
+if [ "$TARGETS" = all ]; then rm -rf "$DIST"; fi
+mkdir -p "$DIST"
 trap 'rm -rf "$STAGE"' EXIT
 echo "OMXPatch $VER"
 copydocs() { mkdir -p "$1/docs"; cp "$ROOT"/docs/build/MANUAL-*-"$VER".pdf "$1/docs/" 2>/dev/null || true; }
 
 echo "==> wheel da aplicação"
-$PY -m pip wheel . --no-deps -q -w "$STAGE/app-wheel"
-rm -rf build ./*.egg-info
+if want ubuntu || want windows || want windows2012r2; then
+  $PY -m pip wheel . --no-deps -q -w "$STAGE/app-wheel"
+  rm -rf build ./*.egg-info
+fi
 
 dl() {  # dl <pasta> <plataforma> <python> -> dependências binárias
   $PY -m pip download -q -r requirements.lock --require-hashes --only-binary=:all: --platform "$2" --python-version "$3" --implementation cp -d "$1" 2>&1 | tail -2
 }
 
+if want ubuntu; then
 echo "==> Ubuntu"
 U="$STAGE/omxpatch-ubuntu-$VER"; mkdir -p "$U/wheels"
 cp "$STAGE"/app-wheel/*.whl "$U/wheels/"
@@ -62,6 +71,8 @@ ls "$U/debs" | grep -q . || echo "AVISO: pacote Ubuntu sem .deb offline: o insta
 copydocs "$U"
 tar -C "$STAGE" -czf "$DIST/omxpatch-ubuntu-$VER.tar.gz" "omxpatch-ubuntu-$VER"
 
+fi
+if want windows; then
 echo "==> Windows"
 W="$STAGE/omxpatch-windows-$VER"; mkdir -p "$W/wheels"
 cp "$STAGE"/app-wheel/*.whl "$W/wheels/"
@@ -77,6 +88,8 @@ cp packaging/installers/windows/* "$W/"; echo "$VER" > "$W/VERSION"
 copydocs "$W"
 (cd "$STAGE" && mkzip "$DIST/omxpatch-windows-$VER.zip" "omxpatch-windows-$VER")
 
+fi
+if want windows2012r2; then
 echo "==> Windows Server 2012 R2 (Python 3.11)"
 W2="$STAGE/omxpatch-windows2012r2-$VER"; mkdir -p "$W2/wheels" "$W2/prereq"
 cp "$STAGE"/app-wheel/*.whl "$W2/wheels/"
@@ -95,12 +108,16 @@ copydocs "$W2"
 (cd "$STAGE" && mkzip "$DIST/omxpatch-windows2012r2-$VER.zip" "omxpatch-windows2012r2-$VER")
 
 # Manuais (PDF) nos pacotes, se já foram gerados (sh docs/tools/build_docs.sh)
+fi
+if want kit; then
 echo "==> Kit de validação (Windows/macOS)"
 K="$STAGE/omxpatch-validation-kit-$VER"; mkdir -p "$K"
 cp -r omxpatch_agent "$K/"; find "$K" -name __pycache__ -prune -exec rm -rf {} +
 cp packaging/validation-kit/* "$K/"; chmod +x "$K/validate-macos.sh"; echo "$VER" > "$K/VERSION"
 (cd "$STAGE" && mkzip "$DIST/omxpatch-validation-kit-$VER.zip" "omxpatch-validation-kit-$VER")
 
+fi
+if want agent; then
 echo "==> Agente"
 A="$STAGE/omxpatch-agent-$VER"; mkdir -p "$A"
 cp -r omxpatch_agent "$A/"; find "$A" -name __pycache__ -prune -exec rm -rf {} +
@@ -110,4 +127,5 @@ Manual:  PYTHONPATH=<esta pasta> python3 -m omxpatch_agent enroll --server https
 EOF
 (cd "$STAGE" && mkzip "$DIST/omxpatch-agent-$VER.zip" "omxpatch-agent-$VER")
 
-(cd "$DIST" && sha256sum * > SHA256SUMS && cat SHA256SUMS && du -sh *)
+fi
+(cd "$DIST" && sha256sum $(ls | grep -v SHA256SUMS) > SHA256SUMS && cat SHA256SUMS && du -sh *)

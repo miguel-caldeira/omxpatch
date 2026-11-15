@@ -345,6 +345,9 @@ O **kit de validação** (`omxpatch-validation-kit-<versão>.zip`) traz o agente
 
 O Ansible é **opcional** e articula o modo sem agente: `ansible/` contém 19 *playbooks* e os papéis `omxpatch_server` e `omxpatch_agent`. Em **Sistema** vê se o `ansible-playbook` está disponível. `omxpatch ansible-vars --tenant <slug>` gera as variáveis (inclui um token de registo). Os resultados são lidos do marcador `OMXPATCH_RESULT=` do *callback* JSON.
 
+## Compilar os instaladores nos sistemas de origem
+Os pacotes `.zip`/`.tar.gz` fazem-se a partir de Linux (`packaging/build_installers.sh`). Para obter também os instaladores nativos — **`.deb`/`.rpm` (Linux), `.exe` (Windows) e `.pkg` (macOS)** — compile cada um no SO a que se destina: `bash packaging/build/linux/build.sh`, `packaging\build\windows\build.ps1` (Inno Setup 6) e `bash packaging/build/macos/build.sh`. No GitHub, **Actions → installers → Run workflow** compila-os nos três sistemas, testa-os, junta-os com `SHA256SUMS` e pode criar uma Release. Detalhes, requisitos e opções (inscrição automática por ficheiro `enroll.env` para MDM/GPO, assinatura e notarização do `.pkg`): `packaging/build/README.md`.
+
 # 19. Motor Ansible: atualização completa, CyberArk e equipamentos de rede (sem agente)
 
 ## 19.1 Análise dos scripts que já existiam

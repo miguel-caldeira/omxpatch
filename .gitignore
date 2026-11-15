@@ -12,3 +12,5 @@ instance/
 data/
 omxpatch.toml
 ansible/collections/
+!packaging/build/
+!packaging/build/**

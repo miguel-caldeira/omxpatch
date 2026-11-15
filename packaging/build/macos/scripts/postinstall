@@ -1,0 +1,13 @@
+#!/bin/sh
+# Executado pelo instalador (.pkg) como root. Inscrição automática se existir o ficheiro de inscrição (MDM).
+F="/Library/Application Support/OMXPatchAgent/enroll.env"
+if [ -f "$F" ]; then
+  . "$F"
+  if [ -n "${OMXPATCH_SERVER:-}" ] && [ -n "${OMXPATCH_TOKEN:-}" ]; then
+    if /usr/local/bin/omxpatch-agent enroll --server "$OMXPATCH_SERVER" --token "$OMXPATCH_TOKEN" ${OMXPATCH_PIN:+--pin-sha256 "$OMXPATCH_PIN"} --install-service; then rm -f "$F"
+    else echo "omxpatch-agent: a inscrição falhou (o ficheiro $F foi mantido)." >&2; exit 0; fi
+  fi
+else
+  echo "omxpatch-agent instalado. Inscrever: sudo omxpatch-agent enroll --server https://omxpatchcli.oramix.local:4444 --token omxe_… --pin-sha256 <SHA-256> --install-service"
+fi
+exit 0

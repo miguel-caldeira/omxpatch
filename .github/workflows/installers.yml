@@ -1,0 +1,144 @@
+name: installers
+
+# Compila cada instalador no seu SO de origem (Linux: .tar.gz/.deb/.rpm · Windows: .zip/.exe · macOS: .pkg), testa-os e junta tudo.
+# Manual: Actions → installers → Run workflow.  Com um tag «v*» publica também uma Release (rascunho) com todos os ficheiros.
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Criar/atualizar uma Release (rascunho) com o tag indicado, p.ex. v1.34.20261115 (cria o tag se não existir)"
+        required: false
+        default: ""
+      commit_to_repo:
+        description: "Juntar os instaladores compilados (.exe, .pkg, .deb, .rpm) a releases/<versão>/ no ramo main"
+        type: boolean
+        required: false
+        default: false
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm
+      - run: pip install build wheel
+      - run: bash packaging/build/linux/build.sh
+      - name: Teste do .deb do agente (instalar, executar, remover)
+        run: |
+          sudo dpkg -i dist/omxpatch-agent_*_all.deb
+          omxpatch-agent status
+          sudo dpkg -r omxpatch-agent
+      - name: Teste do .rpm do agente (conteúdo)
+        run: rpm -qlp dist/omxpatch-agent-*.rpm | head -20 && rpm -qip dist/omxpatch-agent-*.rpm | head -8
+      - name: Teste do .deb do servidor (conteúdo e scripts)
+        run: |
+          dpkg-deb --info dist/omxpatch-server_*_all.deb | head -12
+          dpkg-deb --contents dist/omxpatch-server_*_all.deb | grep -E "install.sh|update.sh|wheels-ansible/ansible_core" | head
+          bash -n <(dpkg-deb --ctrl-tarfile dist/omxpatch-server_*_all.deb | tar -xO ./postinst)
+      - uses: actions/upload-artifact@v4
+        with: {name: installers-linux, path: dist/*}
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install build wheel
+      - run: choco install innosetup -y --no-progress
+      - name: Compilar
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build\windows\build.ps1
+      - name: Sintaxe dos scripts PowerShell
+        shell: pwsh
+        run: |
+          $bad = 0
+          Get-ChildItem packaging -Recurse -Filter *.ps1 | ForEach-Object {
+            $e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$e)
+            if ($e) { $bad++; Write-Host "ERRO em $($_.FullName): $($e[0].Message)" }
+          }
+          if ($bad) { exit 1 }
+      - name: Teste do instalador do agente (silencioso, sem inscrever)
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path omxpatch\__init__.py -Pattern '__version__ = "([^"]+)"').Matches[0].Groups[1].Value
+          $exe = Get-ChildItem dist -Filter "omxpatch-agent-windows-setup-$ver.exe" | Select-Object -First 1
+          if (-not $exe) { throw 'setup do agente não gerado' }
+          Start-Process $exe.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORUN' -Wait
+          $d = "C:\ProgramData\OMXPatch\installer\$ver"
+          if (-not (Test-Path "$d\Install-OMXPatchAgent.ps1")) { throw "ficheiros não extraídos em $d" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File "$d\Install-OMXPatchAgent.ps1"
+          if ($LASTEXITCODE -ne 0) { throw 'Install-OMXPatchAgent.ps1 falhou' }
+          $env:PYTHONPATH = 'C:\OMXPatchAgent'
+          python -m omxpatch_agent status
+      - name: Teste dos instaladores do servidor (silencioso, só extrair)
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path omxpatch\__init__.py -Pattern '__version__ = "([^"]+)"').Matches[0].Groups[1].Value
+          foreach ($n in "omxpatch-windows-setup-$ver", "omxpatch-windows2012r2-setup-$ver") {
+            $exe = Get-ChildItem dist -Filter "$n.exe" | Select-Object -First 1
+            if (-not $exe) { throw "$n.exe não gerado" }
+          }
+          $exe = Get-ChildItem dist -Filter "omxpatch-windows-setup-$ver.exe"
+          Start-Process $exe.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORUN' -Wait
+          $d = "C:\ProgramData\OMXPatch\installer\$ver"
+          foreach ($f in 'Install-OMXPatch.ps1', 'Update-OMXPatch.ps1', 'VERSION') { if (-not (Test-Path "$d\$f")) { throw "falta $f" } }
+          if (-not (Get-ChildItem "$d\wheels" -Filter 'omxpatch-*.whl')) { throw 'falta o wheel da aplicação' }
+          Get-ChildItem "$d\wheels" | Measure-Object -Property Length -Sum | ForEach-Object { "wheels: $($_.Count) ficheiros, $([int]($_.Sum / 1MB)) MB" }
+      - uses: actions/upload-artifact@v4
+        with: {name: installers-windows, path: dist/*}
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: bash packaging/build/macos/build.sh
+      - name: Teste do .pkg (instalar e executar)
+        run: |
+          sudo installer -pkg dist/omxpatch-agent-*.pkg -target /
+          /usr/local/bin/omxpatch-agent status
+          test -d /Library/OMXPatchAgent/omxpatch_agent
+      - uses: actions/upload-artifact@v4
+        with: {name: installers-macos, path: dist/*}
+
+  juntar:
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {path: out}
+      - name: Juntar e somar
+        run: |
+          mkdir all
+          find out -type f ! -name 'SHA256SUMS*' ! -name '*.sha256' -exec cp {} all/ \;
+          # as somas parciais de cada SO foram calculadas no SO de origem: confirmar que batem
+          for f in out/*/SHA256SUMS out/*/SHA256SUMS.windows; do [ -f "$f" ] && (cd "$(dirname "$f")" && sha256sum -c --ignore-missing "$(basename "$f")") ; done
+          (cd all && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with: {name: installers-all, path: all/*}
+      - name: Release (rascunho)
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release != ''
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: |
+          TAG="${{ inputs.release }}"; [ -n "$TAG" ] || TAG="$GITHUB_REF_NAME"
+          gh release view "$TAG" >/dev/null 2>&1 && gh release upload "$TAG" all/* --clobber || gh release create "$TAG" all/* --draft --title "OMXPatch ${TAG#v}" --generate-notes
+      - name: Guardar em releases/<versão>/ (ramo main)
+        if: inputs.commit_to_repo == true
+        run: |
+          VER="$(python3 -c "import re;print(re.search(r'__version__ = \"([^\"]+)\"', open('omxpatch/__init__.py').read()).group(1))")"
+          mkdir -p "releases/$VER"
+          for f in all/*; do n="$(basename "$f")"; [ "$n" = SHA256SUMS ] && continue; cp "$f" "releases/$VER/$n"; done
+          (cd "releases/$VER" && sha256sum $(ls -p | grep -v '/$' | grep -v SHA256SUMS) > SHA256SUMS)
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          git add "releases/$VER"; git commit -m "Instaladores compilados nos SO de origem ($VER) [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main

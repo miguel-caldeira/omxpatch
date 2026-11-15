@@ -11,10 +11,11 @@
 #>
 param(
   [string]$Hostname = 'omxpatch.oramix.local', [string]$AgentHostname = 'omxpatchcli.oramix.local', [string]$ServerIp = '',
-  [int]$Port = 4434, [int]$AgentPort = 4444, [switch]$WithAnsible, [switch]$NoFirewall,
+  [int]$Port = 4434, [int]$AgentPort = 4444, [switch]$WithAnsible, [switch]$NoFirewall, [switch]$Pause,
   [string]$PythonUrl = 'https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe', [string]$PythonSha256 = ''
 )
 $ErrorActionPreference = 'Stop'
+trap { Write-Host "ERRO: $_" -ForegroundColor Red; if ($Pause) { Read-Host 'Prima Enter para fechar' | Out-Null }; break }
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $App = 'C:\OMXPatch'; $Data = 'C:\ProgramData\OMXPatch'; $Cfg = Join-Path $Data 'omxpatch.toml'
 if ($Hostname -notmatch '^[A-Za-z0-9.\-]+$' -or $AgentHostname -notmatch '^[A-Za-z0-9.\-]+$') { throw 'Nome inválido' }
@@ -141,3 +142,4 @@ try {
   Write-Host "Versao em execucao na consola: $($h.version)" -ForegroundColor Green
 } catch { Write-Warning "Nao foi possivel confirmar a versao em execucao na consola (ainda a arrancar?)." }
 Stop-Transcript | Out-Null
+if ($Pause) { Read-Host 'Prima Enter para fechar' | Out-Null }
