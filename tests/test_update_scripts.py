@@ -34,27 +34,10 @@ def test_console_shows_version(app, alpha_admin):
     assert versioninfo.read(app.config)["current"] == __version__
 
 
-def _toml_editor():
-    import re
-    t = (R / "ubuntu/update.sh").read_text()
-    return re.search(r"<<'PY'\n(.*?)\nPY\n", t, re.S).group(1)
-
-
-def test_update_enables_ansible_in_config(tmp_path):
-    import subprocess
-    import sys
-    code = _toml_editor()
-    for before, expect in (("[server]\nport = 4434\n\n[ansible]\nenabled = false\nplaybook = \"/x/ap\"\n", None),
-                           ("[server]\nport = 4434\n", "[ansible]"), ("[ansible]\nenabled = false\n", "playbook")):
-        f = tmp_path / "o.toml"
-        f.write_text(before)
-        subprocess.run([sys.executable, "-c", code, str(f), "/opt/omxpatch/venv/bin/ansible-playbook"], check=True, capture_output=True)
-        out = f.read_text()
-        assert "enabled = true" in out and "enabled = false" not in out and "port = 4434" in out or "enabled = true" in out
-        assert expect is None or expect in out
-        assert "[server]" not in out or out.index("[server]") < out.index("[ansible]")
-    tomllib = pytest.importorskip("tomllib")                                  # Python ≥ 3.11
-    tomllib.loads(f.read_text())                                            # o resultado continua a ser TOML válido
+def test_installers_call_the_ansible_doctor():
+    for f in ("ubuntu/install.sh", "ubuntu/update.sh"):
+        s = (R / f).read_text()
+        assert "ansible-doctor" in s and "wheels-ansible" in s and "collections" in s
 
 
 def test_ansible_binary_is_found_next_to_the_python_of_the_venv(app, tmp_path, monkeypatch):
@@ -74,3 +57,40 @@ def test_ansible_binary_is_found_next_to_the_python_of_the_venv(app, tmp_path, m
         assert ar.binary() == str(exe)
         app.config["ANSIBLE_PLAYBOOK"] = "ansible-inexistente"
         assert ar.binary() is None
+
+
+def test_ansible_doctor_reasons_and_config_edit(app, tmp_path, monkeypatch):
+    from omxpatch.engine import ansible_doctor as ad
+    monkeypatch.setattr("shutil.which", lambda n: None)
+    monkeypatch.setattr("sys.executable", str(tmp_path / "bin" / "python"))
+    monkeypatch.setattr("sys.prefix", str(tmp_path))
+    with app.app_context():
+        app.config["ANSIBLE_ENABLED"] = False
+        d = ad.diagnose(fresh=True)
+        assert d["reason"] == "disabled" and "enabled = true" in d["fix"]
+        app.config["ANSIBLE_ENABLED"] = True
+        d = ad.diagnose(fresh=True)
+        assert d["reason"] == "missing_binary" and "ansible-doctor --fix" in d["fix"] and d["ok"] is False
+        (tmp_path / "bin").mkdir()
+        fake = tmp_path / "bin" / "ansible-playbook"
+        fake.write_text("#!/bin/sh\necho 'ansible-playbook [core 2.22.0]'\n")
+        fake.chmod(0o755)
+        d = ad.diagnose(fresh=True)
+        assert d["ok"] is True and d["found"] == str(fake) and "2.22" in d["version"]
+        monkeypatch.setattr("sys.platform", "win32")
+        assert ad.diagnose(fresh=True)["reason"] == "windows"
+    cfg = tmp_path / "o.toml"
+    cfg.write_text("[server]\nport = 1\n\n[ansible]\nenabled = false\nplaybook = \"ansible-playbook\"\n")
+    assert ad.enable_in_config(str(cfg), "/x/ansible-playbook") is True
+    t = cfg.read_text()
+    assert "enabled = true" in t and "/x/ansible-playbook" in t and "port = 1" in t
+    assert ad.enable_in_config(str(cfg), "/x/ansible-playbook") is False             # idempotente
+
+
+def test_ansible_pages_show_the_reason(app, alpha_admin, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda n: None)
+    app.config.update(ANSIBLE_ENABLED=True, ANSIBLE_PLAYBOOK="ansible-inexistente")
+    from omxpatch.engine import ansible_doctor as ad
+    ad._cache.clear()
+    page = alpha_admin.get("/ansible").data.decode()
+    assert "não está disponível" in page and "ansible-doctor --fix" in page

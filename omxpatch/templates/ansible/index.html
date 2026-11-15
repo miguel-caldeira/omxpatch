@@ -2,7 +2,12 @@
 {% block content %}<div class="actions"><h1>Motor Ansible (sem agente)</h1><span class="spacer"></span>
 <a class="btn sec" href="{{ url_for('ansible_ops.network') }}">Avaliação de rede</a>{% if current_user.can_manage %}<a class="btn sec" href="{{ url_for('ansible_ops.credentials') }}">Credenciais</a>{% endif %}</div>
 <p class="muted small">Atualiza o sistema operativo e todo o software (Windows, Linux, macOS), os componentes CyberArk (Vault, CPM, PSM, PSMP) e avalia atualizações de switches, routers e firewalls (Check Point, FortiGate, Palo Alto, Cisco, Juniper, Arista), sem instalar agente. Fluxo: <strong>avaliar</strong> (só leitura) → <strong>OK do administrador</strong> → <strong>aplicar</strong> (exige avaliação das últimas {{ now_fresh.total_seconds() // 3600 | int }} h).</p>
-{% if not available %}<div class="flash flash-warning">O Ansible não está disponível neste servidor (ansible-playbook não encontrado ou [ansible] enabled = false): as tarefas ficam em fila.</div>{% endif %}
+{% if not available %}<div class="flash flash-warning"><strong>O Ansible não está disponível neste servidor — as tarefas ficam em fila.</strong>
+{% if doctor.reason == 'windows' %}Este servidor corre em Windows e o Ansible não corre nativamente: use um controlador Linux.
+{% elif doctor.reason == 'disabled' %}Causa: o Ansible está <b>desativado</b> na configuração ({{ doctor.config_file or 'omxpatch.toml' }}, [ansible] enabled = false).
+{% else %}Causa: o <code>ansible-playbook</code> <b>não está instalado</b> (procurado: <code>{{ doctor.configured }}</code>, Python {{ doctor.python }}).{% endif %}
+<br>Solução: <code>{{ doctor.fix }}</code></div>
+{% elif doctor.missing_collections %}<div class="flash flash-warning">Ansible instalado ({{ doctor.version }}), mas faltam coleções: {{ doctor.missing_collections|join(', ') }}. <code>{{ doctor.fix }}</code></div>{% endif %}
 {% if current_user.can_write %}<form method="post" action="{{ url_for('ansible_ops.run') }}" class="panel"><h2>Nova operação</h2>{{ csrf() }}
 <div class="row"><div><label for="op">Operação</label><select id="op" name="op">{% for k, o in ops.items() %}<option value="{{ k }}">{{ o.label }}</option>{% endfor %}</select></div>
 <div><label for="mode">Modo</label><select id="mode" name="mode"><option value="assess">Avaliar (só leitura)</option>{% if current_user.can_manage %}<option value="apply">Aplicar (exige OK)</option>{% endif %}</select></div>

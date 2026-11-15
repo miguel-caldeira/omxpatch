@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.34.20261115
+# Referência técnica — OMXPatch 1.35.20261115
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
@@ -150,6 +150,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | Comando | Utilização |
 |---|---|
 | `agent-token` | `omxpatch agent-token [-h] --tenant TENANT [--ring RING] [--days DAYS] [--name NAME] [--max-uses MAX_USES]` |
+| `ansible-doctor` | `omxpatch ansible-doctor [-h] [--fix] [--wheels WHEELS] [--collections COLLECTIONS]` |
 | `ansible-vars` | `omxpatch ansible-vars [-h] --tenant TENANT [--ring RING] [--days DAYS] [--name NAME] [--max-uses MAX_USES]` |
 | `backup` | `omxpatch backup [-h] [{create,list}]` |
 | `capacity` | `omxpatch capacity [-h] [--benchmark] [--agents AGENTS] [--seconds SECONDS] [--tenant TENANT] [--json]` |

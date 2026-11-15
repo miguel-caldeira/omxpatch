@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm
-      - run: pip install build wheel
+      - run: pip install build wheel ansible-core
       - run: bash packaging/build/linux/build.sh
       - name: Teste do .deb do agente (instalar, executar, remover)
         run: |

@@ -5,7 +5,7 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 
 from ..connectors import store
-from ..engine import ansible_engine as eng, ansible_runner
+from ..engine import ansible_doctor, ansible_engine as eng, ansible_runner
 from ..extensions import db
 from ..models import CREDENTIAL_KINDS, NET_PLATFORMS, AnsibleCredential, Asset, NetBaseline, NetworkAssessment, Task
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
@@ -22,7 +22,7 @@ def index():
     require_tenant()
     assets = scoped(Asset).filter(Asset.connection == "ansible").order_by(Asset.name).all()
     jobs = scoped(Task).filter(Task.type.in_(eng.TASK_TYPES)).order_by(Task.id.desc()).limit(40).all()
-    return render_template("ansible/index.html", assets=assets, jobs=jobs, ops=eng.OPERATIONS, eligible=eng.eligible, available=ansible_runner.available(),
+    return render_template("ansible/index.html", assets=assets, jobs=jobs, ops=eng.OPERATIONS, eligible=eng.eligible, available=ansible_runner.available(), doctor=ansible_doctor.diagnose(),
                            word=eng.CONFIRM_WORD, now_fresh=eng.APPLY_FRESHNESS)
 
 

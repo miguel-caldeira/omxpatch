@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Constrói os pacotes de instalação em dist/:
-#   omxpatch-ubuntu-<versão>.tar.gz   centro de comando (Ubuntu/Debian) com wheelhouse offline (cp312/cp313, x86_64 e aarch64)
+#   omxpatch-ubuntu-<versão>.tar.gz   centro de comando (Ubuntu/Debian) com wheelhouse offline (cp312/cp313/cp314, x86_64 e aarch64)
 #   omxpatch-windows-<versão>.zip     centro de comando (Windows) com wheelhouse offline (cp312, win_amd64)
 #   omxpatch-windows2012r2-<versão>.zip centro de comando para Windows Server 2012 R2 (Python 3.11, cp311 win_amd64)
 #   omxpatch-agent-<versão>.zip       agente (só biblioteca padrão) para instalação manual/offline
@@ -51,11 +51,19 @@ if want ubuntu; then
 echo "==> Ubuntu"
 U="$STAGE/omxpatch-ubuntu-$VER"; mkdir -p "$U/wheels"
 cp "$STAGE"/app-wheel/*.whl "$U/wheels/"
-for arch in manylinux2014_x86_64 manylinux2014_aarch64; do for pv in 3.12 3.13; do dl "$U/wheels" "$arch" "$pv"; done; done
+for arch in manylinux2014_x86_64 manylinux2014_aarch64; do for pv in 3.12 3.13 3.14; do dl "$U/wheels" "$arch" "$pv"; done; done
 mkdir -p "$U/wheels-ansible"      # Ansible offline (a instalar por omissão); as colecções vêm do Galaxy
-for arch in manylinux2014_x86_64 manylinux2014_aarch64; do for pv in 3.12 3.13; do
+for arch in manylinux2014_x86_64 manylinux2014_aarch64; do for pv in 3.12 3.13 3.14; do
   $PY -m pip download -q -r packaging/requirements-ansible.txt --only-binary=:all: --platform "$arch" --python-version "$pv" --implementation cp -d "$U/wheels-ansible" 2>&1 | tail -2 || true
 done; done
+# colecções Ansible para instalação offline (precisa de ansible-galaxy e de acesso ao Galaxy no momento da compilação)
+if command -v ansible-galaxy >/dev/null; then
+  mkdir -p "$U/collections"
+  ansible-galaxy collection download -r ansible/requirements.yml -p "$U/collections" >/dev/null 2>&1 || echo "AVISO: colecções Ansible não descarregadas (sem acesso ao Galaxy): o instalador usará o Galaxy"
+  ls "$U/collections"/*.tar.gz >/dev/null 2>&1 || rmdir "$U/collections" 2>/dev/null || true
+else
+  echo "AVISO: ansible-galaxy não encontrado (pip install ansible-core): colecções não incluídas no pacote"
+fi
 ls "$U/wheels-ansible" | grep -qi ansible_core || echo "AVISO: wheels do Ansible não incluídos (o instalador usará o PyPI)"
 $PY -m pip download -q "tomli>=2.0" --only-binary=:all: --python-version 3.9 --platform manylinux2014_x86_64 --implementation cp -d "$U/wheels" 2>/dev/null || true
 cp packaging/installers/ubuntu/* "$U/"; cp packaging/requirements-ansible.txt "$U/"; cp ansible/requirements.yml "$U/requirements-collections.yml"; echo "$VER" > "$U/VERSION"

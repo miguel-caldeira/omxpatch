@@ -45,9 +45,9 @@ def ansible_dir() -> Path:
     return Path(current_app.config["ANSIBLE_DIR"])
 
 
-def binary() -> str | None:
+def binary(name: str | None = None) -> str | None:
     """ansible-playbook configurado, no PATH ou na pasta do próprio ambiente virtual (o serviço systemd não tem o venv no PATH)."""
-    name = str(current_app.config["ANSIBLE_PLAYBOOK"])
+    name = str(name or current_app.config["ANSIBLE_PLAYBOOK"])
     found = shutil.which(name)
     if found:
         return found

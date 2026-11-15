@@ -430,6 +430,54 @@ def cmd_agent_token(args) -> int:
     return 0
 
 
+def cmd_ansible_doctor(args) -> int:
+    """Diagnostica o Ansible deste servidor e, com --fix, instala-o (ansible-core, WinRM e coleções) e ativa-o na configuração.
+    Não abre a base de dados nem cria pastas (pode correr como root sem estragar as permissões dos dados)."""
+    import subprocess  # nosec B404
+    from .config import DEFAULTS, _find_ansible_dir, _load_toml
+    from .engine import ansible_doctor
+    cfgfile = os.environ.get("OMXPATCH_CONFIG") or next((p for p in ("/etc/omxpatch/omxpatch.toml", r"C:\ProgramData\OMXPatch\omxpatch.toml") if Path(p).is_file()), "")
+    cfg = dict(DEFAULTS)
+    if cfgfile and Path(cfgfile).is_file():
+        cfg.update({k: v for k, v in _load_toml(Path(cfgfile)).items() if k in DEFAULTS})
+    cfg["CONFIG_FILE"] = cfgfile
+    if not cfg.get("ANSIBLE_DIR"):
+        cfg["ANSIBLE_DIR"] = str(_find_ansible_dir())
+    d = ansible_doctor.diagnose(fresh=True, cfg=cfg)
+    print(f"Python {d['python']} ({d['executable']}) em {d['platform']}\nAnsible ativo na configuração: {d['enabled']}   ansible-playbook: {d['found'] or 'NÃO ENCONTRADO'} {d['version']}")
+    print(f"Estado: {d['reason']}" + (f"\n  {d['fix']}" if d.get("fix") else ""))
+    if not args.fix:
+        return 0 if d["reason"] in ("ok", "missing_collections") else 1
+    if d["reason"] == "windows":
+        return 2
+    venv = Path(sys.executable).parent
+    pkgs = ["ansible-core>=2.15", "pywinrm>=0.4", "requests-credssp", "jmespath"]
+    cmd = [str(venv / "pip"), "install", "-q", "--upgrade"] + (["--no-index", "--find-links", args.wheels] if args.wheels else []) + pkgs
+    print("A instalar:", " ".join(cmd))
+    if subprocess.run(cmd).returncode != 0 and (not args.wheels or subprocess.run(cmd[:6] + pkgs).returncode != 0):  # nosec B603
+        print("ERRO: a instalação do Ansible falhou (sem acesso ao PyPI? use --wheels <pasta wheels-ansible do pacote>).", file=sys.stderr)
+        return 1
+    gal = venv / "ansible-galaxy"
+    target = Path(sys.prefix) / "share" / "omxpatch" / "ansible" / "collections"
+    req = Path(cfg["ANSIBLE_DIR"]) / "requirements.yml"
+    tarballs = sorted(str(p) for p in Path(args.collections).glob("*.tar.gz")) if args.collections else []
+    if gal.is_file():
+        if tarballs:
+            print(f"A instalar {len(tarballs)} coleção(ões) do pacote (offline)")
+            ok = subprocess.run([str(gal), "collection", "install", *tarballs, "-p", str(target), "--no-deps", "--force"]).returncode == 0  # nosec B603
+        else:
+            ok = req.is_file() and subprocess.run([str(gal), "collection", "install", "-r", str(req), "-p", str(target)]).returncode == 0  # nosec B603
+        if not ok:
+            print("AVISO: coleções não instaladas (sem acesso ao Galaxy e sem coleções no pacote). Repita com acesso ao Galaxy.", file=sys.stderr)
+    if cfgfile:
+        changed = ansible_doctor.enable_in_config(cfgfile, str(venv / "ansible-playbook"))
+        print(f"Configuração {cfgfile}: {'atualizada' if changed else 'já estava correta'} ([ansible] enabled = true)")
+    else:
+        print("Sem ficheiro de configuração: defina [ansible] enabled = true.")
+    print("Reinicie o serviço:  sudo systemctl restart omxpatch omxpatch-worker")
+    return 0
+
+
 def cmd_ansible_vars(args) -> int:
     """Mostra as variáveis (``-e``) dos playbooks de instalação dos agentes, com um novo token de registo."""
     from .extensions import db
@@ -463,6 +511,7 @@ def main(argv=None) -> int:
     r = sub.add_parser("reset-admin"); r.add_argument("--email"); r.add_argument("--reset-mfa", action="store_true"); r.set_defaults(fn=cmd_reset_admin)
     sub.add_parser("initial-password").set_defaults(fn=cmd_initial_password)
     sub.add_parser("check").set_defaults(fn=cmd_check)
+    ad = sub.add_parser("ansible-doctor"); ad.add_argument("--fix", action="store_true"); ad.add_argument("--wheels", default=""); ad.add_argument("--collections", default=""); ad.set_defaults(fn=cmd_ansible_doctor)
     sub.add_parser("intel-sync").set_defaults(fn=cmd_intel_sync)
     co = sub.add_parser("correlate"); co.add_argument("--tenant", required=True); co.set_defaults(fn=cmd_correlate)
     ii = sub.add_parser("import-intel"); ii.add_argument("file"); ii.set_defaults(fn=cmd_import_intel)

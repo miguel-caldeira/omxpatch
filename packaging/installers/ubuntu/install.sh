@@ -83,18 +83,6 @@ if ! "$PIP" install -q --upgrade --no-index --find-links "$HERE/wheels" omxpatch
   "$PIP" install -q --upgrade --find-links "$HERE/wheels" omxpatch
 fi
 echo "Versão instalada agora: $("$PIP" show omxpatch | sed -n 's/^Version: //p')"
-if [ "$WITH_ANSIBLE" = 1 ]; then
-  step "Ansible (modo sem agente)"
-  if ls "$HERE"/wheels-ansible/ansible_core-*.whl >/dev/null 2>&1 && "$PIP" install -q --upgrade --no-index --find-links "$HERE/wheels-ansible" -r "$HERE/requirements-ansible.txt"; then
-    echo "Ansible instalado a partir do pacote (offline)."
-  else
-    "$PIP" install -q --upgrade -r "$HERE/requirements-ansible.txt" || warn "Ansible não instalado (sem acesso ao PyPI?)."
-  fi
-  "$APP/venv/bin/ansible-galaxy" collection install -r "$HERE/requirements-collections.yml" \
-      -p "$APP/venv/share/omxpatch/ansible/collections" || warn "Coleções Ansible não instaladas (sem acesso ao Galaxy?). Repita mais tarde: sudo $APP/venv/bin/ansible-galaxy collection install -r $HERE/requirements-collections.yml -p $APP/venv/share/omxpatch/ansible/collections"
-  [ -x "$APP/venv/bin/ansible-playbook" ] && echo "ansible-playbook: $APP/venv/bin/ansible-playbook" || warn "ansible-playbook não ficou instalado."
-fi
-
 step "Configuração"
 if [ ! -f "$ETC/omxpatch.toml" ]; then
   cat > "$ETC/omxpatch.toml" <<TOML
@@ -122,6 +110,12 @@ else
   echo "Configuração existente mantida: $ETC/omxpatch.toml"
 fi
 cp "$HERE/uninstall.sh" "$APP/uninstall.sh" 2>/dev/null && chmod 755 "$APP/uninstall.sh" || true
+
+if [ "$WITH_ANSIBLE" = 1 ]; then
+  step "Ansible (modo sem agente)"
+  OMXPATCH_CONFIG="$ETC/omxpatch.toml" "$APP/venv/bin/omxpatch" ansible-doctor --fix --wheels "$HERE/wheels-ansible" --collections "$HERE/collections" \
+    || warn "O Ansible não ficou pronto. Diagnóstico: sudo $APP/venv/bin/omxpatch ansible-doctor   ·   correção: sudo $APP/venv/bin/omxpatch ansible-doctor --fix"
+fi
 
 step "Certificados TLS (autoassinados, 2 anos)"
 export OMXPATCH_CONFIG="$ETC/omxpatch.toml"

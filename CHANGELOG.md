@@ -2,6 +2,11 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.35.20261115 — Ansible: diagnóstico e correção
+- «O Ansible não está disponível» passa a dizer **porquê** (servidor Windows, desativado na configuração, `ansible-playbook` não instalado, coleções em falta) e o comando exato que resolve, em Sistema e em Motor Ansible.
+- Novo comando `omxpatch ansible-doctor [--fix --wheels … --collections …]`: diagnostica e instala o ansible-core, o WinRM e as coleções, e ativa o Ansible na configuração (sem tocar na base de dados nem criar pastas; seguro como root). `install.sh` e `update.sh` usam-no.
+- Pacote Ubuntu: wheels também para Python 3.14 (Ubuntu 26.04) e coleções Ansible incluídas quando compilado com acesso ao Galaxy (instalação 100 % offline).
+
 ## 1.34.20261115 — Instaladores compiláveis nos SO de origem
 - Novos construtores nativos: `packaging/build/linux/build.sh` (`.tar.gz`, `.deb` do servidor e do agente, `.rpm` do agente), `packaging/build/windows/build.ps1` (`.zip` e `.exe` Inno Setup do servidor, do servidor 2012 R2 e do agente) e `packaging/build/macos/build.sh` (`.pkg` do agente, com assinatura/notarização opcionais).
 - Workflow `installers.yml`: compila cada instalador no seu SO, testa-os (instala o agente `.deb`/`.pkg`/`.exe`), junta tudo e pode criar uma Release ou guardar os ficheiros em `releases/`.

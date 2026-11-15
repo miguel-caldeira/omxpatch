@@ -221,7 +221,8 @@ def system():
     cfg = current_app.config
     return render_template("admin/system.html", ansible=ansible_runner.available(), ansible_bin=ansible_runner.binary(),
                            ansible_dir=cfg["ANSIBLE_DIR"], intel=intel.stats(), cfg=cfg, certs=_certs(cfg),
-                           worker=current_app.extensions.get("omxpatch_worker"), vinfo=versioninfo.read(cfg))
+                           worker=current_app.extensions.get("omxpatch_worker"), vinfo=versioninfo.read(cfg),
+                           ansible_diag=__import__("omxpatch.engine.ansible_doctor", fromlist=["diagnose"]).diagnose())
 
 
 # --------------------------------------------------------------------------- capacidade, configuração e reinício
