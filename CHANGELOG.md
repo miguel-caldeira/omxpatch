@@ -2,6 +2,10 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.38.20261122 — Windows sem WinRM
+- Credencial com «Windows: como ligar → SSH» (OpenSSH Server do Windows, palavra-passe ou chave SSH): o motor Ansible liga-se por SSH com shell PowerShell, sem WinRM. Uma credencial de chave SSH num ativo Windows usa SSH automaticamente.
+- Manual: preparação do OpenSSH no Windows e a alternativa do agente (sem WinRM nem portas de entrada).
+
 ## 1.37.20261122 — Ligação WinRM/SSH do motor Ansible
 - Erro «ssl: auth method ssl requires a username» (UNREACHABLE): faltava utilizador no ativo. A consola valida agora **antes de criar a tarefa** o que falta (utilizador, palavra-passe no Windows, token de API nos FortiGate/Palo Alto) e diz como corrigir.
 - WinRM: NTLM sobre HTTPS por omissão, com o transporte (NTLM/Basic/CredSSP) e a validação do certificado configuráveis na credencial.

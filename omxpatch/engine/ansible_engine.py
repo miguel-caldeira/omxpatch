@@ -49,8 +49,11 @@ def eligible(asset: Asset, op: str) -> bool:
 WINRM_TRANSPORTS = ("ntlm", "basic", "credssp", "kerberos", "ssl")
 
 
-def _winrm_vars(opts: dict) -> dict:
-    """Ligação WinRM: NTLM sobre HTTPS por omissão (contas locais e de domínio); o certificado é validado salvo indicação em contrário na credencial."""
+def _winrm_vars(opts: dict, kind: str = "") -> dict:
+    """Ligação ao Windows. Por omissão WinRM (NTLM sobre HTTPS, contas locais e de domínio; certificado validado salvo indicação na credencial).
+    Alternativa SEM WinRM: SSH (OpenSSH Server do Windows) — escolhida na credencial ou implícita numa credencial de chave SSH."""
+    if opts.get("windows_connection") == "ssh" or kind == "ssh_key":
+        return {"ansible_connection": "ssh", "ansible_shell_type": "powershell"}
     transport = opts.get("winrm_transport") if opts.get("winrm_transport") in WINRM_TRANSPORTS else "ntlm"
     return {"ansible_connection": "winrm", "ansible_winrm_transport": transport, "ansible_winrm_scheme": "https",
             "ansible_winrm_server_cert_validation": "ignore" if opts.get("validate_certs") is False else "validate"}
@@ -76,8 +79,8 @@ def connection_problems(asset: Asset) -> list[str]:
     if not user:
         out.append("falta o utilizador (campo «Utilizador Ansible» do ativo ou o utilizador da credencial)")
     is_windows = asset.os_family == "windows" or (asset.cyberark_role and asset.cyberark_role != "psmp")
-    if is_windows and not sec.get("password"):
-        out.append("o Windows (WinRM) precisa de uma credencial com palavra-passe")
+    if is_windows and not sec.get("password") and not sec.get("ssh_key"):
+        out.append("o Windows precisa de uma credencial com palavra-passe (WinRM ou SSH) ou com chave SSH")
     return out
 
 
@@ -131,7 +134,8 @@ def build_inventory(assets: list[Asset]) -> dict:
             sec = store.decrypt_json(c.secret)
             if c.username and not a.ansible_user:
                 v["ansible_user"] = c.username
-            winrm_opts = sec.get("opts") or {}
+            winrm_opts = dict(sec.get("opts") or {})
+            winrm_opts["_kind"] = c.kind
             if c.kind == "password" and sec.get("password"):
                 v["ansible_password"] = sec["password"]
                 if c.become_password:
@@ -154,14 +158,14 @@ def build_inventory(assets: list[Asset]) -> dict:
         elif a.cyberark_role:
             v["omx_component"] = a.cyberark_role
             if a.cyberark_role != "psmp":
-                v.update(_winrm_vars(winrm_opts))
+                v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', '')))
                 add("windows", key)
             else:
                 add("linux", key)
             add(f"cyberark_{a.cyberark_role}", key)
         elif a.os_family:
             if a.os_family == "windows":
-                v.update(_winrm_vars(winrm_opts))
+                v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', '')))
             add(a.os_family, key)
         hosts[key] = v
     inv: dict = {"all": {"hosts": hosts}}

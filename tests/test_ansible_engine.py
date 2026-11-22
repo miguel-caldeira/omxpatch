@@ -389,3 +389,23 @@ def test_known_ansible_errors_are_explained_in_portuguese():
     assert any("Sem ligação" in h for h in eng.explain("Connection refused"))
     assert any("recusados" in h for h in eng.explain("the specified credentials were rejected by the server"))
     assert eng.explain("tudo bem") == []
+
+
+def test_windows_without_winrm_uses_ssh(app, tenant):
+    """Alternativa ao WinRM: SSH (OpenSSH Server do Windows) com palavra-passe ou chave."""
+    from omxpatch.connectors import store
+    with app.app_context():
+        pw = AnsibleCredential(tenant_id=tenant.id, name="win-ssh", kind="password", username="Administrator",
+                               secret=store.encrypt_json({"password": "pw", "opts": {"windows_connection": "ssh"}}))
+        key = AnsibleCredential(tenant_id=tenant.id, name="win-key", kind="ssh_key", username="svc",
+                                secret=store.encrypt_json({"ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nx\n-----END OPENSSH PRIVATE KEY-----", "opts": {}}))
+        db.session.add_all([pw, key])
+        db.session.flush()
+        a = mk(tenant, "win-ssh1", os_family="windows", credential_id=pw.id, ip="10.0.0.20")
+        b = mk(tenant, "win-ssh2", os_family="windows", credential_id=key.id, ip="10.0.0.21")
+        inv = eng.build_inventory([a, b])["all"]["hosts"]
+        for x in (a, b):
+            h = inv[f"asset{x.id}"]
+            assert h["ansible_connection"] == "ssh" and h["ansible_shell_type"] == "powershell" and not any(k.startswith("ansible_winrm") for k in h)
+        assert inv[f"asset{a.id}"]["ansible_password"] == "pw" and "__ssh_key__" in inv[f"asset{b.id}"]       # a chave vai para ficheiro temporário
+        assert eng.connection_problems(a) == [] and eng.connection_problems(b) == []
