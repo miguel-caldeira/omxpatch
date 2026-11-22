@@ -17,7 +17,26 @@ from omxpatch.models import AnsibleCredential, Asset, AvailableUpdate, NetBaseli
 ANS = Path(__file__).resolve().parents[1] / "ansible"
 
 
+def _cred(tenant, kind):
+    from omxpatch.connectors import store
+    c = AnsibleCredential.query.filter_by(tenant_id=tenant.id, name=f"t-{kind}").first()
+    if c is None:
+        sec = {"password": {"password": "pw", "opts": {}}, "api_token": {"api_token": "tok"}}[kind]
+        c = AnsibleCredential(tenant_id=tenant.id, name=f"t-{kind}", kind=kind, username="svc" if kind == "password" else "", secret=store.encrypt_json(sec))
+        db.session.add(c)
+        db.session.flush()
+    return c
+
+
 def mk(tenant, name, **kw):
+    """Ativo sem agente com o que o Ansible precisa para ligar-se (utilizador; palavra-passe no Windows; token nas API)."""
+    if "credential_id" not in kw:
+        if kw.get("os_family") == "windows" or (kw.get("cyberark_role") and kw.get("cyberark_role") != "psmp"):
+            kw["credential_id"] = _cred(tenant, "password").id
+        elif kw.get("platform") in ("fortios", "panos"):
+            kw["credential_id"] = _cred(tenant, "api_token").id
+        elif "ansible_user" not in kw:
+            kw["ansible_user"] = "ops"
     a = Asset(tenant_id=tenant.id, uid=name.lower(), name=name, connection="ansible", managed=True, **kw)
     db.session.add(a)
     db.session.flush()
@@ -328,3 +347,45 @@ def test_asset_form_ignores_foreign_credential_and_invalid_platform(app, alpha_a
         a, b = Asset.query.filter_by(uid="fw-form").one(), Asset.query.filter_by(uid="fw-form2").one()
         assert a.platform == "fortios" and a.credential_id is None and not a.cyberark_role
         assert not b.platform and b.credential_id == mid and b.cyberark_role == "cpm"
+
+
+def test_missing_connection_details_are_reported_before_running(app, tenant):
+    """Antes: «ssl: auth method ssl requires a username» (UNREACHABLE) já a meio da execução; agora a consola diz o que falta."""
+    with app.app_context():
+        win = Asset(tenant_id=tenant.id, uid="w-nocred", name="w-nocred", connection="ansible", managed=True, os_family="windows")
+        lin = Asset(tenant_id=tenant.id, uid="l-nouser", name="l-nouser", connection="ansible", managed=True, os_family="linux")
+        fw = Asset(tenant_id=tenant.id, uid="f-notoken", name="f-notoken", connection="ansible", managed=True, platform="fortios")
+        db.session.add_all([win, lin, fw])
+        db.session.commit()
+        for a, op, expect in ((win, "os", "utilizador"), (win, "os", "palavra-passe"), (lin, "os", "utilizador"), (fw, "network", "API")):
+            with pytest.raises(eng.EngineError, match=expect):
+                eng.create_job(tenant, None, op, [a.id], "assess", {})
+        win.ansible_user = "admin"
+        with pytest.raises(eng.EngineError, match="palavra-passe") as e:
+            eng.create_job(tenant, None, "os", [win.id], "assess", {})
+        assert "utilizador" not in str(e.value).split("w-nocred:")[1].split("Defina")[0]
+
+
+def test_winrm_defaults_and_options_from_the_credential(app, tenant):
+    from omxpatch.connectors import store
+    with app.app_context():
+        c = AnsibleCredential(tenant_id=tenant.id, name="lab", kind="password", username="Administrator",
+                              secret=store.encrypt_json({"password": "pw", "opts": {"winrm_transport": "credssp", "validate_certs": False}}))
+        db.session.add(c)
+        db.session.flush()
+        a = mk(tenant, "winlab", os_family="windows", credential_id=c.id, ip="10.0.0.9")
+        h = eng.build_inventory([a])["all"]["hosts"][f"asset{a.id}"]
+        assert h["ansible_user"] == "Administrator" and h["ansible_password"] == "pw"
+        assert h["ansible_winrm_transport"] == "credssp" and h["ansible_winrm_server_cert_validation"] == "ignore" and h["ansible_winrm_scheme"] == "https"
+        b = mk(tenant, "winprod", os_family="windows")
+        h2 = eng.build_inventory([b])["all"]["hosts"][f"asset{b.id}"]
+        assert h2["ansible_winrm_transport"] == "ntlm" and h2["ansible_winrm_server_cert_validation"] == "validate"      # seguro por omissão
+
+
+def test_known_ansible_errors_are_explained_in_portuguese():
+    out = "fatal: [asset3]: UNREACHABLE! => {\"msg\": \"ssl: auth method ssl requires a username\"}"
+    assert any("utilizador" in h for h in eng.explain(out))
+    assert any("Certificado" in h for h in eng.explain("ssl: CERTIFICATE_VERIFY_FAILED"))
+    assert any("Sem ligação" in h for h in eng.explain("Connection refused"))
+    assert any("recusados" in h for h in eng.explain("the specified credentials were rejected by the server"))
+    assert eng.explain("tudo bem") == []

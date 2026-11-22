@@ -46,6 +46,65 @@ def eligible(asset: Asset, op: str) -> bool:
 # --------------------------------------------------------------------------- inventário (com credenciais cifradas → ficheiro temporário 0600)
 
 
+WINRM_TRANSPORTS = ("ntlm", "basic", "credssp", "kerberos", "ssl")
+
+
+def _winrm_vars(opts: dict) -> dict:
+    """Ligação WinRM: NTLM sobre HTTPS por omissão (contas locais e de domínio); o certificado é validado salvo indicação em contrário na credencial."""
+    transport = opts.get("winrm_transport") if opts.get("winrm_transport") in WINRM_TRANSPORTS else "ntlm"
+    return {"ansible_connection": "winrm", "ansible_winrm_transport": transport, "ansible_winrm_scheme": "https",
+            "ansible_winrm_server_cert_validation": "ignore" if opts.get("validate_certs") is False else "validate"}
+
+
+def connection_problems(asset: Asset) -> list[str]:
+    """O que falta para o Ansible conseguir ligar-se ao ativo (evita erros crípticos como «auth method ssl requires a username»)."""
+    from ..connectors import store
+    from ..models import AnsibleCredential
+    cred = db.session.get(AnsibleCredential, asset.credential_id) if asset.credential_id else None
+    user = asset.ansible_user or (cred.username if cred else "")
+    sec = {}
+    if cred is not None and cred.tenant_id == asset.tenant_id:
+        try:
+            sec = store.decrypt_json(cred.secret)
+        except Exception:  # noqa: BLE001 - chave de cifra alterada: o erro aparece ao executar
+            sec = {}
+    out = []
+    if asset.platform in ("fortios", "panos"):
+        if not sec.get("api_token"):
+            out.append("falta uma credencial do tipo «Token / chave de API» (utilizador de API só de leitura)")
+        return out
+    if not user:
+        out.append("falta o utilizador (campo «Utilizador Ansible» do ativo ou o utilizador da credencial)")
+    is_windows = asset.os_family == "windows" or (asset.cyberark_role and asset.cyberark_role != "psmp")
+    if is_windows and not sec.get("password"):
+        out.append("o Windows (WinRM) precisa de uma credencial com palavra-passe")
+    return out
+
+
+_HINTS = (
+    (r"requires a username", "Falta o utilizador de ligação: associe ao ativo uma credencial com utilizador (e palavra-passe no Windows) ou preencha «Utilizador Ansible»."),
+    (r"(?i)401|unauthorized|credentials were rejected|authentication failed|invalid credentials|logon failure",
+     "Utilizador ou palavra-passe recusados. No Windows confirme também o transporte WinRM da credencial (NTLM por omissão) e que o utilizador pertence a «Administrators»."),
+    (r"(?i)certificate verify failed|ssl: .*certificate|CERTIFICATE_VERIFY_FAILED|hostname .* doesn't match",
+     "Certificado do WinRM não confiável (autoassinado ou nome diferente). Instale a CA no servidor OMXPatch ou, em laboratório, desmarque «Validar certificado» na credencial."),
+    (r"(?i)connection refused|timed out|timeout|no route to host|name or service not known|nodename nor servname|temporary failure in name resolution|unreachable",
+     "Sem ligação ao equipamento: confirme o nome/IP, a porta (WinRM HTTPS 5986; SSH 22), a firewall e, no Windows, que o WinRM está ativo (Enable-PSRemoting -Force e um listener HTTPS)."),
+    (r"(?i)permission denied \(publickey|no authentication methods available|host key verification failed",
+     "SSH recusado: a chave/palavra-passe não serve ou a chave do servidor não é conhecida (ssh-keyscan para o known_hosts do utilizador omxpatch)."),
+    (r"(?i)a password is required|sudo: .*password", "O utilizador precisa de sudo sem palavra-passe, ou marque na credencial «usar a palavra-passe também para sudo»."),
+    (r"(?i)couldn't resolve module/action|collection .* not found", "Faltam coleções Ansible no servidor: sudo /opt/omxpatch/venv/bin/omxpatch ansible-doctor --fix"),
+)
+
+
+def explain(output: str) -> list[str]:
+    """Explicações em português para os erros mais comuns do Ansible (mostradas no detalhe do trabalho)."""
+    out = []
+    for pat, text in _HINTS:
+        if re.search(pat, output or "") and text not in out:
+            out.append(text)
+    return out
+
+
 def build_inventory(assets: list[Asset]) -> dict:
     from ..connectors import store
     from ..models import AnsibleCredential
@@ -63,6 +122,7 @@ def build_inventory(assets: list[Asset]) -> dict:
         if a.ansible_port:
             v["ansible_port"] = a.ansible_port
         c = None
+        winrm_opts: dict = {}
         if a.credential_id:
             c = creds.get(a.credential_id) or db.session.get(AnsibleCredential, a.credential_id)
             if c is None or c.tenant_id != a.tenant_id:
@@ -71,6 +131,7 @@ def build_inventory(assets: list[Asset]) -> dict:
             sec = store.decrypt_json(c.secret)
             if c.username and not a.ansible_user:
                 v["ansible_user"] = c.username
+            winrm_opts = sec.get("opts") or {}
             if c.kind == "password" and sec.get("password"):
                 v["ansible_password"] = sec["password"]
                 if c.become_password:
@@ -93,14 +154,14 @@ def build_inventory(assets: list[Asset]) -> dict:
         elif a.cyberark_role:
             v["omx_component"] = a.cyberark_role
             if a.cyberark_role != "psmp":
-                v.update({"ansible_connection": "winrm", "ansible_winrm_server_cert_validation": "validate"})
+                v.update(_winrm_vars(winrm_opts))
                 add("windows", key)
             else:
                 add("linux", key)
             add(f"cyberark_{a.cyberark_role}", key)
         elif a.os_family:
             if a.os_family == "windows":
-                v.update({"ansible_connection": "winrm", "ansible_winrm_server_cert_validation": "validate"})
+                v.update(_winrm_vars(winrm_opts))
             add(a.os_family, key)
         hosts[key] = v
     inv: dict = {"all": {"hosts": hosts}}
@@ -151,6 +212,9 @@ def create_job(tenant: Tenant, user, op: str, asset_ids: list[int], mode: str, o
     if mode not in ("assess", "apply") or (op == "network" and mode != "assess"):
         raise EngineError("Modo inválido (os equipamentos de rede só admitem avaliação)")
     assets = _assets(tenant, asset_ids, op)
+    problems = [f"{a.name}: {'; '.join(p)}" for a in assets if (p := connection_problems(a))]
+    if problems:
+        raise EngineError("Não é possível ligar a: " + " | ".join(problems[:5]) + ". Defina a credencial no ativo (Ativos → editar → «Credencial Ansible») e crie-a em Motor Ansible → Credenciais.")
     base = _payload(op, mode, options, user)
     if mode == "apply":
         if not options.get("confirm_ok"):

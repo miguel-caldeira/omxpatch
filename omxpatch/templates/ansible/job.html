@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block title %}Trabalho {{ t.id }}{% endblock %}
 {% block content %}<div class="actions"><h1>Trabalho #{{ t.id }} — {{ t.asset.name }}</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('ansible_ops.index') }}">Motor Ansible</a></div>
 <p class="muted small">{{ TASK_TYPES.get(t.type, t.type) }} · {{ 'aplicar' if payload.mode == 'apply' else 'avaliar' }} · pedido por {{ payload.requested_by }} · estado: <strong>{{ TASK_STATUSES.get(t.status, t.status) }}</strong></p>
+{% if hints %}<div class="panel"><h2>O que fazer</h2><ul>{% for h in hints %}<li>{{ h }}</li>{% endfor %}</ul></div>{% endif %}
 {% set pend = result.get('pending') or result.get('applied') or [] %}
 {% if pend %}<div class="panel"><h2>{{ 'Atualizadas' if result.get('applied') else 'Por atualizar' }} ({{ pend|length }})</h2><table><tr><th>Nome</th><th>Atual</th><th>Nova</th><th>Origem</th></tr>
 {% for i in pend[:300] %}<tr><td>{{ i.name }}</td><td class="small">{{ i.current_version }}</td><td class="small">{{ i.new_version }}</td><td class="small">{{ i.source }}</td></tr>{% endfor %}</table></div>{% endif %}

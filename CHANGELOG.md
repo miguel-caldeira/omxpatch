@@ -2,6 +2,11 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.37.20261122 — Ligação WinRM/SSH do motor Ansible
+- Erro «ssl: auth method ssl requires a username» (UNREACHABLE): faltava utilizador no ativo. A consola valida agora **antes de criar a tarefa** o que falta (utilizador, palavra-passe no Windows, token de API nos FortiGate/Palo Alto) e diz como corrigir.
+- WinRM: NTLM sobre HTTPS por omissão, com o transporte (NTLM/Basic/CredSSP) e a validação do certificado configuráveis na credencial.
+- O detalhe de cada trabalho explica em português os erros de ligação mais comuns (credenciais, certificado, rede/WinRM, SSH, sudo, coleções).
+
 ## 1.36.20261122 — Ansible deixava de arrancar com o utilizador do serviço
 - **Causa real do «faltam coleções» e da versão vazia:** o utilizador do serviço (`omxpatch`) tem a «home» em `/opt/omxpatch` (só de leitura) e o Ansible recusava-se a arrancar («Unable to create local directories ~/.ansible/tmp»), nem `--version` funcionava. Qualquer tarefa Ansible falharia. O motor passa a usar `ANSIBLE_HOME` (e temporários e controlo SSH) na pasta de dados do próprio serviço.
 - O diagnóstico já não confunde «a listagem de coleções falhou» com «coleções em falta» e mostra o erro quando o `ansible-playbook` existe mas não executa.

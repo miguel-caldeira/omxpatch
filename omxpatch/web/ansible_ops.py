@@ -56,7 +56,8 @@ def job(task_id: int):
     t = get_scoped_or_404(Task, task_id)
     if t.type not in eng.TASK_TYPES:
         abort(404)
-    return render_template("ansible/job.html", t=t, result=t.result_data, payload=t.payload_data, ops=eng.OPERATIONS)
+    hints = eng.explain(t.output) if t.status in ("failed", "cancelled") else []
+    return render_template("ansible/job.html", t=t, result=t.result_data, payload=t.payload_data, ops=eng.OPERATIONS, hints=hints)
 
 
 @bp.route("/ansible/jobs/<int:task_id>/cancel", methods=["POST"])
@@ -86,9 +87,10 @@ def credentials():
         if kind not in CREDENTIAL_KINDS or not name:
             flash("Nome e tipo são obrigatórios.", "danger")
             return redirect(url_for("ansible_ops.credentials"))
-        secret = {"password": {"password": f.get("password", "")}, "ssh_key": {"ssh_key": f.get("ssh_key", ""), "passphrase": f.get("passphrase", "")},
+        opts = {"winrm_transport": f.get("winrm_transport") if f.get("winrm_transport") in eng.WINRM_TRANSPORTS else "ntlm", "validate_certs": bool(f.get("validate_certs"))}
+        secret = {"password": {"password": f.get("password", ""), "opts": opts}, "ssh_key": {"ssh_key": f.get("ssh_key", ""), "passphrase": f.get("passphrase", "")},
                   "api_token": {"api_token": f.get("api_token", "")}}[kind]
-        if not any(secret.values()):
+        if not any(v for k, v in secret.items() if k != "opts"):
             flash("Indique o segredo (palavra-passe, chave ou token).", "danger")
             return redirect(url_for("ansible_ops.credentials"))
         if kind == "ssh_key" and "PRIVATE KEY" not in secret["ssh_key"]:

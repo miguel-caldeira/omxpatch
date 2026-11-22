@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.36.20261122
+# Referência técnica — OMXPatch 1.37.20261122
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
