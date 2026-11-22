@@ -2,6 +2,10 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.36.20261122 — Ansible deixava de arrancar com o utilizador do serviço
+- **Causa real do «faltam coleções» e da versão vazia:** o utilizador do serviço (`omxpatch`) tem a «home» em `/opt/omxpatch` (só de leitura) e o Ansible recusava-se a arrancar («Unable to create local directories ~/.ansible/tmp»), nem `--version` funcionava. Qualquer tarefa Ansible falharia. O motor passa a usar `ANSIBLE_HOME` (e temporários e controlo SSH) na pasta de dados do próprio serviço.
+- O diagnóstico já não confunde «a listagem de coleções falhou» com «coleções em falta» e mostra o erro quando o `ansible-playbook` existe mas não executa.
+
 ## 1.35.20261115 — Ansible: diagnóstico e correção
 - «O Ansible não está disponível» passa a dizer **porquê** (servidor Windows, desativado na configuração, `ansible-playbook` não instalado, coleções em falta) e o comando exato que resolve, em Sistema e em Motor Ansible.
 - Novo comando `omxpatch ansible-doctor [--fix --wheels … --collections …]`: diagnostica e instala o ansible-core, o WinRM e as coleções, e ativa o Ansible na configuração (sem tocar na base de dados nem criar pastas; seguro como root). `install.sh` e `update.sh` usam-no.

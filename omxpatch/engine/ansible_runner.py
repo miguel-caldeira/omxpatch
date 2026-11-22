@@ -114,6 +114,32 @@ def parse_result(output: str) -> dict | None:
     return None
 
 
+def ansible_home(cfg=None) -> Path:
+    """Pasta de trabalho do Ansible, gravável pelo serviço. O utilizador do serviço (omxpatch) tem a «home» em /opt/omxpatch (só de leitura):
+    sem isto o Ansible recusa-se a arrancar («Unable to create local directories ~/.ansible/tmp»), nem `--version` funciona."""
+    cfg = cfg if cfg is not None else current_app.config
+    base = Path(str(cfg.get("DATA_DIR") or "")) if cfg.get("DATA_DIR") else None
+    for cand in ([base / "ansible"] if base else []) + [Path(tempfile.gettempdir()) / f"omxpatch-ansible-{os.getuid() if hasattr(os, 'getuid') else 0}"]:
+        try:
+            (cand / "tmp").mkdir(parents=True, exist_ok=True)
+            (cand / "cp").mkdir(exist_ok=True)
+            os.chmod(cand, 0o700)
+            return cand
+        except OSError:
+            continue
+    return Path(tempfile.gettempdir())
+
+
+def ansible_env(cfg=None, collections: str = "") -> dict:
+    """Ambiente com que o Ansible é executado (diretórios graváveis e coleções do ambiente virtual)."""
+    home = ansible_home(cfg)
+    env = dict(os.environ, ANSIBLE_HOME=str(home), ANSIBLE_LOCAL_TEMP=str(home / "tmp"), ANSIBLE_SSH_CONTROL_PATH_DIR=str(home / "cp"),
+               ANSIBLE_FORCE_COLOR="0", ANSIBLE_NOCOLOR="1")
+    if collections:
+        env["ANSIBLE_COLLECTIONS_PATH"] = collections
+    return env
+
+
 def _materialize_keys(inventory: dict, tmp: Path) -> dict:
     """Chaves SSH privadas vindas das credenciais: ficheiro 0600 na pasta temporária (apagada no fim) em vez de seguirem na linha de comandos."""
     hosts = (inventory.get("all") or {}).get("hosts") or {}
@@ -153,7 +179,9 @@ def run_playbook(playbook: str, inventory: dict, extra_vars: dict | None = None,
             cmd += ["--limit", limit]
         if check:
             cmd.append("--check")
-        env = dict(os.environ, ANSIBLE_FORCE_COLOR="0", ANSIBLE_NOCOLOR="1", ANSIBLE_CALLBACK_RESULT_FORMAT="json", ANSIBLE_HOST_KEY_CHECKING="True",
+        from . import ansible_doctor
+        env = ansible_env(collections=ansible_doctor.collections_path())
+        env.update(ANSIBLE_CALLBACK_RESULT_FORMAT="json", ANSIBLE_HOST_KEY_CHECKING="True",
                    ANSIBLE_CONFIG=str(base / "ansible.cfg") if (base / "ansible.cfg").is_file() else "")
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=str(base), env=env)  # nosec B603

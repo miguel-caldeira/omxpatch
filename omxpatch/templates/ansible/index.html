@@ -5,6 +5,7 @@
 {% if not available %}<div class="flash flash-warning"><strong>O Ansible não está disponível neste servidor — as tarefas ficam em fila.</strong>
 {% if doctor.reason == 'windows' %}Este servidor corre em Windows e o Ansible não corre nativamente: use um controlador Linux.
 {% elif doctor.reason == 'disabled' %}Causa: o Ansible está <b>desativado</b> na configuração ({{ doctor.config_file or 'omxpatch.toml' }}, [ansible] enabled = false).
+{% elif doctor.reason == 'broken' %}Causa: o <code>ansible-playbook</code> existe mas <b>não executa</b>: {{ doctor.version_error }}.
 {% else %}Causa: o <code>ansible-playbook</code> <b>não está instalado</b> (procurado: <code>{{ doctor.configured }}</code>, Python {{ doctor.python }}).{% endif %}
 <br>Solução: <code>{{ doctor.fix }}</code></div>
 {% elif doctor.missing_collections %}<div class="flash flash-warning">Ansible instalado ({{ doctor.version }}), mas faltam coleções: {{ doctor.missing_collections|join(', ') }}. <code>{{ doctor.fix }}</code></div>{% endif %}

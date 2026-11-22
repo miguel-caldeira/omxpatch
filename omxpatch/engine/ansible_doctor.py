@@ -21,22 +21,26 @@ def _venv_pip() -> str:
     return str(Path(sys.executable).parent / "pip")
 
 
-def _version(exe: str) -> str:
+def _version(exe: str, cfg=None) -> tuple[str, str]:
+    """(versão, erro): o erro é a 1.ª linha da saída de erro quando o ansible-playbook não executa."""
     try:
-        out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=30).stdout  # nosec B603
-        return (out.splitlines() or [""])[0].strip()
-    except (OSError, subprocess.SubprocessError):
-        return ""
+        p = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=60, env=ansible_runner.ansible_env(cfg))  # nosec B603
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "", str(exc)[:200]
+    first = (p.stdout.splitlines() or [""])[0].strip()
+    if p.returncode != 0 or not first:
+        return "", ((p.stderr or p.stdout).strip().splitlines() or ["erro desconhecido"])[0][:250]
+    return first, ""
 
 
-def _collections(exe: str, path: str) -> list[str] | None:
+def _collections(exe: str, path: str, cfg=None) -> list[str] | None:
     gal = str(Path(exe).with_name("ansible-galaxy"))
     if not Path(gal).is_file():
         return None
     try:
         out = subprocess.run([gal, "collection", "list", "--format", "json"], capture_output=True, text=True, timeout=60,  # nosec B603
-                             env=dict(os.environ, ANSIBLE_COLLECTIONS_PATH=path, ANSIBLE_NOCOLOR="1")).stdout
-        data = json.loads(out[out.index("{"):]) if "{" in out else {}
+                             env=ansible_runner.ansible_env(cfg, path)).stdout
+        data = json.loads(out[out.index("{"):])           # sem JSON = o ansible-galaxy não executou: desconhecido (não «em falta»)
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
     return sorted({name for paths in data.values() for name in paths})
@@ -78,8 +82,13 @@ def diagnose(fresh: bool = False, cfg: dict | None = None) -> dict:
                  fix=f"ansible-playbook não está instalado neste servidor (Python {d['python']}). Execute: sudo {venv}/omxpatch ansible-doctor --fix   "
                      f"(instala ansible-core e as coleções; precisa de acesso ao PyPI/Galaxy, ou use --wheels <pasta com os wheels do pacote>).")
     else:
-        d["version"] = _version(found)
-        cols = _collections(found, cpath)
+        d["version"], d["version_error"] = _version(found, cfg)
+        if d["version_error"]:
+            d.update(ok=False, reason="broken", fix=f"O ansible-playbook existe mas não executa: {d['version_error']}  —  Reinstale: sudo {venv}/omxpatch ansible-doctor --fix")
+            _cache.update(t=time.time(), data=d) if (cfg is current_app.config if _has_app() else False) else None
+            d["python_ok"] = py_ok
+            return d
+        cols = _collections(found, cpath, cfg)
         if cols is not None:
             d["missing_collections"] = [c for c in REQUIRED if c not in cols]
         d["ok"] = True

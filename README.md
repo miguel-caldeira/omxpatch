@@ -19,16 +19,16 @@ agente, mitigação, descoberta).
 | **Cliente / agente** (`omxpatch_agent/`) | Windows, Linux e macOS. Só liga *para fora* (HTTPS), regista-se com um token, envia inventário e executa o que *puxa*: patches, validações, simulações seguras, firewall local, Wake-on-LAN. |
 | **Ansible** (`ansible/`) | Instala o servidor e os agentes; no **modo sem agente** o próprio centro de comando corre inventário, patches, validação e mitigação por SSH/WinRM; o **motor Ansible** atualiza SO e todo o software (Windows, Linux, macOS), componentes CyberArk (Vault, CPM, PSM, PSMP) e avalia atualizações em switches, routers e firewalls (Check Point, FortiGate, Palo Alto, Cisco, Juniper, Arista). |
 
-> ## Versão atual: **1.35.20261115**
-> **Instaladores** (em [`releases/1.35.20261115/`](releases/1.35.20261115/), com `SHA256SUMS`):
-> [Ubuntu/Debian](releases/1.35.20261115/omxpatch-ubuntu-1.35.20261115.tar.gz) ·
-> [Windows](releases/1.35.20261115/omxpatch-windows-1.35.20261115.zip) ·
-> [Windows Server 2012 R2](releases/1.35.20261115/omxpatch-windows2012r2-1.35.20261115.zip) ·
-> [Agente](releases/1.35.20261115/omxpatch-agent-1.35.20261115.zip) ·
-> [Kit de validação Windows/macOS](releases/1.35.20261115/omxpatch-validation-kit-1.35.20261115.zip)
+> ## Versão atual: **1.36.20261122**
+> **Instaladores** (em [`releases/1.36.20261122/`](releases/1.36.20261122/), com `SHA256SUMS`):
+> [Ubuntu/Debian](releases/1.36.20261122/omxpatch-ubuntu-1.36.20261122.tar.gz) ·
+> [Windows](releases/1.36.20261122/omxpatch-windows-1.36.20261122.zip) ·
+> [Windows Server 2012 R2](releases/1.36.20261122/omxpatch-windows2012r2-1.36.20261122.zip) ·
+> [Agente](releases/1.36.20261122/omxpatch-agent-1.36.20261122.zip) ·
+> [Kit de validação Windows/macOS](releases/1.36.20261122/omxpatch-validation-kit-1.36.20261122.zip)
 >
-> **Manuais:** [Utilização](docs/MANUAL-UTILIZACAO.md) ([PDF](releases/1.35.20261115/docs/MANUAL-UTILIZACAO-1.35.20261115.pdf)) ·
-> [Administração](docs/MANUAL-ADMINISTRACAO.md) ([PDF](releases/1.35.20261115/docs/MANUAL-ADMINISTRACAO-1.35.20261115.pdf)) ·
+> **Manuais:** [Utilização](docs/MANUAL-UTILIZACAO.md) ([PDF](releases/1.36.20261122/docs/MANUAL-UTILIZACAO-1.36.20261122.pdf)) ·
+> [Administração](docs/MANUAL-ADMINISTRACAO.md) ([PDF](releases/1.36.20261122/docs/MANUAL-ADMINISTRACAO-1.36.20261122.pdf)) ·
 > [Referência técnica](docs/REFERENCIA.md) · [Histórico de versões](CHANGELOG.md)
 
 ---

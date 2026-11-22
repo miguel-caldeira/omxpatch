@@ -94,3 +94,43 @@ def test_ansible_pages_show_the_reason(app, alpha_admin, monkeypatch):
     ad._cache.clear()
     page = alpha_admin.get("/ansible").data.decode()
     assert "não está disponível" in page and "ansible-doctor --fix" in page
+
+
+def _ansible_exe():
+    import shutil
+    from pathlib import Path
+    return shutil.which("ansible-playbook") or ("/tmp/venv/bin/ansible-playbook" if Path("/tmp/venv/bin/ansible-playbook").exists() else None)
+
+
+@pytest.mark.skipif(_ansible_exe() is None, reason="ansible-core não instalado")
+def test_ansible_works_when_the_service_home_is_not_writable(app, tmp_path, monkeypatch):
+    """O utilizador do serviço tem a «home» em /opt/omxpatch (só de leitura): o Ansible recusava-se a arrancar (nem --version) e o diagnóstico
+    dava «coleções em falta» por engano. Com ANSIBLE_HOME na pasta de dados passa a funcionar."""
+    from omxpatch.engine import ansible_doctor as ad, ansible_runner as ar
+    monkeypatch.setenv("HOME", "/proc/inexistente")
+    (tmp_path / "pb").mkdir()
+    (tmp_path / "pb" / "hello.yml").write_text('- hosts: all\n  gather_facts: false\n  tasks:\n    - ansible.builtin.debug:\n        msg: \'OMXPATCH_RESULT={"status": "succeeded"}\'\n')
+    app.config.update(ANSIBLE_ENABLED=True, ANSIBLE_PLAYBOOK=_ansible_exe(), ANSIBLE_DIR=str(tmp_path / "pb"), DATA_DIR=str(tmp_path / "dados"))
+    with app.app_context():
+        d = ad.diagnose(fresh=True)
+        assert d["version"].startswith("ansible-playbook") and d["reason"] in ("ok", "missing_collections"), d
+        r = ar.run_playbook("hello.yml", {"all": {"hosts": {"h": {"ansible_connection": "local"}}}}, {}, timeout_minutes=2)
+        assert r["rc"] == 0 and r["result"] == {"status": "succeeded"}, r["output"][-500:]
+        assert (tmp_path / "dados" / "ansible" / "tmp").is_dir()
+
+
+def test_collection_listing_failure_is_unknown_not_missing(app, tmp_path, monkeypatch):
+    from omxpatch.engine import ansible_doctor as ad
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "ansible-playbook").write_text("#!/bin/sh\necho 'ansible-playbook [core 2.22.0]'\n")
+    (fake / "ansible-galaxy").write_text("#!/bin/sh\necho 'ERROR: Unable to create local directories' >&2\n")
+    for f in fake.iterdir():
+        f.chmod(0o755)
+    app.config.update(ANSIBLE_ENABLED=True, ANSIBLE_PLAYBOOK=str(fake / "ansible-playbook"), DATA_DIR=str(tmp_path / "d"))
+    with app.app_context():
+        d = ad.diagnose(fresh=True)
+        assert d["reason"] == "ok" and d["missing_collections"] == []                # a falha da listagem não vira «faltam coleções»
+        (fake / "ansible-playbook").write_text("#!/bin/sh\necho 'ERROR: Unable to create local directories' >&2\nexit 1\n")
+        d = ad.diagnose(fresh=True)
+        assert d["reason"] == "broken" and "Unable to create" in d["version_error"] and d["ok"] is False
