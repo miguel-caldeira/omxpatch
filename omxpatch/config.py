@@ -45,7 +45,7 @@ DEFAULTS: dict[str, object] = {
     "AUDIT_RETENTION_DAYS": 0, "TASK_RETENTION_DAYS": 0,                     # retenção (0 = guardar sempre)
     "RATE_ENROLL_PER_MIN": 120,       # registos/transferências do pacote por IP e minuto (0 = sem limite)
     "RATE_AUTH_FAIL_PER_MIN": 30,     # chaves de agente inválidas por IP e minuto antes de bloquear 30 s
-    "RATE_AGENT_PER_MIN": 120,        # pedidos por agente e minuto (um agente normal faz ~1 a cada 5 min)
+    "RATE_AGENT_PER_MIN": 300,        # pedidos por agente e minuto (um agente normal faz ~1 a cada 5 min)
     "AGENT_AUTO_UPDATE": True,         # os agentes atualizam-se sozinhos (só com pacote assinado pela consola e autoteste)
     "AGENT_SERVER_URLS": "",           # endereços alternativos publicados aos agentes (vírgula), p.ex. https://10.0.0.5:4444,https://10.0.1.5:4444
     "TLS_HOSTNAME": "omxpatch.oramix.local",
@@ -62,6 +62,10 @@ DEFAULTS: dict[str, object] = {
     "LICENSE_GRACE_DAYS": 15, "LICENSE_WARN_DAYS": 30,
     # Agentes (clientes Windows / Linux / macOS)
     "AGENT_HEARTBEAT_SECONDS": 300,   # intervalo de contacto pedido aos agentes
+    "ANSIBLE_SSH_ACCEPT_NEW": True,   # aceitar a chave SSH de um equipamento na 1.ª ligação (fica registada; se mudar depois, a ligação é recusada)
+    "AGENT_EXEC_ENABLED": False,      # os agentes podem executar comandos do Ansible/PowerShell pedidos pela consola (procuração) — também exige permissão local no agente
+    "AGENT_EXEC_FALLBACK": True,     # se a ligação direta (SSH/WinRM) falhar, repetir através do agente (se permitido)
+    "AGENT_EXEC_TIMEOUT_SECONDS": 600,   # espera máxima por cada comando executado através do agente
     "AGENT_GIVEUP_MINUTES": 120,      # sem contacto com a consola durante este tempo o agente desliga-se (0 = nunca)
     "AGENT_DEBUG_DEFAULT_MINUTES": 60,    # validade por defeito da depuração completa pedida na consola
     "AGENT_LOG_UPLOAD": True,         # os agentes enviam eventos de operação/auditoria à consola

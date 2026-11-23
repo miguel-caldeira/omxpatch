@@ -37,6 +37,8 @@ def cmd_enroll(args) -> int:
     if any(client_mod.is_ip_host(urlsplit(u).hostname or "") for u in urls) and not (cfg["pin_sha256"] or cfg["ca_file"]):
         print("Para falar com a consola por IP é obrigatório indicar a impressão digital do certificado (--pin-sha256) ou um CA (--ca-file).", file=sys.stderr)
         return 2
+    if getattr(args, "allow_exec", False):
+        cfg["allow_exec"] = True
     existing = config.load()
     if existing.get("agent_key") and not args.force:
         print(f"Este equipamento já está registado na organização «{existing.get('tenant_name', '?')}» "
@@ -168,7 +170,7 @@ def cycle(client: Client, state: dict) -> int:
 def _report_state(state: dict) -> dict:
     """Estado do agente enviado em cada contacto (visível na consola)."""
     return {"uptime_s": int(time.time() - state.setdefault("started", time.time())), "debug": telemetry.debug_active(), "python": sys.version.split()[0],
-            "platform": sys.platform, "update_failed": state.get("update_failed", ""), "events_pending": telemetry.pending_count()}
+            "platform": sys.platform, "update_failed": state.get("update_failed", ""), "exec_allowed": bool(config.load().get("allow_exec")), "events_pending": telemetry.pending_count()}
 
 
 def _finish_and_restart(client: Client) -> None:
@@ -207,6 +209,8 @@ def cmd_run(args) -> int:
         try:
             n = cycle(client, state)
             wait = 5 if n else state.get("poll", 300)
+            if time.time() < executor.HOT_UNTIL:          # sessão de comandos remotos em curso (Ansible): resposta rápida
+                wait = 1
         except ServerError as exc:
             mins = telemetry.contact_failed()
             log.warning("Sem contacto com o servidor há %.0f min: %s", mins, exc)
@@ -302,6 +306,21 @@ def cmd_updates(args) -> int:
     return 0
 
 
+def cmd_config(args) -> int:
+    """Definições locais do agente. «allow-exec on» permite que a consola (se o ativar) use este agente como procuração de comandos do Ansible/PowerShell."""
+    cfg = config.load()
+    if not cfg:
+        print("Agente não registado.", file=sys.stderr)
+        return 2
+    if args.key == "allow-exec":
+        if args.value in ("on", "off"):
+            cfg["allow_exec"] = args.value == "on"
+            config.save(cfg)
+            telemetry.audit("config", f"execução remota {'permitida' if cfg['allow_exec'] else 'proibida'} localmente")
+        print(f"allow-exec: {'on' if cfg.get('allow_exec') else 'off'}")
+    return 0
+
+
 def cmd_status(args) -> int:
     cfg = config.load()
     print(f"Agente {__version__} — organização: {cfg.get('tenant_name', '(não registado)')} — servidor: {cfg.get('server_url', '-')} — configuração: {config.config_path()}")
@@ -322,13 +341,14 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="omxpatch-agent")
     sub = p.add_subparsers(dest="cmd")
     e = sub.add_parser("enroll"); e.add_argument("--server", required=True); e.add_argument("--token", required=True)
-    e.add_argument("--pin-sha256"); e.add_argument("--ca-file"); e.add_argument("--install-service", action="store_true"); e.add_argument("--force", action="store_true"); e.set_defaults(fn=cmd_enroll)
+    e.add_argument("--allow-exec", action="store_true"); e.add_argument("--pin-sha256"); e.add_argument("--ca-file"); e.add_argument("--install-service", action="store_true"); e.add_argument("--force", action="store_true"); e.set_defaults(fn=cmd_enroll)
     for name, fn in (("run", cmd_run), ("once", cmd_once), ("inventory", cmd_inventory), ("status", cmd_status)):
         sub.add_parser(name).set_defaults(fn=fn)
     va = sub.add_parser("validate"); va.add_argument("--level", choices=["read", "lab"], default="read"); va.add_argument("--yes-lab", action="store_true")
     va.add_argument("--with-isolation", action="store_true"); va.add_argument("--server"); va.add_argument("--pin"); va.add_argument("--json"); va.add_argument("--report")
     va.add_argument("--no-redact", action="store_true"); va.add_argument("--quiet", action="store_true"); va.set_defaults(fn=cmd_validate)
     up = sub.add_parser("updates"); up.add_argument("--send", action="store_true"); up.add_argument("--no-refresh", action="store_true"); up.add_argument("--limit", type=int, default=20); up.set_defaults(fn=cmd_updates)
+    cf = sub.add_parser("config"); cf.add_argument("key", choices=["allow-exec"]); cf.add_argument("value", nargs="?", choices=["on", "off"]); cf.set_defaults(fn=cmd_config)
     st = sub.add_parser("selftest"); st.add_argument("--json", action="store_true"); st.set_defaults(fn=cmd_selftest)
     sub.add_parser("install-service").set_defaults(fn=lambda a: print(service.install()) or 0)
     sub.add_parser("uninstall-service").set_defaults(fn=lambda a: print(service.uninstall()) or 0)

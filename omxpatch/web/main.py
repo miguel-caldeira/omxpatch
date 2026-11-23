@@ -153,12 +153,14 @@ def _asset_form() -> dict:
                                                "primary_user", "owner", "department", "criticality", "internet_exposed",
                                                "country", "city", "tags", "open_ports", "connection", "ansible_user",
                                                "maintenance_group", "cmdb_ref", "business_value", "ring", "ansible_port",
-                                               "latitude", "longitude", "platform", "cyberark_role", "credential_id")}
+                                               "latitude", "longitude", "platform", "cyberark_role", "credential_id", "ansible_transport")}
     data["managed"] = bool(f.get("managed")) or data.get("connection") == "ansible"
     if data.get("credential_id") and not str(data["credential_id"]).isdigit():
         data.pop("credential_id")
     if data.get("credential_id") and int(data["credential_id"]) not in {c.id for c in _credentials()}:
         data.pop("credential_id")                                # só credenciais do próprio tenant
+    if data.get("ansible_transport") not in (None, "", "agent"):
+        data.pop("ansible_transport")
     if data.get("platform") and data["platform"] not in __import__("omxpatch.models", fromlist=["NET_PLATFORMS"]).NET_PLATFORMS:
         data.pop("platform")
     if data.get("cyberark_role") and data["cyberark_role"] not in __import__("omxpatch.models", fromlist=["CYBERARK_ROLES"]).CYBERARK_ROLES:
@@ -193,6 +195,7 @@ def asset_edit(asset_id: int):
         data = _asset_form()
         data["uid"] = asset.uid
         inventory.upsert_asset(require_tenant(), data, source=asset.source)
+        asset.ansible_transport = "agent" if request.form.get("ansible_transport") == "agent" else ""      # o formulário não envia campos vazios: «direto» tem de poder repor-se
         asset.managed = bool(request.form.get("managed")) or asset.managed
         asset.shadow_it = bool(request.form.get("shadow_it"))
         audit("asset_updated", asset.name)

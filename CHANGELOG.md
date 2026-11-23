@@ -2,6 +2,15 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.39.20261123 — Agente como procuração (proxy) do Ansible e do PowerShell
+- Nova ligação Ansible `omx_agent`: os comandos do Ansible são executados pelo agente do equipamento (PowerShell em Windows, shell POSIX nos restantes), sem WinRM, SSH nem portas de entrada; ficheiros por repositório temporário com SHA-256. Validado de ponta a ponta com o Ansible, o servidor e o agente reais (Linux).
+- Agente: tarefa `exec` (executar/copiar/ler), permissão local obrigatória (`omxpatch-agent config allow-exec on`, `enroll --allow-exec`, `OMXPATCH_ALLOW_EXEC` nos instaladores) e ativação na consola (`AGENT_EXEC_ENABLED`); auditoria só com resumos; consulta de 1 s durante uma sessão de comandos.
+- Motor Ansible: «Transporte do Ansible → agente» por ativo e repetição automática através do agente se a ligação direta falhar (`AGENT_EXEC_FALLBACK`). Agentes → Detalhe → «Execução remota» para comandos PowerShell/shell.
+- Comandos e saídas são apagados da base de dados após a execução; limite de pedidos por agente elevado a 300/min.
+- WMI/DCOM não implementado (ver manual 19.7).
+- Corrigido: «Host key verification failed» — o SSH usa um `known_hosts` na pasta de dados do serviço (a «home» do utilizador do serviço é só de leitura) e aceita a chave na 1.ª ligação (`ANSIBLE_SSH_ACCEPT_NEW`, ou por credencial).
+- Corrigido: uma firewall (FortiGate…) escolhida na atualização do SO era tratada como Linux; a consola explica que é um equipamento de rede e a «Avaliação de rede» assume a plataforma provável.
+
 ## 1.38.20261122 — Windows sem WinRM
 - Credencial com «Windows: como ligar → SSH» (OpenSSH Server do Windows, palavra-passe ou chave SSH): o motor Ansible liga-se por SSH com shell PowerShell, sem WinRM. Uma credencial de chave SSH num ativo Windows usa SSH automaticamente.
 - Manual: preparação do OpenSSH no Windows e a alternativa do agente (sem WinRM nem portas de entrada).

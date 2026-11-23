@@ -221,6 +221,15 @@ class Client:
         r.raise_for_status()
         return r.json()
 
+    def blob(self, sha256: str, dest) -> str:
+        """Ficheiro preparado pela consola para uma tarefa de execução remota (verificado pelo SHA-256)."""
+        status, digest = self.s.download(f"{self.base}/agent/v1/blob/{sha256}", dest, self.headers)
+        if status != 200:
+            raise ServerError(f"Ficheiro indisponível (HTTP {status})")
+        if digest != sha256.lower():
+            raise ServerError("SHA-256 do ficheiro não corresponde ao esperado — transferência rejeitada")
+        return digest
+
     def download(self, patch_id: int, dest, expected_sha256: str, bandwidth_kbps: int = 0) -> str:
         """Transfere o pacote e verifica o SHA-256 antes de o usar."""
         status, digest = self.s.download(f"{self.base}/agent/v1/package/{patch_id}", dest, self.headers, bandwidth_kbps)

@@ -87,7 +87,7 @@ def credentials():
         if kind not in CREDENTIAL_KINDS or not name:
             flash("Nome e tipo são obrigatórios.", "danger")
             return redirect(url_for("ansible_ops.credentials"))
-        opts = {"windows_connection": "ssh" if f.get("windows_connection") == "ssh" else "winrm", "winrm_transport": f.get("winrm_transport") if f.get("winrm_transport") in eng.WINRM_TRANSPORTS else "ntlm", "validate_certs": bool(f.get("validate_certs"))}
+        opts = {"windows_connection": "ssh" if f.get("windows_connection") == "ssh" else "winrm", "ssh_accept_new": bool(f.get("ssh_accept_new")), "winrm_transport": f.get("winrm_transport") if f.get("winrm_transport") in eng.WINRM_TRANSPORTS else "ntlm", "validate_certs": bool(f.get("validate_certs"))}
         secret = {"password": {"password": f.get("password", ""), "opts": opts}, "ssh_key": {"ssh_key": f.get("ssh_key", ""), "passphrase": f.get("passphrase", ""), "opts": opts},
                   "api_token": {"api_token": f.get("api_token", "")}}[kind]
         if not any(v for k, v in secret.items() if k != "opts"):

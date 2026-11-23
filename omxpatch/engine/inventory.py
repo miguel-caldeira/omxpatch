@@ -55,7 +55,7 @@ def upsert_asset(tenant: Tenant, data: dict, source: str = "manual") -> tuple[As
     changes = []
     for field in ("name", "fqdn", "ip", "mac", "kind", "os_family", "os_name", "os_version", "primary_user", "owner",
                   "department", "criticality", "internet_exposed", "country", "city", "cloud_provider", "cloud_id",
-                  "cluster", "tags", "open_ports", "connection", "ansible_user", "maintenance_group", "cmdb_ref", "platform", "cyberark_role"):
+                  "cluster", "tags", "open_ports", "connection", "ansible_user", "maintenance_group", "cmdb_ref", "platform", "cyberark_role", "ansible_transport"):
         if field in data and data[field] not in (None, ""):
             value = data[field]
             if field == "kind" and value not in ASSET_KINDS:

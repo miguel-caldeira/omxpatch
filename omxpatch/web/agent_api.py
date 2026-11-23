@@ -180,6 +180,22 @@ def poll():
                     "server_urls": agent_urls(current_app.config)})
 
 
+@bp.get("/blob/<sha>")
+def blob(sha: str):
+    """Ficheiro que uma tarefa de execução remota pede ao agente para gravar (só o da tarefa em curso deste ativo)."""
+    import re
+    from pathlib import Path
+    agent: Agent = g.agent
+    if not re.fullmatch(r"[0-9a-f]{64}", sha):
+        abort(404)
+    ok = Task.query.filter(Task.tenant_id == agent.tenant_id, Task.asset_id == agent.asset_id, Task.type == "exec", Task.status.in_(("queued", "sent", "running")),
+                           Task.payload.contains(sha)).first()
+    path = Path(current_app.config["DATA_DIR"]) / "ansible-blobs" / sha
+    if ok is None or not path.is_file():
+        abort(404)
+    return send_file(path, mimetype="application/octet-stream")
+
+
 @bp.post("/logs")
 def post_logs():
     agent: Agent = g.agent

@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.38.20261122
+# Referência técnica — OMXPatch 1.39.20261123
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
@@ -47,7 +47,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `TASK_RETENTION_DAYS` | `[server] task_retention_days` | `0` |
 | `RATE_ENROLL_PER_MIN` | `[server] rate_enroll_per_min` | `120` |
 | `RATE_AUTH_FAIL_PER_MIN` | `[server] rate_auth_fail_per_min` | `30` |
-| `RATE_AGENT_PER_MIN` | `[server] rate_agent_per_min` | `120` |
+| `RATE_AGENT_PER_MIN` | `[server] rate_agent_per_min` | `300` |
 | `AGENT_AUTO_UPDATE` | `[agents] auto_update` | sim |
 | `AGENT_SERVER_URLS` | `[agents] server_urls` | (vazio) |
 | `TLS_HOSTNAME` | `[server] tls_hostname` | `omxpatch.oramix.local` |
@@ -78,6 +78,10 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `LICENSE_GRACE_DAYS` | `[licensing] grace_days` | `15` |
 | `LICENSE_WARN_DAYS` | `[licensing] warn_days` | `30` |
 | `AGENT_HEARTBEAT_SECONDS` | `[agents] heartbeat_seconds` | `300` |
+| `ANSIBLE_SSH_ACCEPT_NEW` | `[ansible] ssh_accept_new` | sim |
+| `AGENT_EXEC_ENABLED` | `[agents] exec_enabled` | não |
+| `AGENT_EXEC_FALLBACK` | `[agents] exec_fallback` | sim |
+| `AGENT_EXEC_TIMEOUT_SECONDS` | `[agents] exec_timeout_seconds` | `600` |
 | `AGENT_GIVEUP_MINUTES` | `[agents] giveup_minutes` | `120` |
 | `AGENT_DEBUG_DEFAULT_MINUTES` | `[agents] debug_default_minutes` | `60` |
 | `AGENT_LOG_UPLOAD` | `[agents] log_upload` | sim |
@@ -173,7 +177,8 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 
 | Comando | Utilização |
 |---|---|
-| `enroll` | `omxpatch-agent enroll [-h] --server SERVER --token TOKEN [--pin-sha256 PIN_SHA256] [--ca-file CA_FILE] [--install-service] [--force]` |
+| `config` | `omxpatch-agent config [-h] {allow-exec} [{on,off}]` |
+| `enroll` | `omxpatch-agent enroll [-h] --server SERVER --token TOKEN [--allow-exec] [--pin-sha256 PIN_SHA256] [--ca-file CA_FILE] [--install-service] [--force]` |
 | `install-service` | `omxpatch-agent install-service [-h]` |
 | `inventory` | `omxpatch-agent inventory [-h]` |
 | `once` | `omxpatch-agent once [-h]` |
@@ -205,6 +210,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `sw_update` | Atualização de software (Ansible) |
 | `cyb_upgrade` | Atualização CyberArk (Ansible) |
 | `net_assess` | Avaliação de equipamento de rede |
+| `exec` | Execução remota (agente como procuração do Ansible) |
 
 ## Boas práticas
 
@@ -285,6 +291,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | admin | `/agents/<int:agent_id>/revoke` | POST | admin |
 | admin | `/agents/<int:agent_id>` | GET | admin/auditor/user |
 | admin | `/agents/<int:agent_id>/command` | POST | admin |
+| admin | `/agents/<int:agent_id>/exec` | POST | admin |
 | admin | `/agents/<int:agent_id>/logs.csv` | GET | admin/auditor |
 | admin | `/agents/purge-revoked` | POST | admin |
 | ansible_ops | `/ansible` | GET | qualquer utilizador autenticado |

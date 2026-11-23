@@ -34,10 +34,23 @@ class EngineError(ValueError):
     pass
 
 
+NET_GUESS = (("fortios", r"forti(gate|os)"), ("panos", r"pan-?os|palo ?alto"), ("checkpoint", r"check ?point|gaia"), ("cisco_nxos", r"nx-?os|nexus"),
+             ("cisco_ios", r"cisco|ios[- ]?xe?"), ("junos", r"junos|juniper"), ("eos", r"arista|\beos\b"))
+
+
+def guess_platform(asset: Asset) -> str:
+    """Plataforma de rede provável de um ativo sem «plataforma» definida (pelo tipo, nome e sistema)."""
+    text = " ".join([asset.name or "", asset.os_name or "", asset.os_version or "", asset.tags or ""]).lower()
+    for plat, pat in NET_GUESS:
+        if re.search(pat, text):
+            return plat
+    return ""
+
+
 def eligible(asset: Asset, op: str) -> bool:
     kinds = OPERATIONS[op]["kinds"]
     if "network" in kinds:
-        return bool(asset.platform)
+        return bool(asset.platform or guess_platform(asset))
     if "cyberark" in kinds:
         return bool(asset.cyberark_role)
     return asset.os_family in kinds and not asset.platform and not asset.cyberark_role
@@ -59,8 +72,11 @@ def _winrm_vars(opts: dict, kind: str = "") -> dict:
             "ansible_winrm_server_cert_validation": "ignore" if opts.get("validate_certs") is False else "validate"}
 
 
-def connection_problems(asset: Asset) -> list[str]:
+def connection_problems(asset: Asset, transport: str | None = None) -> list[str]:
     """O que falta para o Ansible conseguir ligar-se ao ativo (evita erros crípticos como «auth method ssl requires a username»)."""
+    if (transport if transport is not None else asset.ansible_transport) == "agent" and not asset.platform:
+        ok, why = agent_usable(asset)
+        return [] if ok else [why]
     from ..connectors import store
     from ..models import AnsibleCredential
     cred = db.session.get(AnsibleCredential, asset.credential_id) if asset.credential_id else None
@@ -93,7 +109,7 @@ _HINTS = (
     (r"(?i)connection refused|timed out|timeout|no route to host|name or service not known|nodename nor servname|temporary failure in name resolution|unreachable",
      "Sem ligação ao equipamento: confirme o nome/IP, a porta (WinRM HTTPS 5986; SSH 22), a firewall e, no Windows, que o WinRM está ativo (Enable-PSRemoting -Force e um listener HTTPS)."),
     (r"(?i)permission denied \(publickey|no authentication methods available|host key verification failed",
-     "SSH recusado: a chave/palavra-passe não serve ou a chave do servidor não é conhecida (ssh-keyscan para o known_hosts do utilizador omxpatch)."),
+     "SSH recusado: a chave/palavra-passe não serve ou a chave do equipamento não é confiável. Com «Ansible aceita a chave SSH na 1.ª ligação» (Sistema → Configuração) a chave é aceite e registada na 1.ª ligação; se o equipamento mudou de chave, apague a linha em <dados>/ansible/known_hosts."),
     (r"(?i)a password is required|sudo: .*password", "O utilizador precisa de sudo sem palavra-passe, ou marque na credencial «usar a palavra-passe também para sudo»."),
     (r"(?i)couldn't resolve module/action|collection .* not found", "Faltam coleções Ansible no servidor: sudo /opt/omxpatch/venv/bin/omxpatch ansible-doctor --fix"),
 )
@@ -108,7 +124,47 @@ def explain(output: str) -> list[str]:
     return out
 
 
-def build_inventory(assets: list[Asset]) -> dict:
+def agent_for(asset: Asset):
+    """Agente ativo do ativo (None se não houver)."""
+    from ..models import Agent
+    return Agent.query.filter_by(asset_id=asset.id, revoked=False).first() if asset.id else None
+
+
+def agent_usable(asset: Asset) -> tuple[bool, str]:
+    """O agente do ativo pode servir de procuração? (consola ativa, agente recente e com a permissão local ``allow-exec``)"""
+    from datetime import timedelta
+    from flask import current_app
+    if not current_app.config.get("AGENT_EXEC_ENABLED"):
+        return False, "a execução através do agente está desativada na consola (Sistema → Configuração → AGENT_EXEC_ENABLED)"
+    ag = agent_for(asset)
+    if ag is None:
+        return False, "o ativo não tem agente OMXPatch"
+    if not ag.last_seen or utcnow() - ag.last_seen > timedelta(minutes=int(current_app.config["AGENT_OFFLINE_MINUTES"])):
+        return False, "o agente está offline"
+    if not ag.status.get("exec_allowed"):
+        return False, "o agente não permite execução remota: no equipamento execute «omxpatch-agent config allow-exec on» (administrador local)"
+    return True, ""
+
+
+def _agent_vars(a: Asset) -> dict:
+    """Ligação pela procuração do agente: sem credenciais, sem portas de entrada; PowerShell em Windows, shell POSIX nos restantes."""
+    win = a.os_family == "windows" or (a.cyberark_role and a.cyberark_role != "psmp")
+    return {"ansible_connection": "omx_agent", "ansible_shell_type": "powershell" if win else "sh", "omx_asset_id": a.id, "ansible_become": False}
+
+
+def _ssh_args(opts: dict) -> str:
+    """Argumentos SSH: ficheiro known_hosts na pasta de trabalho do serviço (a «home» do utilizador do serviço é só de leitura) e, por omissão,
+    aceitação da chave do equipamento na 1.ª ligação (``accept-new``: se mudar depois, a ligação é recusada)."""
+    from flask import current_app
+    from . import ansible_runner
+    kh = ansible_runner.ansible_home() / "known_hosts"
+    accept = opts.get("ssh_accept_new")
+    if accept is None:
+        accept = bool(current_app.config.get("ANSIBLE_SSH_ACCEPT_NEW", True))
+    return f"-o UserKnownHostsFile={kh}" + (" -o StrictHostKeyChecking=accept-new" if accept else "")
+
+
+def build_inventory(assets: list[Asset], transports: dict | None = None) -> dict:
     from ..connectors import store
     from ..models import AnsibleCredential
     hosts: dict[str, dict] = {}
@@ -120,13 +176,16 @@ def build_inventory(assets: list[Asset]) -> dict:
     for a in assets:
         key = f"asset{a.id}"
         v: dict = {"ansible_host": a.fqdn or a.ip or a.name, "omx_asset_id": a.id}
-        if a.ansible_user:
+        via_agent = (transports or {}).get(a.id, a.ansible_transport) == "agent" and not a.platform       # equipamentos de rede não têm agente
+        if via_agent:
+            v.update(_agent_vars(a))
+        if a.ansible_user and not via_agent:
             v["ansible_user"] = a.ansible_user
         if a.ansible_port:
             v["ansible_port"] = a.ansible_port
         c = None
         winrm_opts: dict = {}
-        if a.credential_id:
+        if a.credential_id and not via_agent:                   # pela procuração do agente não são precisas credenciais de ligação
             c = creds.get(a.credential_id) or db.session.get(AnsibleCredential, a.credential_id)
             if c is None or c.tenant_id != a.tenant_id:
                 raise EngineError(f"Credencial inválida no ativo {a.name}")
@@ -158,15 +217,20 @@ def build_inventory(assets: list[Asset]) -> dict:
         elif a.cyberark_role:
             v["omx_component"] = a.cyberark_role
             if a.cyberark_role != "psmp":
-                v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', '')))
+                if not via_agent:
+                    v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', '')))
                 add("windows", key)
             else:
                 add("linux", key)
             add(f"cyberark_{a.cyberark_role}", key)
         elif a.os_family:
-            if a.os_family == "windows":
+            if a.os_family == "windows" and not via_agent:
                 v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', '')))
             add(a.os_family, key)
+        if not via_agent and v.get("ansible_connection") in (None, "ssh", "ansible.netcommon.network_cli"):
+            v["ansible_ssh_common_args"] = _ssh_args(winrm_opts)
+            if v.get("ansible_connection") == "ansible.netcommon.network_cli":
+                v["ansible_host_key_auto_add"] = bool(winrm_opts.get("ssh_accept_new", True))           # network_cli (paramiko)
         hosts[key] = v
     inv: dict = {"all": {"hosts": hosts}}
     for g, members in groups.items():
@@ -179,7 +243,7 @@ def build_inventory(assets: list[Asset]) -> dict:
 
 def _assets(tenant: Tenant, ids: list[int], op: str) -> list[Asset]:
     rows = Asset.query.filter(Asset.tenant_id == tenant.id, Asset.id.in_(ids or [0])).all()
-    bad = [a.name for a in rows if a.connection != "ansible" or not eligible(a, op)]
+    bad = [a.name for a in rows if (a.connection != "ansible" and a.ansible_transport != "agent") or not eligible(a, op)]
     if not rows:
         raise EngineError("Selecione pelo menos um ativo.")
     if bad:
@@ -216,7 +280,24 @@ def create_job(tenant: Tenant, user, op: str, asset_ids: list[int], mode: str, o
     if mode not in ("assess", "apply") or (op == "network" and mode != "assess"):
         raise EngineError("Modo inválido (os equipamentos de rede só admitem avaliação)")
     assets = _assets(tenant, asset_ids, op)
-    problems = [f"{a.name}: {'; '.join(p)}" for a in assets if (p := connection_problems(a))]
+    if op in ("os", "software", "all"):
+        netlike = [a for a in assets if a.kind == "network" or guess_platform(a)]
+        if netlike:
+            from ..models import NET_PLATFORMS
+            raise EngineError("Estes ativos parecem equipamentos de rede/firewall, não servidores: " + ", ".join(f"{a.name}" + (f" ({NET_PLATFORMS[guess_platform(a)]})" if guess_platform(a) else "") for a in netlike[:5])
+                              + ". Defina a «Plataforma de rede / firewall» no ativo e use a operação «Avaliar atualizações de switches, routers e firewalls».")
+    if op == "network":
+        for a in assets:
+            if not a.platform and (g := guess_platform(a)):
+                a.platform = g                                           # primeira avaliação: assume a plataforma provável
+    transports: dict[int, str] = {}
+    problems = []
+    for a in assets:
+        p = connection_problems(a)
+        if p and not a.ansible_transport and not a.platform and _fallback_on() and agent_usable(a)[0]:
+            transports[a.id] = "agent"                          # sem credenciais/ligação direta, mas há agente que o permite: usa-o como procuração
+        elif p:
+            problems.append(f"{a.name}: {'; '.join(p)}")
     if problems:
         raise EngineError("Não é possível ligar a: " + " | ".join(problems[:5]) + ". Defina a credencial no ativo (Ativos → editar → «Credencial Ansible») e crie-a em Motor Ansible → Credenciais.")
     base = _payload(op, mode, options, user)
@@ -242,6 +323,8 @@ def create_job(tenant: Tenant, user, op: str, asset_ids: list[int], mode: str, o
             if prev_stage:
                 p["after"] = [t.id for t in prev_stage]
                 status = "waiting_dep"
+        if a.id in transports:
+            p["transport"] = "agent"
         t = Task(tenant_id=tenant.id, type=OPERATIONS[op]["task"], asset_id=a.id, ring=a.ring, mode="ansible", status=status, payload=json.dumps(p))
         db.session.add(t)
         db.session.flush()
@@ -288,16 +371,32 @@ def playbook_for(task: Task) -> str | None:
     return PLAYBOOKS.get((task.type, task.asset.os_family)) or PLAYBOOKS.get((task.type, "any"))
 
 
-def run_task(task: Task) -> dict:
+def _fallback_on() -> bool:
+    from flask import current_app
+    return bool(current_app.config.get("AGENT_EXEC_FALLBACK", True)) and bool(current_app.config.get("AGENT_EXEC_ENABLED"))
+
+
+def _run_once(task: Task, pb: str, transport: str | None) -> dict:
     from . import ansible_runner
+    p = dict(task.payload_data)
+    extra = {k: v for k, v in p.items() if k not in ("op", "requested_by", "after", "transport")}
+    extra["omx_mode"] = p.get("mode", "assess")
+    extra["task_id"] = task.id
+    inv = build_inventory([task.asset], {task.asset_id: transport} if transport else None)
+    return ansible_runner.run_playbook(pb, inv, extra, limit=f"asset{task.asset_id}", timeout_minutes=240 if task.type == "cyb_upgrade" else None)
+
+
+def run_task(task: Task) -> dict:
     pb = playbook_for(task)
     if pb is None:
         return {"status": "failed", "output": f"Sem playbook para {task.type}/{task.asset.os_family or '?'}"}
-    p = dict(task.payload_data)
-    extra = {k: v for k, v in p.items() if k not in ("op", "requested_by", "after")}
-    extra["omx_mode"] = p.get("mode", "assess")
-    extra["task_id"] = task.id
-    res = ansible_runner.run_playbook(pb, build_inventory([task.asset]), extra, limit=f"asset{task.asset_id}", timeout_minutes=240 if task.type == "cyb_upgrade" else None)
+    transport = task.payload_data.get("transport") or task.asset.ansible_transport or None
+    res = _run_once(task, pb, transport)
+    note = ""
+    if res["rc"] != 0 and transport != "agent" and not task.asset.platform and "UNREACHABLE" in (res["output"] or "") and _fallback_on() and agent_usable(task.asset)[0]:
+        first = res["output"]
+        res = _run_once(task, pb, "agent")                       # «caso não seja possível a operação sem agente»: repete através do agente
+        note = "[Ligação direta impossível — repetido através do agente OMXPatch (procuração)]\n--- tentativa direta ---\n" + _scrub(first)[-3000:] + "\n--- através do agente ---\n"
     data = res["result"] or {}
     status = data.get("status") or ("succeeded" if res["rc"] == 0 else "failed")
     if res["rc"] != 0:
@@ -305,7 +404,26 @@ def run_task(task: Task) -> dict:
     for k in ("raw_winget", "raw_choco"):
         if isinstance(data.get(k), str):
             data[k] = data[k][:200000]
-    return {**data, "status": status, "exit_code": res["rc"], "output": _scrub(res["output"])}
+    return {**data, "status": status, "exit_code": res["rc"], "output": note + _scrub(res["output"]), "via_agent": bool(note) or transport == "agent"}
+
+
+def housekeeping(tenant: Tenant) -> int:
+    """Limpa as tarefas de execução remota antigas (podem conter comandos/saídas com segredos) e os ficheiros temporários."""
+    import time
+    from datetime import timedelta
+    from pathlib import Path
+    from flask import current_app
+    n = 0
+    for t in Task.query.filter(Task.tenant_id == tenant.id, Task.type == "exec", Task.created_at < utcnow() - timedelta(hours=1)):
+        if t.payload != '{"limpo": true}' and '"limpo"' not in (t.payload or ""):
+            t.payload, t.result, t.output = '{"limpo": true}', "{}", ""
+            n += 1
+    d = Path(current_app.config["DATA_DIR"]) / "ansible-blobs"
+    if d.is_dir():
+        for f in d.iterdir():
+            if f.is_file() and time.time() - f.stat().st_mtime > 24 * 3600:
+                f.unlink(missing_ok=True)
+    return n
 
 
 def _scrub(text: str) -> str:

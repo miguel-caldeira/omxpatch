@@ -409,3 +409,42 @@ def test_windows_without_winrm_uses_ssh(app, tenant):
             assert h["ansible_connection"] == "ssh" and h["ansible_shell_type"] == "powershell" and not any(k.startswith("ansible_winrm") for k in h)
         assert inv[f"asset{a.id}"]["ansible_password"] == "pw" and "__ssh_key__" in inv[f"asset{b.id}"]       # a chave vai para ficheiro temporário
         assert eng.connection_problems(a) == [] and eng.connection_problems(b) == []
+
+
+def test_firewall_chosen_for_os_update_is_explained_and_network_assess_guesses_platform(app, tenant):
+    """Erro real: uma FortiGate sem «plataforma» foi tratada como Linux (SSH, «Host key verification failed»)."""
+    with app.app_context():
+        fw = Asset(tenant_id=tenant.id, uid="fgt-x", name="FGT-HQ", connection="ansible", managed=True, os_family="linux", os_name="FortiOS", kind="network", ansible_user="admin")
+        db.session.add(fw)
+        db.session.commit()
+        for op in ("os", "software", "all"):
+            with pytest.raises(eng.EngineError, match="equipamentos de rede"):
+                eng.create_job(tenant, None, op, [fw.id], "assess", {})
+        assert eng.guess_platform(fw) == "fortios"
+        fw.platform = ""
+        from omxpatch.connectors import store
+        c = AnsibleCredential(tenant_id=tenant.id, name="tok", kind="api_token", secret=store.encrypt_json({"api_token": "t"}))
+        db.session.add(c)
+        db.session.flush()
+        fw.credential_id = c.id
+        (t,) = eng.create_job(tenant, None, "network", [fw.id], "assess", {})       # a avaliação de rede assume a plataforma provável
+        assert fw.platform == "fortios" and t.type == "net_assess"
+
+
+def test_ssh_known_hosts_is_writable_and_host_keys_accepted_on_first_use(app, tenant, tmp_path):
+    from omxpatch.connectors import store
+    with app.app_context():
+        app.config["DATA_DIR"] = str(tmp_path / "dados")
+        a = mk(tenant, "lin-ssh", os_family="linux", ip="10.1.1.1")
+        h = eng.build_inventory([a])["all"]["hosts"][f"asset{a.id}"]
+        args = h["ansible_ssh_common_args"]
+        assert f"UserKnownHostsFile={tmp_path / 'dados' / 'ansible' / 'known_hosts'}" in args and "StrictHostKeyChecking=accept-new" in args
+        app.config["ANSIBLE_SSH_ACCEPT_NEW"] = False
+        assert "accept-new" not in eng.build_inventory([a])["all"]["hosts"][f"asset{a.id}"]["ansible_ssh_common_args"]
+        c = AnsibleCredential(tenant_id=tenant.id, name="strict", kind="password", username="u", secret=store.encrypt_json({"password": "p", "opts": {"ssh_accept_new": True}}))
+        db.session.add(c)
+        db.session.flush()
+        b = mk(tenant, "lin-ssh2", os_family="linux", credential_id=c.id)
+        assert "accept-new" in eng.build_inventory([b])["all"]["hosts"][f"asset{b.id}"]["ansible_ssh_common_args"]     # a opção da credencial prevalece
+        w = mk(tenant, "win-x", os_family="windows")
+        assert "ansible_ssh_common_args" not in eng.build_inventory([w])["all"]["hosts"][f"asset{w.id}"]               # WinRM não usa SSH

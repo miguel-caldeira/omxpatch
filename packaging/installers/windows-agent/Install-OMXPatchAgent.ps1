@@ -2,10 +2,10 @@
 <#
   OMXPatch - instalacao do AGENTE em Windows (10/11 e Server 2012 R2+). Instala os ficheiros em C:\OMXPatchAgent, encontra (ou instala,
   se o pacote trouxer python-installer.exe) um Python 3.8+ e, com os dados de inscricao, inscreve o agente e instala o servico.
-  Uso:  .\Install-OMXPatchAgent.ps1 [-Server https://omxpatchcli.oramix.local:4444 -Token omxe_... [-Pin <SHA-256 ou thumbprint>]] [-Pause]
+  Uso:  .\Install-OMXPatchAgent.ps1 [-Server https://omxpatchcli.oramix.local:4444 -Token omxe_... [-Pin <SHA-256 ou thumbprint>]] [-AllowExec] [-Pause]
   Sem parametros usa C:\ProgramData\OMXPatchAgent\enroll.env (MDM: OMXPATCH_SERVER, OMXPATCH_TOKEN, OMXPATCH_PIN); se nao existir, so instala os ficheiros.
 #>
-param([string]$Server = '', [string]$Token = '', [string]$Pin = '', [switch]$Pause)
+param([string]$Server = '', [string]$Token = '', [string]$Pin = '', [switch]$AllowExec, [switch]$Pause)
 $ErrorActionPreference = 'Stop'
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Dest = 'C:\OMXPatchAgent'; $Data = Join-Path $env:ProgramData 'OMXPatchAgent'
@@ -29,8 +29,8 @@ try {
   if (-not $Server -or -not $Token) {
     $envf = Join-Path $Data 'enroll.env'
     if (Test-Path $envf) {
-      Get-Content $envf | ForEach-Object { if ($_ -match '^\s*(OMXPATCH_SERVER|OMXPATCH_TOKEN|OMXPATCH_PIN)\s*=\s*(.*?)\s*$') { Set-Variable -Name ('E_' + $Matches[1]) -Value $Matches[2] } }
-      if (-not $Server) { $Server = $E_OMXPATCH_SERVER }; if (-not $Token) { $Token = $E_OMXPATCH_TOKEN }; if (-not $Pin) { $Pin = $E_OMXPATCH_PIN }
+      Get-Content $envf | ForEach-Object { if ($_ -match '^\s*(OMXPATCH_SERVER|OMXPATCH_TOKEN|OMXPATCH_PIN|OMXPATCH_ALLOW_EXEC)\s*=\s*(.*?)\s*$') { Set-Variable -Name ('E_' + $Matches[1]) -Value $Matches[2] } }
+      if (-not $Server) { $Server = $E_OMXPATCH_SERVER }; if (-not $Token) { $Token = $E_OMXPATCH_TOKEN }; if (-not $Pin) { $Pin = $E_OMXPATCH_PIN }; if ($E_OMXPATCH_ALLOW_EXEC -eq '1') { $AllowExec = $true }
     }
   }
   Step 'Python'
@@ -48,6 +48,7 @@ try {
     $env:PYTHONPATH = $Dest
     $a = @('-m', 'omxpatch_agent', 'enroll', '--server', $Server, '--token', $Token, '--install-service')
     if ($Pin) { $a += @('--pin-sha256', $Pin) }
+    if ($AllowExec) { $a += '--allow-exec' }
     & $Py @a
     if ($LASTEXITCODE -ne 0) { throw "A inscricao falhou (codigo $LASTEXITCODE)." }
     Remove-Item -Force (Join-Path $Data 'enroll.env') -ErrorAction SilentlyContinue

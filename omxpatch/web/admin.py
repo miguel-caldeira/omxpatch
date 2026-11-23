@@ -598,7 +598,19 @@ def agent_detail(agent_id: int):
     logs = _agent_log_query(ag).order_by(AgentLog.ts.desc(), AgentLog.id.desc()).offset((page - 1) * 100).limit(100).all()
     from ..models import Task
     cmds = Task.query.filter(Task.tenant_id == ag.tenant_id, Task.asset_id == ag.asset_id, Task.type == "agent_ctl").order_by(Task.id.desc()).limit(8).all() if ag.asset_id else []
-    return render_template("admin/agent_detail.html", ag=ag, logs=logs, page=page, cmds=cmds, actions=agentops.ACTIONS, now=utcnow(),
+    execs = []
+    if ag.asset_id:
+        import base64
+        for t in Task.query.filter(Task.tenant_id == ag.tenant_id, Task.asset_id == ag.asset_id, Task.type == "exec").order_by(Task.id.desc()).limit(40):
+            pl = t.payload_data
+            if not pl.get("adhoc"):
+                continue
+            r = t.result_data
+            dec = lambda k: base64.b64decode(r.get(k, "")).decode("utf-8", "replace")[:20000]  # noqa: E731
+            execs.append({"t": t, "by": pl.get("by", ""), "rc": r.get("rc"), "out": dec("stdout_b64"), "err": dec("stderr_b64"), "msg": t.output})
+            if len(execs) >= 5:
+                break
+    return render_template("admin/agent_detail.html", ag=ag, logs=logs, page=page, cmds=cmds, execs=execs, exec_cfg=current_app.config.get("AGENT_EXEC_ENABLED"), actions=agentops.ACTIONS, now=utcnow(),
                            offline=current_app.config["AGENT_OFFLINE_MINUTES"], heartbeat=current_app.config["AGENT_HEARTBEAT_SECONDS"],
                            giveup=current_app.config["AGENT_GIVEUP_MINUTES"], debug_default=current_app.config["AGENT_DEBUG_DEFAULT_MINUTES"])
 
@@ -619,6 +631,36 @@ def agent_command(agent_id: int):
     db.session.commit()
     hb = max(1, int(current_app.config["AGENT_HEARTBEAT_SECONDS"]) // 60)
     flash(f"«{agentops.ACTIONS[action]}» pedido: o agente aplica-o no próximo contacto (até ~{hb} min).", "info")
+    return redirect(url_for("admin.agent_detail", agent_id=ag.id))
+
+
+@bp.route("/agents/<int:agent_id>/exec", methods=["POST"])
+@login_required
+@roles_required("admin")
+def agent_exec(agent_id: int):
+    """Executa um script PowerShell (Windows) ou shell (Linux/macOS) no equipamento através do agente. Só se a consola o ativar e o agente o permitir."""
+    import base64
+    import json
+    from ..engine import ansible_engine
+    from ..models import Task
+    ag = get_scoped_or_404(Agent, agent_id)
+    script = (request.form.get("script") or "").strip()
+    if not script or len(script) > 20000:
+        flash("Indique o comando (até 20 000 caracteres).", "danger")
+        return redirect(url_for("admin.agent_detail", agent_id=ag.id))
+    ok, why = ansible_engine.agent_usable(ag.asset) if ag.asset is not None else (False, "agente sem ativo")
+    if not ok:
+        flash(f"Não é possível executar: {why}.", "danger")
+        return redirect(url_for("admin.agent_detail", agent_id=ag.id))
+    win = ag.os_family == "windows"
+    cmd = ("powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + base64.b64encode(script.encode("utf-16-le")).decode("ascii")) if win else script
+    task = Task(tenant_id=ag.tenant_id, type="exec", asset_id=ag.asset_id, ring=ag.asset.ring or 4, mode="agent", status="queued",
+                payload=json.dumps({"op": "run", "cmd": cmd, "timeout": 300, "adhoc": True, "by": current_user.email}))
+    db.session.add(task)
+    audit("agent_exec", f"{ag.hostname}: comando de {len(script)} caracteres (sha256 {__import__('hashlib').sha256(script.encode()).hexdigest()[:16]})")
+    agentops.record(ag, "audit", f"Comando remoto pedido por {current_user.email} ({len(script)} caracteres)", source="console", data={"by": current_user.email})
+    db.session.commit()
+    flash("Comando enviado: o resultado aparece abaixo no próximo contacto do agente (1–5 s se houver uma sessão em curso, senão até ao intervalo de contacto).", "info")
     return redirect(url_for("admin.agent_detail", agent_id=ag.id))
 
 

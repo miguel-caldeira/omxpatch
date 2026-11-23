@@ -77,7 +77,7 @@ def adopt_server_config(ac: dict) -> None:
     if not isinstance(ac, dict):
         return
     keep = {}
-    for k in ("giveup_minutes", "log_upload", "log_level", "log_max_batch", "auto_update"):
+    for k in ("giveup_minutes", "log_upload", "log_level", "log_max_batch", "auto_update", "exec_enabled"):
         if k in ac:
             keep[k] = ac[k]
     if keep:

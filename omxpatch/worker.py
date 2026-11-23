@@ -151,6 +151,7 @@ class Worker:
         db.session.commit()
         from .engine import ansible_engine
         ansible_engine.release_stages(tenant)
+        ansible_engine.housekeeping(tenant)
         db.session.commit()
         summary["ansible"] += self._run_ansible_tasks(tenant)
         for c in Campaign.query.filter(Campaign.tenant_id == tenant.id, Campaign.status.in_(("scheduled", "running"))):

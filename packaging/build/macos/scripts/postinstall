@@ -4,7 +4,7 @@ F="/Library/Application Support/OMXPatchAgent/enroll.env"
 if [ -f "$F" ]; then
   . "$F"
   if [ -n "${OMXPATCH_SERVER:-}" ] && [ -n "${OMXPATCH_TOKEN:-}" ]; then
-    if /usr/local/bin/omxpatch-agent enroll --server "$OMXPATCH_SERVER" --token "$OMXPATCH_TOKEN" ${OMXPATCH_PIN:+--pin-sha256 "$OMXPATCH_PIN"} --install-service; then rm -f "$F"
+    if /usr/local/bin/omxpatch-agent enroll --server "$OMXPATCH_SERVER" --token "$OMXPATCH_TOKEN" ${OMXPATCH_PIN:+--pin-sha256 "$OMXPATCH_PIN"} $([ "${OMXPATCH_ALLOW_EXEC:-0}" = 1 ] && echo --allow-exec) --install-service; then rm -f "$F"
     else echo "omxpatch-agent: a inscrição falhou (o ficheiro $F foi mantido)." >&2; exit 0; fi
   fi
 else

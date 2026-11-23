@@ -76,6 +76,8 @@ cat > "$A/etc/omxpatch-agent/enroll.env.example" <<'ENV'
 OMXPATCH_SERVER=https://omxpatchcli.oramix.local:4444
 OMXPATCH_TOKEN=omxe_...
 OMXPATCH_PIN=
+# 1 = permitir que a consola use este agente como procuração de comandos Ansible/PowerShell (equivale a: omxpatch-agent config allow-exec on)
+OMXPATCH_ALLOW_EXEC=0
 ENV
 cat > "$A/DEBIAN/control" <<CTL
 Package: omxpatch-agent
@@ -96,7 +98,7 @@ if [ "$1" = configure ] || [ "$1" = reconfigure ]; then
   if [ -f "$F" ]; then
     . "$F"
     if [ -n "${OMXPATCH_SERVER:-}" ] && [ -n "${OMXPATCH_TOKEN:-}" ]; then
-      if omxpatch-agent enroll --server "$OMXPATCH_SERVER" --token "$OMXPATCH_TOKEN" ${OMXPATCH_PIN:+--pin-sha256 "$OMXPATCH_PIN"} --install-service; then rm -f "$F"
+      if omxpatch-agent enroll --server "$OMXPATCH_SERVER" --token "$OMXPATCH_TOKEN" ${OMXPATCH_PIN:+--pin-sha256 "$OMXPATCH_PIN"} $([ "${OMXPATCH_ALLOW_EXEC:-0}" = 1 ] && echo --allow-exec) --install-service; then rm -f "$F"
       else echo "omxpatch-agent: a inscrição falhou (o ficheiro $F foi mantido)." >&2; fi
     fi
   else
@@ -144,7 +146,7 @@ install -m 0600 $A/etc/omxpatch-agent/enroll.env.example %{buildroot}/etc/omxpat
 %post
 F=/etc/omxpatch-agent/enroll.env
 if [ -f "\$F" ]; then . "\$F"; if [ -n "\${OMXPATCH_SERVER:-}" ] && [ -n "\${OMXPATCH_TOKEN:-}" ]; then
-  omxpatch-agent enroll --server "\$OMXPATCH_SERVER" --token "\$OMXPATCH_TOKEN" \${OMXPATCH_PIN:+--pin-sha256 "\$OMXPATCH_PIN"} --install-service && rm -f "\$F" || true; fi; fi
+  omxpatch-agent enroll --server "\$OMXPATCH_SERVER" --token "\$OMXPATCH_TOKEN" \${OMXPATCH_PIN:+--pin-sha256 "\$OMXPATCH_PIN"} \$([ "\${OMXPATCH_ALLOW_EXEC:-0}" = 1 ] && echo --allow-exec) --install-service && rm -f "\$F" || true; fi; fi
 %preun
 if [ "\$1" = 0 ]; then systemctl disable --now omxpatch-agent >/dev/null 2>&1 || true; rm -f /etc/systemd/system/omxpatch-agent.service; rm -rf /opt/omxpatch-agent/omxpatch_agent/__pycache__; fi
 %files

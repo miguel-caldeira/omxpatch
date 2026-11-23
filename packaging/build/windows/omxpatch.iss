@@ -78,4 +78,5 @@ begin
   if GetParam('/SERVER') <> '' then Result := Result + ' -Server "' + GetParam('/SERVER') + '"';
   if GetParam('/TOKEN') <> '' then Result := Result + ' -Token "' + GetParam('/TOKEN') + '"';
   if GetParam('/PIN') <> '' then Result := Result + ' -Pin "' + GetParam('/PIN') + '"';
+  if CmdLineParamExists('/ALLOWEXEC') then Result := Result + ' -AllowExec';
 end;

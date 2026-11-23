@@ -23,6 +23,8 @@ cat > "$ROOTDIR/Library/OMXPatchAgent/enroll.env.example" <<'ENV'
 OMXPATCH_SERVER=https://omxpatchcli.oramix.local:4444
 OMXPATCH_TOKEN=omxe_...
 OMXPATCH_PIN=
+# 1 = permitir que a consola use este agente como procuração de comandos Ansible (equivale a: omxpatch-agent config allow-exec on)
+OMXPATCH_ALLOW_EXEC=0
 ENV
 cat > "$ROOTDIR/usr/local/bin/omxpatch-agent" <<'SH'
 #!/bin/sh

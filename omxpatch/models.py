@@ -60,7 +60,8 @@ TASK_TYPES = {"update_scan": "Descobrir atualizações", "practice_sim": "Simula
               "simulate": "Simulação prévia", "inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
               "control": "Controlo compensatório", "rollback": "Reverter patch", "wake": "Wake-on-LAN",
               "agent_ctl": "Comando ao agente", "os_update": "Atualização do SO (Ansible)", "sw_update": "Atualização de software (Ansible)",
-              "cyb_upgrade": "Atualização CyberArk (Ansible)", "net_assess": "Avaliação de equipamento de rede"}
+              "cyb_upgrade": "Atualização CyberArk (Ansible)", "net_assess": "Avaliação de equipamento de rede",
+              "exec": "Execução remota (agente como procuração do Ansible)"}
 TASK_STATUSES = {"pending": "Pendente", "waiting_window": "À espera da janela", "waking": "Wake-on-LAN",
                  "queued": "Em fila", "sent": "Enviada ao agente", "running": "Em execução",
                  "succeeded": "Concluída", "failed": "Falhou", "rolled_back": "Revertida",
@@ -306,6 +307,7 @@ class Asset(TimestampMixin, db.Model):
     platform = db.Column(db.String(16), default="")             # equipamentos de rede (checkpoint, fortios, panos, cisco_ios, cisco_nxos, junos, eos)
     cyberark_role = db.Column(db.String(8), default="")         # componente CyberArk: vault | cpm | psm | psmp
     credential_id = db.Column(db.Integer, db.ForeignKey("ansible_credentials.id"), nullable=True)   # credencial usada pelo motor Ansible
+    ansible_transport = db.Column(db.String(8), default="")     # "" = direto (SSH/WinRM) | "agent" = o agente executa os comandos do Ansible (procuração)
     maintenance_group = db.Column(db.String(120), default="")
     cmdb_ref = db.Column(db.String(190), default="")            # ID na CMDB externa (ServiceNow, etc.)
     cmdb_synced_at = db.Column(db.DateTime, nullable=True)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import socket
 import tempfile
 import time
@@ -166,6 +167,79 @@ def _practice_rollback(client: Client, task: dict) -> dict:
     return practices.rollback(f"item-{p['item_id']}", {**(p.get("params") or {}), "practice": p.get("practice", "")})
 
 
+MAX_EXEC_SECONDS = 1800
+MAX_RESULT_BYTES = 8 * 1024 * 1024
+HOT_UNTIL = 0.0                        # depois de executar um comando, o agente consulta a consola a cada segundo durante 2 min (o Ansible faz muitos pedidos seguidos)
+
+
+def _cap(data: bytes) -> tuple[str, bool]:
+    import base64
+    cut = len(data) > MAX_RESULT_BYTES
+    return base64.b64encode(data[:MAX_RESULT_BYTES]).decode("ascii"), cut
+
+
+def _exec(client: Client, task: dict) -> dict:
+    """Procuração (proxy) de comandos do Ansible e do PowerShell: executa no próprio equipamento o que a consola pede, quando o acesso sem agente
+    (WinRM/SSH) não é possível. Só funciona se a consola o ativar (AGENT_EXEC_ENABLED) **e** o administrador do equipamento o permitir
+    localmente (``omxpatch-agent config allow-exec on``); a tarefa tem de estar assinada pela consola. Cada comando fica na auditoria do agente
+    (só o resumo SHA-256 e o tamanho, nunca o conteúdo)."""
+    import base64
+    import hashlib
+    import subprocess  # nosec B404 - função própria deste módulo: executar comandos pedidos pela consola
+    from . import config as agent_config, telemetry
+    global HOT_UNTIL
+    p = task["payload"]
+    if not agent_config.load().get("allow_exec"):
+        return {"status": "failed", "rc": 126, "output": "Execução remota desativada neste equipamento (administrador local: omxpatch-agent config allow-exec on)."}
+    if not telemetry.runtime().get("exec_enabled"):
+        return {"status": "failed", "rc": 126, "output": "Execução remota desativada na consola (Sistema → Configuração → AGENT_EXEC_ENABLED)."}
+    op = str(p.get("op") or "run")
+    HOT_UNTIL = time.time() + 120
+    if op == "run":
+        cmd = str(p.get("cmd") or "")
+        stdin = base64.b64decode(p["stdin_b64"]) if p.get("stdin_b64") else None
+        timeout = max(1, min(int(p.get("timeout") or 300), MAX_EXEC_SECONDS))
+        telemetry.audit("exec", f"comando de {len(cmd)} caracteres, stdin {len(stdin or b'')} bytes", cmd_sha256=hashlib.sha256(cmd.encode()).hexdigest(), task_id=task["id"])
+        kw = {"executable": "/bin/sh"} if platform_family() != "windows" else {}
+        try:
+            r = subprocess.run(cmd, shell=True, input=stdin, capture_output=True, timeout=timeout, **kw)  # nosec B602 - é a função deste proxy; ver docstring
+        except subprocess.TimeoutExpired as exc:
+            out, cut = _cap(exc.stdout or b"")
+            err, _ = _cap((exc.stderr or b"") + f"\nTempo excedido ({timeout}s)".encode())
+            return {"status": "succeeded", "rc": 124, "stdout_b64": out, "stderr_b64": err, "output": "tempo excedido"}
+        out, cut = _cap(r.stdout)
+        err, cut2 = _cap(r.stderr)
+        return {"status": "succeeded", "rc": r.returncode, "stdout_b64": out, "stderr_b64": err, "truncated": cut or cut2, "output": f"rc={r.returncode}"}
+    if op == "put":
+        import tempfile
+        sha, dest = str(p.get("sha256") or ""), str(p.get("dest") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", sha) or not dest:
+            return {"status": "failed", "rc": 1, "output": "pedido inválido"}
+        telemetry.audit("exec_put", f"ficheiro de {int(p.get('size') or 0)} bytes", sha256=sha, task_id=task["id"])
+        fd, tmp = tempfile.mkstemp(prefix="omx-put-")
+        os.close(fd)
+        try:
+            client.blob(sha, tmp)
+            os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+            os.replace(tmp, dest)
+            if p.get("mode") and platform_family() != "windows":
+                os.chmod(dest, int(str(p["mode"]), 8))
+            return {"status": "succeeded", "rc": 0, "output": "ficheiro copiado"}
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+    if op == "get":
+        path = str(p.get("src") or "")
+        telemetry.audit("exec_get", "leitura de ficheiro", task_id=task["id"])
+        try:
+            if os.path.getsize(path) > 16 * 1024 * 1024:
+                return {"status": "succeeded", "rc": 1, "output": "ficheiro maior que 16 MB"}
+            return {"status": "succeeded", "rc": 0, "content_b64": base64.b64encode(open(path, "rb").read()).decode("ascii"), "output": "ficheiro lido"}
+        except OSError as exc:
+            return {"status": "succeeded", "rc": 1, "output": f"{exc.__class__.__name__}: {exc}"}
+    return {"status": "failed", "rc": 1, "output": f"operação desconhecida: {op}"}
+
+
 PENDING_ACTION: dict = {}              # ação a executar depois de o resultado da tarefa ser enviado (reiniciar / atualizar)
 LAST_TRUST: dict = {}                  # confiança publicada no último contacto (oferta de atualização assinada)
 
@@ -217,7 +291,7 @@ def _update_scan(client: Client, task: dict) -> dict:
             "sources": {k: {kk: vv for kk, vv in v.items() if kk in ("ok", "count")} for k, v in res.get("sources", {}).items()}}
 
 
-HANDLERS = {"agent_ctl": _agent_ctl, "update_scan": _update_scan, "practice_sim": _practice_sim, "practice_apply": _practice_apply, "practice_rollback": _practice_rollback, "simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
+HANDLERS = {"exec": _exec, "agent_ctl": _agent_ctl, "update_scan": _update_scan, "practice_sim": _practice_sim, "practice_apply": _practice_apply, "practice_rollback": _practice_rollback, "simulate": _simulate, "patch": _patch, "validate": _validate, "bas": _bas, "control": _control, "wake": _wake, "inventory": _inventory,
             "rollback": lambda c, t: {"status": "failed", "output": "Reversão automática não suportada neste agente"}}
 
 
