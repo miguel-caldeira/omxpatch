@@ -228,6 +228,7 @@ def execute(plan: OperationPlan, tenant: Tenant, user=None, now=None) -> dict:
         if it.kind == "patch":
             payload = deploy.patch_payload(plan, it.patch, it.asset)
             payload["reboot_policy"] = plan.reboot_policy
+            payload["reboot_notice_min"] = deploy.reboot_notice(tenant.id)
             ttype, patch_id = "patch", it.patch_id
         else:
             if it.asset.agent is None:

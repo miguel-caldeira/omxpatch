@@ -2,6 +2,14 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.41.20261128 — Instalar agentes à distância, fiabilidade de patches, congelações, SLA e controlos de perímetro
+- **I8 — Instalar o agente por SSH/WMI** (Motor Ansible → «Instalar o agente OMXPatch»): copia e executa o script da consola com um token de uso único, apaga-o e só conclui quando o agente se regista. Linux/macOS por SSH (`sudo -n`), Windows por WMI/DCOM + SMB.
+- **I1 — Fiabilidade de patches entre organizações (opt-in)** e **avisos de problemas conhecidos** (Patches → Avisos e fiabilidade): taxa de sucesso/rollback agregada e anónima (reciprocidade e k-anonimato: ≥ 3 organizações e ≥ 10 aplicações) e avisos por patch (globais ou da organização) que levam o Patch Intelligence a *atenção* ou *suspenso*.
+- **I3 — Congelações (blackout), prazo limite e reinício com aviso**: períodos de congelação por datas/anel/grupo (a congelação prevalece sobre janelas e prazo; emergência só se permitido); prazo limite por campanha; aviso prévio de reinício configurável (Linux/Windows/macOS); agendar/cancelar o reinício de um equipamento a partir da consola.
+- **I5 — SLA, aging e cobertura** (menu «SLA e aging»): cumprimento de SLA, MTTR por categoria e por mês, envelhecimento, cobertura e mais antigas em atraso; **exportação CSV** (neutraliza injeção de fórmulas) e **relatório agendado por e-mail** (semanal/mensal) com CSV em anexo.
+- **V1 — Controlos compensatórios nas firewalls de perímetro** (virtual patching; desligado por omissão): bloquear IP/rede ou isolar um ativo no FortiGate, Palo Alto e Check Point, só por pertença a grupos pré-criados; simular → aprovar → aplicar (tudo-ou-nada) → verificar → expirar (TTL) / reverter; redes e endereços protegidos, prefixo máximo.
+- Testes novos com firewalls simuladas (HTTPS com estado), SSH/WMI simulados, SMTP simulado. **Firewalls e WMI não validados em equipamentos reais.**
+
 ## 1.40.20261128 — Acesso sem agente: WMI (Windows) e SSH (Linux)
 - **Camada de transportes sem agente** (`omxpatch/transports`): SSH (paramiko; palavra-passe/chave, `sftp`, chave aceite na 1.ª ligação ou exigida, sudo) e **WMI/DCOM + SMB** (impacket) para Windows — sem WinRM e sem SSH no Windows.
 - Nova ligação Ansible **`omx_wmi`**: os módulos do Ansible para Windows (win_updates, win_shell, win_copy…) correm sobre o WMI. O **WMI passa a ser o acesso por omissão ao Windows** sem agente (`ANSIBLE_WINDOWS_TRANSPORT`; WinRM e SSH por credencial ou ativo); o Linux usa SSH.

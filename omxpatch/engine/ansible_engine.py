@@ -18,12 +18,13 @@ OPERATIONS = {
     "software": {"label": "Software e aplicações (winget, Chocolatey, snap, flatpak, Homebrew, Mac App Store)", "task": "sw_update", "scope": "software", "kinds": ("windows", "linux", "macos")},
     "all": {"label": "Tudo: sistema operativo + software", "task": "os_update", "scope": "all", "kinds": ("windows", "linux", "macos")},
     "cyberark": {"label": "CyberArk: Vault, CPM, PSM, PSMP", "task": "cyb_upgrade", "scope": "", "kinds": ("cyberark",)},
+    "agent_install": {"label": "Instalar o agente OMXPatch (por SSH/WMI, sem agente prévio)", "task": "agent_inst", "scope": "", "kinds": ("windows", "linux", "macos")},
     "network": {"label": "Avaliar atualizações de switches, routers e firewalls (somente leitura)", "task": "net_assess", "scope": "", "kinds": ("network",)},
 }
 PLAYBOOKS = {("os_update", "windows"): "update_windows.yml", ("os_update", "linux"): "update_linux.yml", ("os_update", "macos"): "update_macos.yml",
              ("sw_update", "windows"): "update_windows.yml", ("sw_update", "linux"): "update_linux.yml", ("sw_update", "macos"): "update_macos.yml",
              ("cyb_upgrade", "any"): "cyberark_upgrade.yml", ("net_assess", "any"): "net_assess.yml"}
-TASK_TYPES = ("os_update", "sw_update", "cyb_upgrade", "net_assess")
+TASK_TYPES = ("os_update", "sw_update", "cyb_upgrade", "net_assess", "agent_inst")
 CYBERARK_ORDER = ("vault", "cpm", "psm", "psmp")
 APPLY_FRESHNESS = timedelta(hours=24)
 CONFIRM_WORD = "ATUALIZAR"
@@ -53,7 +54,7 @@ def eligible(asset: Asset, op: str) -> bool:
         return bool(asset.platform or guess_platform(asset))
     if "cyberark" in kinds:
         return bool(asset.cyberark_role)
-    return asset.os_family in kinds and not asset.platform and not asset.cyberark_role
+    return asset.os_family in kinds and not asset.platform and not asset.cyberark_role and (op != "agent_install" or agent_for(asset) is None)
 
 
 # --------------------------------------------------------------------------- inventário (com credenciais cifradas → ficheiro temporário 0600)
@@ -243,7 +244,8 @@ def build_inventory(assets: list[Asset], transports: dict | None = None) -> dict
                     v.update({"ansible_become": True, "ansible_become_method": "enable"})
             elif a.platform in ("fortios", "panos"):
                 v["ansible_connection"] = "local"
-            v["omx_validate_certs"] = True
+            v["omx_validate_certs"] = winrm_opts.get("validate_certs", True) is not False
+            v["omx_fw_opts"] = {k: winrm_opts[k] for k in ("group_block", "group_isolate", "vsys", "cp_package", "cp_targets", "cp_domain", "tag_block", "tag_isolate") if winrm_opts.get(k)}
             add(f"net_{a.platform}", key)
         elif a.cyberark_role:
             v["omx_component"] = a.cyberark_role
@@ -329,14 +331,17 @@ def create_job(tenant: Tenant, user, op: str, asset_ids: list[int], mode: str, o
     problems = []
     for a in assets:
         p = connection_problems(a)
-        if p and not a.ansible_transport and not a.platform and _fallback_on() and agent_usable(a)[0]:
+        if p and op != "agent_install" and not a.ansible_transport and not a.platform and _fallback_on() and agent_usable(a)[0]:
             transports[a.id] = "agent"                          # sem credenciais/ligação direta, mas há agente que o permite: usa-o como procuração
         elif p:
             problems.append(f"{a.name}: {'; '.join(p)}")
     if problems:
         raise EngineError("Não é possível ligar a: " + " | ".join(problems[:5]) + ". Defina a credencial no ativo (Ativos → editar → «Credencial Ansible») e crie-a em Motor Ansible → Credenciais.")
     base = _payload(op, mode, options, user)
-    if mode == "apply":
+    if op == "agent_install":
+        mode = "apply"                                              # não há «avaliação»: a instalação é pedida explicitamente pelo administrador
+        base["mode"] = "apply"
+    elif mode == "apply":
         if not options.get("confirm_ok"):
             raise EngineError("Aplicar exige o OK explícito do administrador.")
         missing = [a.name for a in assets if _fresh_assessment(a, op) is None]
@@ -422,6 +427,9 @@ def _run_once(task: Task, pb: str, transport: str | None) -> dict:
 
 
 def run_task(task: Task) -> dict:
+    if task.type == "agent_inst":
+        from . import agent_deploy
+        return agent_deploy.run(task)
     pb = playbook_for(task)
     if pb is None:
         return {"status": "failed", "output": f"Sem playbook para {task.type}/{task.asset.os_family or '?'}"}

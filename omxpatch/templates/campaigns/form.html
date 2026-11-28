@@ -8,6 +8,7 @@
 <div><label for="asset_ids">Âmbito: IDs de ativos</label><input type="text" id="asset_ids" name="asset_ids" value="{{ form.get('asset_ids', '') }}" placeholder="1,2,3"></div>
 <div><label for="start_at">Início (vazio = já)</label><input type="datetime-local" id="start_at" name="start_at"></div>
 <div><label for="bandwidth_kbps">Limite de largura de banda por ativo (kbit/s; 0 = sem limite)</label><input type="number" id="bandwidth_kbps" name="bandwidth_kbps" min="0" value="{{ form.get('bandwidth_kbps', 0) }}"></div>
+<div><label for="deadline_at">Prazo limite (ignora janelas, nunca congelações)</label><input type="datetime-local" id="deadline_at" name="deadline_at" value="{{ form.get('deadline_at', '') }}"></div>
 <div><label for="reboot_policy">Reinício</label><select id="reboot_policy" name="reboot_policy">{% for k, l in [('if_needed', 'Se necessário'), ('none', 'Nunca (fica pendente)'), ('force', 'Forçar')] %}<option value="{{ k }}" {{ 'selected' if form.get('reboot_policy') == k }}>{{ l }}</option>{% endfor %}</select></div></div>
 <label class="chk"><input type="checkbox" name="use_rings" value="1" {{ 'checked' if form.get('use_rings') }}> Usar anéis de teste (Ring 0 → Ring 4) com promoção automática</label>
 <label class="chk"><input type="checkbox" name="auto_promote" value="1" {{ 'checked' if form.get('auto_promote') }}> Promover automaticamente quando os critérios do anel forem cumpridos</label>

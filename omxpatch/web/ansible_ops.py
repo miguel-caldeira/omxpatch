@@ -33,7 +33,7 @@ def run():
     tenant = require_tenant()
     f = request.form
     op, mode = f.get("op", ""), f.get("mode", "assess")
-    if mode == "apply" and not current_user.can_manage:
+    if (mode == "apply" or op == "agent_install") and not current_user.can_manage:
         abort(403)
     ids = [int(i) for i in f.getlist("asset_ids") if i.isdigit()]
     options = {"confirm_ok": bool(f.get("confirm_ok")), "reboot_policy": f.get("reboot_policy"), "security_only": bool(f.get("security_only")),
@@ -99,9 +99,9 @@ def credentials():
         if kind not in CREDENTIAL_KINDS or not name:
             flash("Nome e tipo são obrigatórios.", "danger")
             return redirect(url_for("ansible_ops.credentials"))
-        opts = {"windows_connection": f.get("windows_connection") if f.get("windows_connection") in eng.WINDOWS_TRANSPORTS else "wmi", "domain": f.get("domain", "").strip()[:120], "ssh_accept_new": bool(f.get("ssh_accept_new")), "winrm_transport": f.get("winrm_transport") if f.get("winrm_transport") in eng.WINRM_TRANSPORTS else "ntlm", "validate_certs": bool(f.get("validate_certs"))}
+        opts = {"windows_connection": f.get("windows_connection") if f.get("windows_connection") in eng.WINDOWS_TRANSPORTS else "wmi", "domain": f.get("domain", "").strip()[:120], "ssh_accept_new": bool(f.get("ssh_accept_new")), **{k: f.get(k, "").strip()[:200] for k in ("group_block", "group_isolate", "vsys", "cp_package", "cp_targets", "cp_domain", "tag_block", "tag_isolate") if f.get(k, "").strip()}, "winrm_transport": f.get("winrm_transport") if f.get("winrm_transport") in eng.WINRM_TRANSPORTS else "ntlm", "validate_certs": bool(f.get("validate_certs"))}
         secret = {"password": {"password": f.get("password", ""), "opts": opts}, "ssh_key": {"ssh_key": f.get("ssh_key", ""), "passphrase": f.get("passphrase", ""), "opts": opts},
-                  "api_token": {"api_token": f.get("api_token", "")}}[kind]
+                  "api_token": {"api_token": f.get("api_token", ""), "opts": opts}}[kind]
         if not any(v for k, v in secret.items() if k != "opts"):
             flash("Indique o segredo (palavra-passe, chave ou token).", "danger")
             return redirect(url_for("ansible_ops.credentials"))

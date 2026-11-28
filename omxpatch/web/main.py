@@ -42,6 +42,53 @@ def executive_page():
     return render_template("dashboard.html", k=k, tenant=tenant, max_cat=max(k["by_category"].values() or [1]) or 1)
 
 
+@bp.route("/sla")
+@login_required
+def sla_page():
+    from ..engine import sla
+    if (r := tenant_or_select()) is not None:
+        return r
+    tenant = require_tenant()
+    return render_template("sla.html", tenant=tenant, r=sla.report(tenant, window_days=min(max(request.args.get("days", type=int) or 90, 7), 730)), periods=sla.PERIODS)
+
+
+@bp.route("/sla.csv")
+@login_required
+def sla_csv():
+    from flask import Response
+
+    from ..engine import sla
+    tenant = require_tenant()
+    audit("sla_export", "CSV")
+    db.session.commit()
+    return Response(("\ufeff" + sla.csv_text(tenant)).encode("utf-8"), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="omxpatch-sla.csv"', "Cache-Control": "no-store"})
+
+
+@bp.route("/sla/schedule", methods=["POST"])
+@login_required
+@roles_required("admin")
+def sla_schedule():
+    from ..engine import sla
+    tenant = require_tenant()
+    f = request.form
+    if f.get("act") == "send":
+        try:
+            n = sla.send_report(tenant)
+            audit("sla_report_sent", f"{n} destinatário(s)")
+            db.session.commit()
+            flash(f"Relatório enviado a {n} destinatário(s).", "success")
+        except Exception as exc:  # noqa: BLE001
+            db.session.rollback()
+            flash(f"Não foi possível enviar: {exc}", "danger")
+    else:
+        tenant.report_schedule = f.get("schedule") if f.get("schedule") in sla.PERIODS else "off"
+        audit("sla_report_schedule", tenant.report_schedule)
+        db.session.commit()
+        flash("Agendamento do relatório guardado.", "success")
+    return redirect(url_for("main.sla_page"))
+
+
 @bp.route("/command/quick", methods=["POST"])
 @login_required
 @roles_required("admin", "user")
@@ -196,6 +243,7 @@ def asset_edit(asset_id: int):
         data["uid"] = asset.uid
         inventory.upsert_asset(require_tenant(), data, source=asset.source)
         asset.ansible_transport = request.form.get("ansible_transport") if request.form.get("ansible_transport") in ("ssh", "wmi", "winrm", "agent") else ""      # o formulário não envia campos vazios: «direto» tem de poder repor-se
+        asset.fw_enforce = bool(request.form.get("fw_enforce")) and bool(asset.platform in ("fortios", "panos", "checkpoint"))
         asset.managed = bool(request.form.get("managed")) or asset.managed
         asset.shadow_it = bool(request.form.get("shadow_it"))
         audit("asset_updated", asset.name)

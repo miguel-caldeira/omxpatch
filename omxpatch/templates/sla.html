@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf, bar with context %}{% block title %}SLA e envelhecimento{% endblock %}
+{% block content %}
+<div class="actions"><h1>SLA, envelhecimento e cobertura — {{ tenant.name }}</h1><span class="spacer"></span>
+<a class="btn sec" href="{{ url_for('main.sla_csv') }}">Exportar CSV</a><a class="btn sec" href="{{ url_for('main.executive_page') }}">Painel executivo</a></div>
+<p class="muted small">Indicadores de remediação sobre os últimos {{ r.window_days }} dias. Os prazos por categoria definem-se em Administração → Organizações. «Fora do prazo» = exposição aberta depois da data limite.</p>
+<div class="grid">
+<div class="kpi"><div class="l">Cumprimento de SLA</div><div class="v">{{ r.overall_sla if r.overall_sla is not none else '—' }}<span class="unit"> %</span></div><div class="small muted">{{ r.closed }} fechadas na janela</div></div>
+<div class="kpi"><div class="l">Em aberto</div><div class="v">{{ r.open }}</div><div class="small muted">{{ r.overdue_total }} fora do prazo</div></div>
+<div class="kpi"><div class="l">Cobertura</div><div class="v">{{ r.coverage.pct if r.coverage.pct is not none else '—' }}<span class="unit"> %</span></div><div class="small muted">{{ r.coverage.managed }}/{{ r.coverage.assets }} ativos geridos · {{ r.coverage.agent_active }} agentes ativos · {{ r.coverage.agentless }} sem agente</div></div>
+</div>
+<div class="panel"><h2>Por categoria de risco</h2><table><tr><th>Categoria</th><th>SLA</th><th>Abertas</th><th>Fora do prazo</th><th>Fechadas</th><th>MTTR</th><th>Cumprimento</th></tr>
+{% for cat, c in r.categories.items() %}<tr><td>{{ cat }}</td><td>{{ c.sla_days }} d</td><td>{{ c.open }}</td><td>{{ c.overdue }}</td><td>{{ c.closed }}</td><td>{{ (c.mttr_days ~ ' d') if c.mttr_days is not none else '—' }}</td><td>{{ (c.sla_compliance ~ ' %') if c.sla_compliance is not none else '—' }}</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Envelhecimento das exposições em aberto</h2><table><tr><th>Idade</th><th>Exposições</th><th>Críticas/emergência</th><th></th></tr>
+{% set mx = (r.aging|map(attribute='n')|max) or 1 %}{% for b in r.aging %}<tr><td>{{ b.label }}</td><td>{{ b.n }}</td><td>{{ b.critical }}</td><td style="width:40%">{{ bar(b.n, mx, 'bad' if b.critical else '') }}</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>MTTR mensal</h2><table><tr><th>Mês</th><th>Fechadas</th><th>MTTR (dias)</th></tr>{% for m in r.trend %}<tr><td>{{ m.label }}</td><td>{{ m.closed }}</td><td>{{ m.mttr_days if m.mttr_days is not none else '—' }}</td></tr>{% endfor %}</table></div>
+<div class="panel"><h2>Mais antigas fora do prazo</h2><table><tr><th>CVE</th><th>Ativo</th><th>Categoria</th><th>Idade</th><th>Atraso</th></tr>
+{% for o in r.oldest %}<tr><td>{{ o.cve }}</td><td>{{ o.asset }}</td><td>{{ o.category }}</td><td>{{ o.age_days }} d</td><td>{{ o.overdue_days }} d</td></tr>{% else %}<tr><td colspan="5" class="muted">Nenhuma.</td></tr>{% endfor %}</table></div>
+{% if current_user.can_manage %}<form method="post" action="{{ url_for('main.sla_schedule') }}" class="panel">{{ csrf() }}<h2>Relatório agendado por e-mail</h2>
+<p class="muted small">Envia este resumo e o CSV completo aos e-mails definidos em Notificações da organização. Requer SMTP configurado. Último envio: {{ tenant.report_last_sent|dt if tenant.report_last_sent else 'nunca' }}.</p>
+<div class="row"><div><label for="schedule">Periodicidade</label><select id="schedule" name="schedule">{% for k, v in periods.items() %}<option value="{{ k }}" {{ 'selected' if tenant.report_schedule == k }}>{{ v }}</option>{% endfor %}</select></div></div>
+<button class="btn">Guardar</button> <button class="btn sec" name="act" value="send" data-confirm="Enviar o relatório agora?">Enviar agora</button></form>{% endif %}
+{% endblock %}

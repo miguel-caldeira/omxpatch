@@ -23,7 +23,7 @@ from pathlib import Path
 
 from flask import current_app
 
-from ..models import Asset, Task
+from ..models import Task
 
 MARKER = "OMXPATCH_RESULT="
 PLAYBOOKS = {

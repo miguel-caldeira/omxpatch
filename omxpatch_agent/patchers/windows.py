@@ -10,7 +10,7 @@ import json
 import re
 import shlex
 
-from .. import sources
+from .. import reboot as rbt, sources
 from ..runner import powershell, run
 from . import SAFE_ARGS, KB_RE, PatchError, check_pkg
 
@@ -140,8 +140,7 @@ def apply(p: dict, download) -> dict:
         raise PatchError(f"Instalador não suportado no Windows: {installer}")
     policy = p.get("reboot_policy", "if_needed")
     if ok and (policy == "force" or (policy == "if_needed" and reboot)):
-        run(["shutdown", "/r", "/t", "120", "/c", "OMXPatch: reinício após a atualização"], 30)
-        out += "\nReinício agendado para daqui a 2 minutos.\n"
+        out += "\n" + rbt.schedule(p.get("reboot_notice_min", 2)) + "\n"
     return {"status": "succeeded" if ok else "failed", "output": out, "reboot_pending": reboot}
 
 

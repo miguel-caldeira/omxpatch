@@ -5,6 +5,10 @@
 <dt>Exposição</dt><dd>{% if c.exposure_id %}<a href="{{ url_for('main.exposure_detail', exposure_id=c.exposure_id) }}">abrir</a>{% else %}—{% endif %}</dd>
 <dt>Redução de risco prevista</dt><dd>−{{ c.risk_reduction }} pontos</dd><dt>Parâmetros</dt><dd><code>{{ c.params_data }}</code></dd><dt>Aplicado por</dt><dd>{{ c.via or '—' }}</dd><dt>Detalhe</dt><dd>{{ c.detail or '—' }}</dd>
 <dt>Aplicado / verificado</dt><dd>{{ c.applied_at|dt }} / {{ c.verified_at|dt }}</dd><dt>Temporário</dt><dd>{{ 'sim — revertido quando o patch é validado' if c.expires_when_patched else 'não' }}</dd></dl></div>
+{% set sim = c.params_data.get('simulation') %}{% if c.action in ('fw_block_ip', 'fw_isolate') %}<div class="panel"><h2>Simulação nas firewalls</h2>
+{% if sim %}<p class="muted small">Alvo {{ sim.target }} · {{ sim.at[:16] }} UTC · {{ 'tudo pronto' if sim.ok else 'há problemas' }}</p><table><tr><th>Firewall</th><th></th><th>Estado</th><th>O que seria feito</th></tr>
+{% for f in sim.firewalls %}<tr><td>{{ f.firewall }} <span class="muted small">({{ f.platform }})</span></td><td>{% if f.ok %}<span class="ok">✔</span>{% else %}<span class="bad">✘</span>{% endif %}</td><td class="small">{{ f.detail }}</td><td class="small">{{ f.actions|join('; ') }}</td></tr>{% endfor %}</table>{% else %}<p class="muted">Ainda sem simulação. Obrigatória (últimas 24 h) antes de aplicar.</p>{% endif %}
+{% if current_user.can_manage and c.status in ('proposed', 'approved', 'failed') %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='simulate') }}">{{ csrf() }}<button class="btn sec">Simular</button></form>{% endif %}</div>{% endif %}
 <div class="panel"><h2>Artefacto gerado</h2><pre class="art">{{ c.artifact }}</pre></div>
 {% if current_user.can_manage %}<div class="actions">
 {% if c.status == 'proposed' %}<form method="post" action="{{ url_for('secops.control_action', control_id=c.id, action='approve') }}" class="inline">{{ csrf() }}<button class="btn">Aprovar</button></form>

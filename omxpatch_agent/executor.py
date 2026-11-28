@@ -275,6 +275,14 @@ def _agent_ctl(client: Client, task: dict) -> dict:
         secs = int(p.get("minutes") or 60) * 60 if action == "debug_on" else 0
         telemetry.set_debug(secs)
         return {"status": "succeeded", "output": "Depuração " + (f"ativada por {secs // 60} min" if secs else "desativada")}
+    if action == "reboot":
+        from . import reboot
+        msg = reboot.schedule(p.get("minutes") or 2)
+        telemetry.audit("reboot_scheduled", msg, task_id=task["id"])
+        return {"status": "succeeded", "output": msg}
+    if action == "reboot_cancel":
+        from . import reboot
+        return {"status": "succeeded", "output": reboot.cancel()}
     if action == "logs":
         n = telemetry.flush(client)
         return {"status": "succeeded", "output": f"{n} evento(s) enviado(s) à consola"}

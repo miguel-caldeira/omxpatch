@@ -155,7 +155,18 @@ def intelligence(patch: Patch) -> dict:
         combined = (c_rate * c_n + t_rate * t_n) / (c_n + t_n)
     else:
         combined = t_rate if t_rate is not None else c_rate
-    issues = patch.known_issues
+    from . import fleet
+    fl = fleet.fleet_stats(patch)
+    if fl is not None:                                   # agregado anónimo entre organizações (só se esta também partilha)
+        c_rate_f = fl["success_rate"]
+        if combined is None:
+            combined = c_rate_f
+        else:
+            combined = (combined * (c_n + t_n) + c_rate_f * fl["n"]) / (c_n + t_n + fl["n"])
+        c_n_total = c_n + t_n + fl["n"]
+    else:
+        c_n_total = c_n + t_n
+    issues = patch.known_issues + fleet.advisories_for(patch)
     severe = [i for i in issues if str(i.get("severity", "")).lower() in ("high", "critical")]
     reasons: list[str] = []
     level = "go"
@@ -163,12 +174,17 @@ def intelligence(patch: Patch) -> dict:
         reasons.append("Sem histórico de aplicação: começar no Ring 0 (laboratório).")
         level = "caution"
     else:
-        if combined < 80 and (c_n + t_n) >= 5:
+        if combined < 80 and c_n_total >= 5:
             level = "hold"
             reasons.append(f"Taxa de sucesso baixa ({combined:.0f} %).")
         elif combined < 95:
             level = "caution"
             reasons.append(f"Taxa de sucesso de {combined:.0f} % (abaixo de 95 %).")
+    if fl is not None:
+        reasons.append(f"Frota ({fl['tenants']} organizações, {fl['n']} aplicações): sucesso {fl['success_rate']:.0f} %, rollbacks {fl['rollback_rate']:.0f} %.")
+        if fl["rollback_rate"] >= 10 or fl["success_rate"] < 80:
+            level = "hold"
+            reasons.append("Outras organizações tiveram problemas com este patch: suspenso até haver evidência de correção.")
     if severe:
         level = "hold"
         reasons.append(f"{len(severe)} incidente(s) grave(s) conhecido(s) do fabricante: "
@@ -196,7 +212,7 @@ def intelligence(patch: Patch) -> dict:
     score -= 25 * len(severe) + 5 * (len(issues) - len(severe)) + 8 * ts["rollbacks"]
     return {"level": level, "score": max(0, min(100, score)), "reasons": reasons, "tenant": ts,
             "community": {"reports": c_n, "success_rate": c_rate}, "combined_success_rate": combined,
-            "known_issues": issues, "reported_problems": patch.reported_problems or 0, "impact": patch.impact,
+            "known_issues": issues, "fleet": fl, "reported_problems": patch.reported_problems or 0, "impact": patch.impact,
             "reboot_required": patch.reboot_required}
 
 

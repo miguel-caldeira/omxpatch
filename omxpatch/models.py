@@ -60,7 +60,7 @@ TASK_TYPES = {"update_scan": "Descobrir atualizações", "practice_sim": "Simula
               "simulate": "Simulação prévia", "inventory": "Inventário", "patch": "Aplicar patch", "validate": "Validar", "bas": "Simulação (BAS)",
               "control": "Controlo compensatório", "rollback": "Reverter patch", "wake": "Wake-on-LAN",
               "agent_ctl": "Comando ao agente", "os_update": "Atualização do SO (Ansible)", "sw_update": "Atualização de software (Ansible)",
-              "cyb_upgrade": "Atualização CyberArk (Ansible)", "net_assess": "Avaliação de equipamento de rede",
+              "cyb_upgrade": "Atualização CyberArk (Ansible)", "agent_inst": "Instalar agente (SSH/WMI)", "net_assess": "Avaliação de equipamento de rede",
               "exec": "Execução remota (agente como procuração do Ansible)"}
 TASK_STATUSES = {"pending": "Pendente", "waiting_window": "À espera da janela", "waking": "Wake-on-LAN",
                  "queued": "Em fila", "sent": "Enviada ao agente", "running": "Em execução",
@@ -80,6 +80,8 @@ CONTROL_ACTIONS = {
     "disable_account": ("iam", "Desativar conta"), "force_mfa": ("iam", "Forçar MFA"),
     "virtual_patch": ("waf", "Virtual patch"),
     "isolate_host": ("isolation", "Isolar o ativo da rede (mantém a consola)"),
+    "fw_block_ip": ("firewall", "Bloquear IP/rede na firewall de perímetro"),
+    "fw_isolate": ("firewall", "Isolar o ativo na firewall de perímetro"),
 }
 CONTROL_STATUSES = {"proposed": "Proposto", "approved": "Aprovado", "applied": "Aplicado", "verified": "Verificado",
                     "failed": "Falhou", "reverted": "Revertido", "rejected": "Rejeitado"}
@@ -160,6 +162,13 @@ class Tenant(TimestampMixin, db.Model):
     brand_version = db.Column(db.Integer, default=0)
     license_expires_on = db.Column(db.Date, nullable=True)
     license_ref = db.Column(db.String(120), default="")
+    # I1 — fiabilidade de patches entre organizações: só agregados anónimos, só com consentimento (opt-in)
+    share_telemetry = db.Column(db.Boolean, default=False, nullable=False)
+    # I3 — aviso prévio de reinício (minutos) dado aos utilizadores antes de reiniciar após um patch
+    reboot_notice_min = db.Column(db.Integer, default=2, nullable=False)
+    # I5 — relatório de SLA por e-mail: off | weekly | monthly
+    report_schedule = db.Column(db.String(8), default="off", nullable=False)
+    report_last_sent = db.Column(db.DateTime, nullable=True)
 
     def sla_days(self, category: str) -> int | None:
         return {"emergency": self.sla_emergency, "critical": self.sla_critical, "high": self.sla_high,
@@ -307,6 +316,7 @@ class Asset(TimestampMixin, db.Model):
     platform = db.Column(db.String(16), default="")             # equipamentos de rede (checkpoint, fortios, panos, cisco_ios, cisco_nxos, junos, eos)
     cyberark_role = db.Column(db.String(8), default="")         # componente CyberArk: vault | cpm | psm | psmp
     credential_id = db.Column(db.Integer, db.ForeignKey("ansible_credentials.id"), nullable=True)   # credencial usada pelo motor Ansible
+    fw_enforce = db.Column(db.Boolean, default=False, nullable=False)   # firewall onde os controlos compensatórios de rede são aplicados
     ansible_transport = db.Column(db.String(8), default="")     # "" = direto (SSH/WinRM) | "agent" = o agente executa os comandos do Ansible (procuração)
     maintenance_group = db.Column(db.String(120), default="")
     cmdb_ref = db.Column(db.String(190), default="")            # ID na CMDB externa (ServiceNow, etc.)
@@ -594,6 +604,20 @@ class PatchTelemetry(db.Model):
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False, index=True)
 
 
+class PatchAdvisory(TimestampMixin, db.Model):
+    """Problema conhecido de um patch (aviso do fabricante, comunidade ou equipa). ``tenant_id`` nulo = aviso global da plataforma (superadmin)."""
+    __tablename__ = "patch_advisories"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=True, index=True)
+    patch_uid = db.Column(db.String(190), nullable=False, index=True)
+    title = db.Column(db.String(300), nullable=False)
+    severity = db.Column(db.String(8), default="medium", nullable=False)       # low | medium | high | critical
+    url = db.Column(db.String(500), default="")
+    source = db.Column(db.String(16), default="manual")                          # manual | vendor | community
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_by = db.Column(db.String(255), default="")
+
+
 class MaintenanceWindow(TimestampMixin, db.Model):
     __tablename__ = "maintenance_windows"
     id = db.Column(db.Integer, primary_key=True)
@@ -606,6 +630,21 @@ class MaintenanceWindow(TimestampMixin, db.Model):
     rings = db.Column(db.String(20), default="")                   # vazio: todos
     group = db.Column(db.String(120), default="")                  # Asset.maintenance_group; vazio: todos
     allow_emergency = db.Column(db.Boolean, default=True, nullable=False)   # P: Emergência ignora a janela
+    enabled = db.Column(db.Boolean, default=True, nullable=False)
+
+
+class BlackoutPeriod(TimestampMixin, db.Model):
+    """Congelação de alterações (fim de mês, campanhas, eventos): nenhum patch é libertado entre ``start_date`` e ``end_date`` (inclusive)."""
+    __tablename__ = "blackout_periods"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey("tenants.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    timezone = db.Column(db.String(64), default="")
+    rings = db.Column(db.String(20), default="")                 # vazio: todos
+    group = db.Column(db.String(120), default="")                # Asset.maintenance_group; vazio: todos
+    allow_emergency = db.Column(db.Boolean, default=False, nullable=False)
     enabled = db.Column(db.Boolean, default=True, nullable=False)
 
 
@@ -629,6 +668,7 @@ class Campaign(TimestampMixin, db.Model):
     bandwidth_kbps = db.Column(db.Integer, default=0)
     reboot_policy = db.Column(db.String(10), default="if_needed")  # none | if_needed | force
     emergency = db.Column(db.Boolean, default=False, nullable=False)
+    deadline_at = db.Column(db.DateTime, nullable=True)           # I3: depois do prazo ignora as janelas (nunca as congelações)
     require_preflight = db.Column(db.Boolean, default=False, nullable=False)   # só instala após simulação prévia sem bloqueios
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     started_at = db.Column(db.DateTime, nullable=True)

@@ -18,7 +18,7 @@ from .security import OutboundURLError, check_outbound_url
 log = logging.getLogger("omxpatch.notify")
 
 
-def send_email(recipients: list[str], subject: str, body: str, cfg=None) -> None:
+def send_email(recipients: list[str], subject: str, body: str, cfg=None, attachments: list[tuple[str, bytes, str]] | None = None) -> None:
     cfg = cfg if cfg is not None else current_app.config
     host = cfg.get("SMTP_HOST")
     if not host:
@@ -27,6 +27,9 @@ def send_email(recipients: list[str], subject: str, body: str, cfg=None) -> None
     msg["Subject"], msg["From"], msg["To"] = subject, cfg.get("MAIL_FROM") or "omxpatch@localhost", ", ".join(recipients)
     msg["Date"], msg["Message-ID"] = formatdate(localtime=True), make_msgid()
     msg.set_content(body)
+    for name, data, mime in attachments or []:
+        maintype, _, subtype = mime.partition("/")
+        msg.add_attachment(data, maintype=maintype or "application", subtype=subtype or "octet-stream", filename=name)
     port, timeout = int(cfg.get("SMTP_PORT") or 587), int(cfg.get("SMTP_TIMEOUT") or 30)
     if cfg.get("SMTP_SSL"):
         smtp = smtplib.SMTP_SSL(host, port, timeout=timeout, context=ssl.create_default_context())

@@ -152,6 +152,21 @@ class Worker:
         from .engine import ansible_engine
         ansible_engine.release_stages(tenant)
         ansible_engine.housekeeping(tenant)
+        try:
+            from .engine import sla
+            if sla.due_now(tenant, now):
+                sla.send_report(tenant, now)
+                db.session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Relatório de SLA %s: %s", tenant.slug, exc)
+            db.session.rollback()
+        try:
+            from .engine import netcontrol
+            netcontrol.expire(tenant)
+            db.session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Validade dos controlos nas firewalls %s: %s", tenant.slug, exc)
+            db.session.rollback()
         db.session.commit()
         summary["ansible"] += self._run_ansible_tasks(tenant)
         for c in Campaign.query.filter(Campaign.tenant_id == tenant.id, Campaign.status.in_(("scheduled", "running"))):

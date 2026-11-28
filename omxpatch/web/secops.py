@@ -62,7 +62,16 @@ def control_new(exposure_id: int):
     action = request.form.get("action", "")
     if action not in CONTROL_ACTIONS:
         abort(400)
-    params = {k: request.form[k].strip() for k in ("port", "proto", "ioc", "country", "account", "process", "scope") if request.form.get(k, "").strip()}
+    params = {k: request.form[k].strip() for k in ("port", "proto", "ioc", "country", "account", "process", "scope", "cidr", "ttl_minutes") if request.form.get(k, "").strip()}
+    if action in ("fw_block_ip", "fw_isolate"):
+        from ..engine import netcontrol
+        try:
+            netcontrol.validate_target(require_tenant(), params.get("cidr") or (ex.asset.ip if ex.asset else ""), isolate=(action == "fw_isolate"))
+            if "ttl_minutes" in params:
+                params["ttl_minutes"] = int(params["ttl_minutes"])
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("main.exposure_detail", exposure_id=ex.id))
     if "port" in params:
         try:
             params["port"] = int(params["port"])
@@ -93,8 +102,16 @@ def control_action(control_id: int, action: str):
             controls.apply(c, tenant)
         elif action == "mark_applied":
             controls.mark_applied(c, verified=bool(request.form.get("verified")))
+        elif action == "simulate" and c.action in ("fw_block_ip", "fw_isolate"):
+            from ..engine import netcontrol
+            res = netcontrol.simulate(c, tenant)
+            flash("Simulação " + ("OK: todas as firewalls estão prontas." if res["ok"] else "com problemas: veja o detalhe por firewall."), "success" if res["ok"] else "warning")
         elif action == "revert":
-            c.status = "reverted"
+            if c.action in ("fw_block_ip", "fw_isolate"):
+                from ..engine import netcontrol
+                netcontrol.revert(c, tenant)
+            else:
+                c.status = "reverted"
         elif action == "release":
             controls.release_isolation(c, tenant)
             flash("Libertação do isolamento pedida ao agente.", "info")

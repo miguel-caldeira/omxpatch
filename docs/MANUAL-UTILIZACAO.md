@@ -328,3 +328,12 @@ Em **Agentes**, o botão **Detalhe** mostra o estado de cada agente (online/offl
 
 # Anexo — Motor Ansible (sem agente)
 Em **Motor Ansible** escolhe a operação (atualizar o sistema, o software, tudo, componentes CyberArk, ou avaliar equipamentos de rede), os ativos (ligação «Sem agente (Ansible)») e o modo. **Avaliar** só lê e mostra o que há por atualizar; **Aplicar** exige o OK do administrador e uma avaliação das últimas 24 h. Em **Trabalhos recentes** vê o estado e o detalhe de cada tarefa. Os resultados da avaliação de sistemas e software aparecem também em **Atualizações**. Em **Avaliação de rede** vê, por equipamento, a versão, o veredicto e a versão recomendada. Detalhes e limites: Manual de Administração, capítulo 19.
+
+
+# Anexo — SLA, avisos, congelações e controlos de perímetro
+- **SLA e aging** (menu principal): cumprimento de SLA, MTTR, envelhecimento das exposições abertas e cobertura. Botão **Exportar CSV** para auditoria.
+- **Patches → Avisos e fiabilidade**: veja os problemas conhecidos de cada patch e (se a sua organização partilhar telemetria) a taxa de sucesso entre organizações. Um patch em **suspenso** não deve ser aplicado sem confirmação do administrador.
+- **Janelas de manutenção**: além das janelas, existem **períodos de congelação** (nada é aplicado nessas datas) e um **prazo limite** opcional em cada campanha.
+- **Reinício:** o utilizador do equipamento recebe um aviso (por omissão 2 min, configurável) antes de um reinício provocado por um patch; o administrador pode agendar ou cancelar um reinício em **Agentes**.
+- **Controlos de perímetro:** numa exposição pode propor «Bloquear IP/rede» ou «Isolar o ativo» na firewall. Simule primeiro, depois peça aprovação; o controlo expira sozinho.
+- **Instalar o agente à distância:** em **Motor Ansible**, operação «Instalar o agente OMXPatch» (por SSH/WMI), sem ir ao equipamento.

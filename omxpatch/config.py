@@ -62,6 +62,10 @@ DEFAULTS: dict[str, object] = {
     "LICENSE_GRACE_DAYS": 15, "LICENSE_WARN_DAYS": 30,
     # Agentes (clientes Windows / Linux / macOS)
     "AGENT_HEARTBEAT_SECONDS": 300,   # intervalo de contacto pedido aos agentes
+    "AGENT_INSTALL_WAIT": 90,             # segundos a aguardar o registo do agente depois de o instalar por SSH/WMI
+    "NETCONTROL_ENABLED": False,          # controlos compensatórios nas firewalls de perímetro (Check Point/FortiGate/Palo Alto)
+    "NETCONTROL_MAX_BLOCK_PREFIX": 24,    # rede mais larga que se pode bloquear (IPv4: /24)
+    "NETCONTROL_DEFAULT_TTL_MINUTES": 1440, "NETCONTROL_PROTECTED": "",   # validade por omissão; redes que nunca se bloqueiam (vírgulas)
     "ANSIBLE_WINDOWS_TRANSPORT": "wmi",   # acesso sem agente ao Windows: wmi (DCOM+SMB, omissão) | winrm | ssh
     "ANSIBLE_SSH_ACCEPT_NEW": True,   # aceitar a chave SSH de um equipamento na 1.ª ligação (fica registada; se mudar depois, a ligação é recusada)
     "AGENT_EXEC_ENABLED": False,      # os agentes podem executar comandos do Ansible/PowerShell pedidos pela consola (procuração) — também exige permissão local no agente

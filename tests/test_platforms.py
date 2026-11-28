@@ -112,12 +112,14 @@ def test_macos_patcher_apply_softwareupdate_pkg_brew(monkeypatch):
             return Result(0, "alice\n")
         return Result(0, "Done. restart required\n")
     monkeypatch.setattr(pmac, "run", run)
+    monkeypatch.setattr("omxpatch_agent.reboot.run", run)
+    monkeypatch.setattr("omxpatch_agent.reboot.sys.platform", "darwin")
     monkeypatch.setattr(pmac, "_brew", lambda: "/opt/homebrew/bin/brew")
     r = pmac.apply({"installer": "softwareupdate", "package": "macOS Sonoma 14.5-23F79", "reboot_policy": "if_needed"}, lambda ext: "")
-    assert r["status"] == "succeeded" and r["reboot_pending"] and ["shutdown", "-r", "+2"] in calls
+    assert r["status"] == "succeeded" and r["reboot_pending"] and any(c[:3] == ["shutdown", "-r", "+2"] for c in calls)
     calls.clear()
     r = pmac.apply({"installer": "pkg", "reboot_policy": "none"}, lambda ext: "/tmp/x.pkg")
-    assert r["status"] == "succeeded" and ["installer", "-pkg", "/tmp/x.pkg", "-target", "/"] in calls and ["shutdown", "-r", "+2"] not in calls
+    assert r["status"] == "succeeded" and ["installer", "-pkg", "/tmp/x.pkg", "-target", "/"] in calls and not any(c[:2] == ["shutdown", "-r"] for c in calls)
     calls.clear()
     pmac.apply({"installer": "brew", "package": "openssl@3", "reboot_policy": "none"}, lambda ext: "")
     assert ["sudo", "-u", "alice", "/opt/homebrew/bin/brew", "upgrade", "openssl@3"] in calls                     # Homebrew nunca como root

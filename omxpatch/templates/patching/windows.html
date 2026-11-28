@@ -1,4 +1,17 @@
-{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Janelas de manutenção{% endblock %}
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Janelas de manutenção
+<div class="panel"><h2>Períodos de congelação (blackout)</h2><p class="muted small">Entre estas datas (inclusive) nenhum patch é libertado para os ativos abrangidos — nem pelo prazo limite das campanhas. Só campanhas de emergência, e apenas se o período o permitir.</p>
+<table><tr><th>Nome</th><th>De</th><th>Até</th><th>Anéis</th><th>Grupo</th><th>Emergência</th><th>Estado</th><th></th></tr>
+{% for b in blackouts %}<tr><td>{{ b.name }}</td><td>{{ b.start_date.strftime('%d/%m/%Y') }}</td><td>{{ b.end_date.strftime('%d/%m/%Y') }}</td><td>{{ b.rings or 'todos' }}</td><td>{{ b.group or 'todos' }}</td><td>{{ 'permitida' if b.allow_emergency else 'não' }}</td><td>{{ 'ativo' if b.enabled else 'desativado' }}</td>
+<td>{% if current_user.can_manage %}<form method="post" action="{{ url_for('patching.blackout_create') }}" class="inline">{{ csrf() }}<input type="hidden" name="id" value="{{ b.id }}"><button class="btn sm sec" name="act" value="toggle">{{ 'Desativar' if b.enabled else 'Ativar' }}</button> <button class="btn sm danger" name="act" value="delete">Eliminar</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="8" class="muted">Sem períodos de congelação.</td></tr>{% endfor %}</table></div>
+{% if current_user.can_manage %}<form method="post" action="{{ url_for('patching.blackout_create') }}" class="panel">{{ csrf() }}<h2>Novo período de congelação</h2><div class="row">
+<div><label for="bname">Nome</label><input type="text" id="bname" name="name" required placeholder="Fecho de contas"></div><div><label for="start_date">De</label><input type="date" id="start_date" name="start_date" required></div>
+<div><label for="end_date">Até (inclusive)</label><input type="date" id="end_date" name="end_date" required></div><div><label for="btz">Fuso</label><input type="text" id="btz" name="timezone" placeholder="Europe/Lisbon"></div>
+<div><label for="bgroup">Grupo de manutenção</label><input type="text" id="bgroup" name="group"></div></div>
+<label class="chk"><input type="checkbox" name="allow_emergency" value="1"> Permitir campanhas de emergência</label><p><button class="btn">Criar período</button></p></form>
+<form method="post" action="{{ url_for('patching.blackout_create') }}" class="panel">{{ csrf() }}<input type="hidden" name="act" value="notice"><h2>Aviso prévio de reinício</h2>
+<p class="muted small">Tempo que os utilizadores têm para guardar o trabalho antes de um reinício provocado por um patch (Windows, Linux e macOS mostram o aviso). Em «Agentes» pode agendar ou cancelar um reinício manual.</p>
+<div class="row"><div><label for="rn">Minutos</label><input type="number" id="rn" name="reboot_notice_min" min="1" max="1440" value="{{ tenant.reboot_notice_min }}"></div></div><button class="btn">Guardar</button></form>{% endif %}{% endblock %}
 {% block content %}<div class="actions"><h1>Janelas de manutenção</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('patching.rings_page') }}">Anéis</a></div>
 <p class="muted small">Sem janelas definidas, os patches podem ser aplicados a qualquer hora. Com janelas, uma tarefa só segue para o ativo dentro de uma janela aplicável (salvo campanhas de emergência, se a janela o permitir).</p>
 <div class="panel"><table><tr><th>Nome</th><th>Dias</th><th>Início</th><th>Duração</th><th>Fuso</th><th>Anéis</th><th>Grupo</th><th>Emergência</th><th></th></tr>

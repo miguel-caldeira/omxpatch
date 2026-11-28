@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf with context %}{% block title %}Avisos e fiabilidade{% endblock %}
+{% block content %}
+<div class="actions"><h1>Fiabilidade de patches e avisos conhecidos</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('patching.patches_list') }}">Patches</a></div>
+<div class="panel"><h2>Partilha anónima de telemetria</h2>
+<p class="muted small">Quando ativa, os resultados (sucesso/falha/rollback) das aplicações desta organização contribuem para uma taxa de sucesso <b>agregada entre organizações</b> por patch, usada pelo Patch Intelligence (verde/atenção/suspenso). Nunca são partilhados nomes, ativos nem valores por organização; o agregado só é mostrado com pelo menos {{ min_tenants }} organizações e {{ min_reports }} aplicações, e só às organizações que também partilham.</p>
+<form method="post" class="row">{{ csrf() }}<input type="hidden" name="act" value="share"><label><input type="checkbox" name="share" value="1" {{ 'checked' if tenant.share_telemetry }} {{ 'disabled' if not current_user.can_manage }}> Partilhar telemetria de patches (opt-in)</label>
+{% if current_user.can_manage %}<button class="btn">Guardar</button>{% endif %}</form></div>
+{% if current_user.can_manage %}<form method="post" class="panel"><h2>Registar problema conhecido</h2>{{ csrf() }}<input type="hidden" name="act" value="add">
+<div class="row"><div><label for="patch_uid">Patch (ID exato, ex. KB5031234 ou apt:openssl)</label><input id="patch_uid" name="patch_uid" required></div>
+<div><label for="title">Problema</label><input id="title" name="title" required maxlength="300"></div>
+<div><label for="severity">Gravidade</label><select id="severity" name="severity">{% for s in severities %}<option value="{{ s }}" {{ 'selected' if s == 'medium' }}>{{ s }}</option>{% endfor %}</select></div>
+<div><label for="url">URL</label><input id="url" name="url"></div>
+<div><label for="source">Origem</label><select id="source" name="source"><option value="manual">Equipa</option><option value="vendor">Fabricante</option><option value="community">Comunidade</option></select></div></div>
+{% if current_user.is_superadmin %}<label><input type="checkbox" name="global" value="1"> Aviso global (todas as organizações)</label>{% endif %}
+<p class="muted small">Gravidade «high»/«critical» coloca o patch em <b>suspenso</b> (hold); as restantes em <b>atenção</b>.</p><button class="btn">Registar</button></form>{% endif %}
+<div class="panel"><table><tr><th>Patch</th><th>Problema</th><th>Gravidade</th><th>Origem</th><th>Âmbito</th><th>Estado</th><th></th></tr>
+{% for a in rows %}<tr><td>{{ a.patch_uid }}</td><td>{{ a.title }}{% if a.url %} <a href="{{ a.url }}" rel="noopener noreferrer" target="_blank">↗</a>{% endif %}</td><td><span class="chip">{{ a.severity }}</span></td><td>{{ a.source }}</td><td>{{ 'global' if a.tenant_id is none else 'organização' }}</td><td>{{ 'ativo' if a.active else 'desativado' }}</td>
+<td>{% if current_user.can_manage and (a.tenant_id is not none or current_user.is_superadmin) %}<form method="post" class="inline">{{ csrf() }}<input type="hidden" name="id" value="{{ a.id }}"><button class="btn sm sec" name="act" value="toggle">{{ 'Desativar' if a.active else 'Ativar' }}</button> <button class="btn sm sec" name="act" value="delete">Eliminar</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Sem avisos registados.</td></tr>{% endfor %}</table></div>
+{% endblock %}

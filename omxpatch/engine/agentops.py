@@ -11,7 +11,8 @@ from ..extensions import db
 from ..models import Agent, AgentLog, Task, utcnow
 
 ACTIONS = {"restart": "Reiniciar o agente", "update": "Atualizar o agente", "debug_on": "Ativar depuração completa",
-           "debug_off": "Desativar depuração", "logs": "Pedir envio imediato dos registos"}
+           "debug_off": "Desativar depuração", "logs": "Pedir envio imediato dos registos",
+           "reboot": "Reiniciar o equipamento (com aviso)", "reboot_cancel": "Cancelar o reinício agendado"}
 KINDS = ("operation", "audit", "debug")
 LEVELS = ("debug", "info", "warning", "error")
 _SECRET = re.compile(r"(omx[ae]_[A-Za-z0-9_\-]{6,}|(?i:bearer)\s+[A-Za-z0-9._\-]{8,}|(?i:(?:password|passwd|palavra-passe|secret|token|agent_key|api[_-]?key))\s*[=:]\s*\S+)")
@@ -35,7 +36,7 @@ def command(agent: Agent, action: str, user=None, minutes: int | None = None) ->
             minutes = mins
         else:
             agent.debug_until = None
-    record(agent, "audit", f"{ACTIONS[action]}" + (f" ({minutes} min)" if action == "debug_on" else "") + f" — pedido por {who}", source="console",
+    record(agent, "audit", f"{ACTIONS[action]}" + (f" ({minutes} min)" if action in ("debug_on", "reboot") and minutes else "") + f" — pedido por {who}", source="console",
            data={"action": action, "by": who})
     if agent.asset_id is None:
         return None
@@ -46,7 +47,7 @@ def command(agent: Agent, action: str, user=None, minutes: int | None = None) ->
                          Task.status.in_(("queued", "sent", "running")), Task.payload.contains(f'"action": "{action}"')).first():
         return None
     t = Task(tenant_id=agent.tenant_id, type="agent_ctl", asset_id=agent.asset_id, ring=agent.asset.ring if agent.asset else 4, mode="agent", status="queued",
-             payload=json.dumps({"action": action, "requested_by": who}))
+             payload=json.dumps({"action": action, "requested_by": who, **({"minutes": max(1, min(int(minutes or 5), 10080))} if action == "reboot" else {})}))
     db.session.add(t)
     return t
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from .. import reboot as rbt
 from ..runner import run
 from . import PatchError, check_pkg
 
@@ -58,8 +59,7 @@ def apply(p: dict, download) -> dict:
     reboot = reboot_required()
     policy = p.get("reboot_policy", "if_needed")
     if ok and ((policy == "force") or (policy == "if_needed" and reboot)):
-        run(["shutdown", "-r", "+2", "OMXPatch: reinício após a atualização"], 30)
-        out += "\nReinício agendado para daqui a 2 minutos.\n"
+        out += "\n" + rbt.schedule(p.get("reboot_notice_min", 2)) + "\n"
     return {"status": "succeeded" if ok else "failed", "output": out, "installed_version": after, "previous_version": before,
             "reboot_pending": reboot}
 

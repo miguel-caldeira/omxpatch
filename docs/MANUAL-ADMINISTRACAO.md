@@ -433,3 +433,56 @@ omxpatch signing show | signing rotate
 omxpatch capacity --benchmark --agents 50 --seconds 10
 omxpatch intel-sync | correlate --tenant cliente
 ```
+
+
+## 19.9 Instalar o agente por SSH ou WMI (sem agente prévio)
+
+Em **Motor Ansible → Nova operação → «Instalar o agente OMXPatch (por SSH/WMI)»** a consola copia o script de instalação para o equipamento, executa-o e confirma o registo. Requer o perfil de administrador e que o ativo já esteja definido «Sem agente (Ansible)» com credencial (19.3).
+
+- **Linux/macOS:** SSH; se o utilizador não for root usa `sudo -n` (é preciso `NOPASSWD`). **Windows:** WMI/DCOM + SMB; o script `.ps1` vai para `C:\Windows\Temp` e corre com `powershell -ExecutionPolicy Bypass`.
+- Cada instalação cria um **token de registo de uso único**, válido 1 dia, no anel do ativo. O script é apagado do equipamento no fim e o token nunca aparece nos resultados.
+- O trabalho só dá «Concluído» quando o agente se **regista** no servidor (porta 4444; `AGENT_INSTALL_WAIT` segundos de espera, 90 por omissão). Se o script correr mas o agente não se registar, o resultado diz que o ativo não alcança a porta 4444.
+- Ativos que já têm agente ativo não são elegíveis.
+
+## 19.10 Fiabilidade de patches entre organizações e avisos conhecidos
+
+**Patches → Avisos e fiabilidade** reúne duas fontes que alimentam o **Patch Intelligence** (verde / atenção / suspenso):
+
+1. **Telemetria partilhada (opt-in, desligada por omissão).** Cada organização escolhe contribuir. O servidor calcula, por patch (mesmo identificador e sistema operativo), a taxa de sucesso, de *rollback* e de *crash* sobre **todas as organizações que partilham**. Garantias: reciprocidade (só vê o agregado quem também partilha); **k-anonimato** (agregado omitido com menos de 3 organizações ou 10 aplicações); nunca se mostram nomes, ativos nem valores por organização. Sucesso < 80 % ou *rollbacks* ≥ 10 % colocam o patch em **suspenso**.
+2. **Avisos de problemas conhecidos.** Registe o patch (ex. `KB5031234`), o problema, a gravidade e o URL. `high`/`critical` → *suspenso*; as restantes → *atenção*. Os avisos globais (todas as organizações) só os cria o superadmin.
+
+Os avisos podem ser desativados ou eliminados sem perder o histórico de telemetria.
+
+## 19.11 Congelações, prazo limite e reinício com aviso
+
+- **Períodos de congelação (blackout)** em **Janelas de manutenção**: entre duas datas (inclusive, com fuso, anéis e grupo opcionais) **nenhum patch é libertado**. Só campanhas de emergência passam, e apenas se o período o permitir. A congelação prevalece sobre janelas e sobre o prazo limite.
+- **Prazo limite da campanha** (campo no formulário da campanha): depois dessa data/hora o patch deixa de esperar pela janela de manutenção — nunca contorna uma congelação.
+- **Aviso prévio de reinício** (minutos, por organização): o agente agenda o reinício com mensagem aos utilizadores (`shutdown -r +N` no Linux/macOS, `shutdown /r /t` no Windows) em vez do valor fixo de 2 min. Em **Agentes → Ações no agente** pode **agendar** (1 min a 7 dias) ou **cancelar** um reinício manual, o que permite diferir reinícios para fora do horário de trabalho.
+
+## 19.12 SLA, envelhecimento e relatório agendado
+
+**SLA e aging** (menu principal) mostra, na janela escolhida (90 dias por omissão): cumprimento de SLA, MTTR e exposições abertas/atrasadas por categoria; envelhecimento das abertas (0–7, 8–30, 31–60, 61–90, > 90 dias); MTTR mensal; cobertura (ativos geridos, agentes ativos, sem agente) e as exposições mais antigas fora do prazo. Os prazos por categoria definem-se em Administração → Organizações.
+
+- **Exportar CSV** com idade, prazo e estado de SLA de todas as exposições (UTF-8 com BOM; células que começam por `=`, `+`, `-`, `@` são neutralizadas contra injeção de fórmulas).
+- **Relatório por e-mail** (semanal à segunda-feira ou mensal no dia 1) com o resumo e o CSV em anexo, enviado aos e-mails de Notificações da organização. Requer `[smtp]` configurado; «Enviar agora» testa o circuito.
+
+## 19.13 Controlos compensatórios nas firewalls de perímetro (virtual patching)
+
+Para uma exposição sem patch (ou antes de o aplicar), a consola pode **bloquear um IP/rede** ou **isolar um ativo** na firewall de perímetro — FortiGate, Palo Alto ou Check Point — como controlo compensatório com validade. **Desligado por omissão** (`NETCONTROL_ENABLED = true` para ativar).
+
+**Segurança do desenho.** A consola **não escreve regras**: só altera a *pertença* de grupos que o administrador de rede já criou e para os quais já existe uma regra de bloqueio. O fluxo é *propor → simular → aprovar → aplicar → verificar → expirar/reverter*:
+
+1. **Simular** (válida 24 h) liga-se a cada firewall, confirma que o grupo existe e lista o que faria.
+2. **Aplicar** exige simulação recente; é **tudo-ou-nada** (se uma firewall falhar, as anteriores são desfeitas) e verifica o resultado. Passa pelo portão ITSM, se ativo.
+3. **Validade (TTL)** por omissão 24 h (`NETCONTROL_DEFAULT_TTL_MINUTES`): o *worker* reverte sozinho. **Reverter** só retira o que a consola acrescentou.
+4. **Proteções:** nunca bloqueia loopback, multicast, reservados, o servidor OMXPatch, os IP das próprias firewalls/equipamentos de rede nem `NETCONTROL_PROTECTED`; redes mais largas que `/24` (`NETCONTROL_MAX_BLOCK_PREFIX`) são recusadas; isolar exige um único endereço.
+
+**Pré-requisitos (uma vez, por quem gere a firewall):**
+
+- **FortiGate:** grupos de endereços `OMX-BLOCK` e `OMX-ISOLATE` + política de recusa que os usa. Token REST API com permissão sobre `firewall address` e `addrgrp`. A consola cria objetos `OMX-<ip>_<máscara>` e acrescenta-os ao grupo.
+- **Palo Alto:** grupos de endereços **dinâmicos** com filtro de etiqueta `omx-block` e `omx-isolate` + regra de recusa. A consola regista/retira a etiqueta por User-ID (sem *commit*; a validade é nativa, `timeout`). Só endereços individuais.
+- **Check Point:** grupos `OMX-BLOCK` e `OMX-ISOLATE` + regra de recusa na política. Na credencial indique o pacote de política (`cp_package`) e os *gateways* (`cp_targets`); a consola cria o host/rede, acrescenta ao grupo, **publica** e **instala a política**.
+
+Em cada firewall: crie uma **credencial** «token de API» (Motor Ansible → Credenciais, com as opções da firewall), associe-a ao ativo (plataforma `fortios`/`panos`/`checkpoint`) e marque **«Aplicar controlos de perímetro nesta firewall»** no ativo. Depois, numa exposição, crie o controlo «Bloquear IP/rede na firewall de perímetro» ou «Isolar o ativo na firewall de perímetro».
+
+**Não validado em equipamentos reais:** as três integrações foram testadas contra APIs simuladas com estado (HTTPS) que reproduzem os pedidos documentados; confirme em laboratório (versão do PAN-OS/FortiOS/Gaia) antes de usar em produção.

@@ -208,7 +208,8 @@ def campaign_new():
                 use_rings=bool(f.get("use_rings")), start_at=parse_date(f.get("start_at", "")), use_wol=bool(f.get("use_wol")),
                 bandwidth_kbps=int(f.get("bandwidth_kbps") or 0), reboot_policy=f.get("reboot_policy", "if_needed"),
                 emergency=bool(f.get("emergency")), force=bool(f.get("force")), auto_promote=bool(f.get("auto_promote")),
-                respect_windows=bool(f.get("respect_windows")), require_preflight=bool(f.get("require_preflight")))
+                respect_windows=bool(f.get("respect_windows")), require_preflight=bool(f.get("require_preflight")),
+                deadline_at=parse_date(f.get("deadline_at", "")))
         except deploy.PatchBlocked as exc:
             flash(str(exc), "danger")
             return render_template("campaigns/form.html", patch=patch, form=f, intel=patches.intelligence(patch)), 400
@@ -306,7 +307,44 @@ def windows():
         audit("window_created", w.name)
         db.session.commit()
         return redirect(url_for("patching.windows"))
-    return render_template("patching/windows.html", rows=scoped(MaintenanceWindow).order_by(MaintenanceWindow.name).all())
+    from ..models import BlackoutPeriod
+    return render_template("patching/windows.html", rows=scoped(MaintenanceWindow).order_by(MaintenanceWindow.name).all(),
+                           blackouts=scoped(BlackoutPeriod).order_by(BlackoutPeriod.start_date.desc()).all(), tenant=tenant)
+
+
+@bp.route("/windows/blackout", methods=["POST"])
+@login_required
+@roles_required("admin")
+def blackout_create():
+    from ..models import BlackoutPeriod
+    tenant = require_tenant()
+    f = request.form
+    if f.get("act") == "notice":
+        tenant.reboot_notice_min = max(1, min(f.get("reboot_notice_min", type=int) or 2, 1440))
+        audit("reboot_notice", f"{tenant.reboot_notice_min} min")
+        db.session.commit()
+        flash("Aviso prévio de reinício guardado.", "success")
+        return redirect(url_for("patching.windows"))
+    if f.get("act") in ("delete", "toggle"):
+        b = get_scoped_or_404(BlackoutPeriod, f.get("id", type=int) or 0)
+        if f["act"] == "delete":
+            db.session.delete(b)
+        else:
+            b.enabled = not b.enabled
+        audit("blackout_" + f["act"], b.name)
+        db.session.commit()
+        return redirect(url_for("patching.windows"))
+    a, b_ = parse_date(f.get("start_date", "")), parse_date(f.get("end_date", ""))
+    if not (a and b_) or b_ < a:
+        flash("Datas inválidas (a data final não pode ser anterior à inicial).", "danger")
+        return redirect(url_for("patching.windows"))
+    b = BlackoutPeriod(tenant_id=tenant.id, name=(f.get("name") or "Congelação")[:120], start_date=a.date(), end_date=b_.date(), timezone=f.get("timezone", "")[:64],
+                       rings=",".join(r for r in f.getlist("rings") if r.isdigit()), group=f.get("group", "")[:120], allow_emergency=bool(f.get("allow_emergency")))
+    db.session.add(b)
+    audit("blackout_created", f"{b.name} {b.start_date}–{b.end_date}")
+    db.session.commit()
+    flash("Período de congelação criado: nenhum patch é libertado nessas datas.", "success")
+    return redirect(url_for("patching.windows"))
 
 
 @bp.route("/windows/<int:window_id>/delete", methods=["POST"])
@@ -441,3 +479,51 @@ def update_sources():
     assets = scoped(Asset).filter(Asset.os_family == "windows").order_by(Asset.name).all()
     return render_template("sources/index.html", matrix=sources.matrix(assets), catalog=sources.APP_CATALOG, assets=assets,
                            caps={a.id: sources.capabilities_of(a) for a in assets})
+
+
+# --------------------------------------------------------------------------- I1 — avisos de problemas conhecidos e telemetria partilhada
+
+
+@bp.route("/patches/advisories", methods=["GET", "POST"])
+@login_required
+def advisories():
+    from flask_login import current_user
+
+    from ..engine import fleet
+    from ..models import PatchAdvisory
+    if (r := tenant_or_select()) is not None:
+        return r
+    tenant = require_tenant()
+    if request.method == "POST":
+        if not current_user.can_manage:
+            abort(403)
+        f = request.form
+        act = f.get("act")
+        if act == "share":
+            tenant.share_telemetry = bool(f.get("share"))
+            audit("telemetry_sharing", "ativada" if tenant.share_telemetry else "desativada")
+            flash("Partilha de telemetria " + ("ativada." if tenant.share_telemetry else "desativada."), "success")
+        elif act == "add":
+            uid, title = f.get("patch_uid", "").strip()[:190], f.get("title", "").strip()[:300]
+            sev = f.get("severity") if f.get("severity") in fleet.SEVERITIES else "medium"
+            if not uid or not title:
+                flash("Indique o patch e o problema conhecido.", "danger")
+            else:
+                glob = bool(f.get("global")) and current_user.is_superadmin
+                db.session.add(PatchAdvisory(tenant_id=None if glob else tenant.id, patch_uid=uid, title=title, severity=sev, url=f.get("url", "").strip()[:500],
+                                             source=f.get("source") if f.get("source") in ("manual", "vendor", "community") else "manual", created_by=current_user.email))
+                audit("patch_advisory", f"{uid}: {title} ({sev}){' [global]' if glob else ''}")
+                flash("Aviso registado: o Patch Intelligence passa a considerá-lo.", "success")
+        elif act in ("toggle", "delete"):
+            a = db.session.get(PatchAdvisory, f.get("id", type=int) or 0)
+            if a is None or (a.tenant_id != tenant.id and not (a.tenant_id is None and current_user.is_superadmin)):
+                abort(404)
+            if act == "delete":
+                db.session.delete(a)
+            else:
+                a.active = not a.active
+            audit("patch_advisory", f"{act} #{a.id}")
+        db.session.commit()
+        return redirect(url_for("patching.advisories"))
+    rows = PatchAdvisory.query.filter(db.or_(PatchAdvisory.tenant_id == tenant.id, PatchAdvisory.tenant_id.is_(None))).order_by(PatchAdvisory.id.desc()).limit(300).all()
+    return render_template("patches/advisories.html", rows=rows, tenant=tenant, min_tenants=fleet.MIN_TENANTS, min_reports=fleet.MIN_REPORTS, severities=fleet.SEVERITIES)

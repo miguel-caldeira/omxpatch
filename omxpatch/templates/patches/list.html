@@ -2,7 +2,7 @@
 {% block content %}
 <div class="actions"><h1>Repositório de patches</h1><span class="spacer"></span>
 {% if current_user.can_write %}<form method="post" action="{{ url_for('patching.patches_identify') }}" class="inline">{{ csrf() }}<button class="btn sec">Identificar patches das exposições</button></form>
-<a class="btn" href="{{ url_for('patching.patch_new') }}">Novo patch</a>{% endif %}</div>
+<a class="btn" href="{{ url_for('patching.patch_new') }}">Novo patch</a>{% endif %}<a class="btn sec" href="{{ url_for('patching.advisories') }}">Avisos e fiabilidade</a></div>
 <div class="panel"><form method="get" class="filters"><div><label for="q">Pesquisa</label><input type="text" id="q" name="q" value="{{ request.args.q }}" placeholder="KB, produto, CVE"></div>
 <div><label for="status">Estado</label><select id="status" name="status"><option value="">Todos</option>{% for k, v in PATCH_STATUSES.items() %}<option value="{{ k }}" {{ 'selected' if request.args.status == k }}>{{ v }}</option>{% endfor %}</select></div>
 <div><label for="os_family">SO</label><select id="os_family" name="os_family"><option value="">Todos</option>{% for k, v in OS_FAMILIES.items() %}<option value="{{ k }}" {{ 'selected' if request.args.os_family == k }}>{{ v }}</option>{% endfor %}</select></div><div><button class="btn">Filtrar</button></div></form></div>

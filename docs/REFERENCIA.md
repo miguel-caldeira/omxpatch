@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.40.20261128
+# Referência técnica — OMXPatch 1.41.20261128
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
@@ -78,6 +78,11 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `LICENSE_GRACE_DAYS` | `[licensing] grace_days` | `15` |
 | `LICENSE_WARN_DAYS` | `[licensing] warn_days` | `30` |
 | `AGENT_HEARTBEAT_SECONDS` | `[agents] heartbeat_seconds` | `300` |
+| `AGENT_INSTALL_WAIT` | `[agents] install_wait` | `90` |
+| `NETCONTROL_ENABLED` | `[server] netcontrol_enabled` | não |
+| `NETCONTROL_MAX_BLOCK_PREFIX` | `[server] netcontrol_max_block_prefix` | `24` |
+| `NETCONTROL_DEFAULT_TTL_MINUTES` | `[server] netcontrol_default_ttl_minutes` | `1440` |
+| `NETCONTROL_PROTECTED` | `[server] netcontrol_protected` | (vazio) |
 | `ANSIBLE_WINDOWS_TRANSPORT` | `[ansible] windows_transport` | `wmi` |
 | `ANSIBLE_SSH_ACCEPT_NEW` | `[ansible] ssh_accept_new` | sim |
 | `AGENT_EXEC_ENABLED` | `[agents] exec_enabled` | não |
@@ -210,6 +215,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `os_update` | Atualização do SO (Ansible) |
 | `sw_update` | Atualização de software (Ansible) |
 | `cyb_upgrade` | Atualização CyberArk (Ansible) |
+| `agent_inst` | Instalar agente (SSH/WMI) |
 | `net_assess` | Avaliação de equipamento de rede |
 | `exec` | Execução remota (agente como procuração do Ansible) |
 
@@ -325,6 +331,9 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | branding | `/branding/settings` | POST | qualquer utilizador autenticado |
 | main | `/` | GET | qualquer utilizador autenticado |
 | main | `/executive` | GET | qualquer utilizador autenticado |
+| main | `/sla` | GET | qualquer utilizador autenticado |
+| main | `/sla.csv` | GET | qualquer utilizador autenticado |
+| main | `/sla/schedule` | POST | admin |
 | main | `/command/quick` | POST | admin/user |
 | main | `/assets` | GET | qualquer utilizador autenticado |
 | main | `/assets/new` | GET,POST | admin/user |
@@ -365,6 +374,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | patching | `/tasks/<int:task_id>` | GET | qualquer utilizador autenticado |
 | patching | `/tasks/<int:task_id>/retry` | POST | admin/user |
 | patching | `/windows` | GET,POST | admin/user/auditor |
+| patching | `/windows/blackout` | POST | admin |
 | patching | `/windows/<int:window_id>/delete` | POST | admin |
 | patching | `/rings` | GET,POST | qualquer utilizador autenticado |
 | patching | `/rings/assign` | POST | admin |
@@ -374,6 +384,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | patching | `/preflights/<int:pf_id>` | GET | qualquer utilizador autenticado |
 | patching | `/preflights/<int:pf_id>/rerun` | POST | admin/user |
 | patching | `/sources` | GET | qualquer utilizador autenticado |
+| patching | `/patches/advisories` | GET,POST | qualquer utilizador autenticado |
 | plans | `/practices` | GET | qualquer utilizador autenticado |
 | plans | `/plans` | GET | qualquer utilizador autenticado |
 | plans | `/plans/new` | GET,POST | admin/user |

@@ -49,6 +49,12 @@ def artifact(action: str, cve_id: str, asset: Asset | None, params: dict, cve: C
                 "# Linux (nftables): política drop em input/output com exceção para loopback, ligações estabelecidas e a consola\n"
                 "# Windows: Set-NetFirewallProfile -All -DefaultInboundAction Block -DefaultOutboundAction Block + regras Allow para a consola\n"
                 "# macOS (pf): block drop quick all, exceto loopback e a consola\n") % params.get("ttl_minutes", 120)
+    if action in ("fw_block_ip", "fw_isolate"):
+        tgt = params.get("cidr") or (asset.ip if asset else "<ip>")
+        return (f"# Firewalls de perímetro (as marcadas em «Aplicar controlos compensatórios»); alvo: {tgt}; validade {params.get('ttl_minutes', 'por omissão')} min\n"
+                "# FortiGate : objeto de endereço OMX-… acrescentado ao grupo OMX-BLOCK / OMX-ISOLATE (regra de negação pré-existente)\n"
+                "# Palo Alto : etiqueta omx-block / omx-isolate registada no IP (grupo dinâmico + regra de negação pré-existentes; sem commit)\n"
+                "# Check Point: host/rede no grupo OMX-BLOCK / OMX-ISOLATE + publicar + instalar a política\n")
     name = rule_name(cve_id, action, params.get("port", ""))
     port, proto = params.get("port"), (params.get("proto") or "tcp").lower()
     host = asset.name if asset else "<ativo>"
@@ -201,6 +207,9 @@ def apply(c: ControlAction, tenant: Tenant) -> ControlAction:
     allowed, why = itsm.gate_control(c, tenant)
     if not allowed:
         raise ValueError(why)
+    if c.action in ("fw_block_ip", "fw_isolate"):
+        from . import netcontrol
+        return netcontrol.apply(c, tenant)
     port = c.params_data.get("port")
     if c.action == "block_port" and port in MANAGEMENT_PORTS and not c.params_data.get("allow_management_port"):
         raise ValueError(f"A porta {port} ({MANAGEMENT_PORTS[port]}) é de gestão: bloqueá-la pode cortar o acesso ao ativo. "
@@ -290,6 +299,9 @@ def retire_for(ex: Exposure) -> int:
         if c.status in ("proposed", "approved"):
             c.status = "rejected"
             c.detail = "Dispensado: patch aplicado antes do controlo."
+        elif c.action in ("fw_block_ip", "fw_isolate"):
+            from . import netcontrol
+            netcontrol.revert(c, db.session.get(Tenant, c.tenant_id))
         elif c.action in ("block_port", "block_ioc") and c.via in ("agent", "ansible"):
             mode = "ansible" if c.via == "ansible" else "agent"
             db.session.add(Task(tenant_id=c.tenant_id, type="control", asset_id=ex.asset_id, mode=mode, status="queued",

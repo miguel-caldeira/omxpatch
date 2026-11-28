@@ -63,7 +63,7 @@ def create_campaign(tenant: Tenant, patch: Patch, name: str, scope: dict, user=N
                     start_at: datetime | None = None, use_wol: bool = False, bandwidth_kbps: int = 0,
                     reboot_policy: str = "if_needed", emergency: bool = False, origin: str = "manual",
                     run_id: int | None = None, force: bool = False, auto_promote: bool = True,
-                    respect_windows: bool = True, require_preflight: bool = False) -> Campaign:
+                    respect_windows: bool = True, require_preflight: bool = False, deadline_at: datetime | None = None) -> Campaign:
     if patch.tenant_id != tenant.id:
         raise PatchBlocked("Patch de outra organização")
     if patch.status != "approved":
@@ -80,7 +80,7 @@ def create_campaign(tenant: Tenant, patch: Patch, name: str, scope: dict, user=N
                  bandwidth_kbps=max(0, int(bandwidth_kbps or current_app.config["BANDWIDTH_DEFAULT_KBPS"] or 0)),
                  reboot_policy=reboot_policy if reboot_policy in ("none", "if_needed", "force") else "if_needed",
                  emergency=emergency, origin=origin, run_id=run_id, auto_promote=auto_promote,
-                 respect_windows=respect_windows, require_preflight=require_preflight, created_by_id=getattr(user, "id", None))
+                 respect_windows=respect_windows, require_preflight=require_preflight, deadline_at=deadline_at, created_by_id=getattr(user, "id", None))
     db.session.add(c)
     db.session.flush()
     return c
@@ -124,7 +124,21 @@ def _in(w: MaintenanceWindow, now: datetime) -> bool:
     return False
 
 
-def window_allows(tenant_id: int, asset: Asset, now: datetime, emergency: bool = False) -> tuple[bool, str]:
+def blackout_for(tenant_id: int, asset: Asset, now: datetime, emergency: bool = False) -> str:
+    """Motivo da congelação em vigor para o ativo ('' se nenhuma)."""
+    from ..models import BlackoutPeriod
+    for b in BlackoutPeriod.query.filter_by(tenant_id=tenant_id, enabled=True):
+        if (b.group and b.group != asset.maintenance_group) or (b.rings and str(asset.ring) not in b.rings.split(",")):
+            continue
+        day = _local_now(b.timezone, now).date()
+        if b.start_date <= day <= b.end_date and not (emergency and b.allow_emergency):
+            return f"Período de congelação «{b.name}» até {b.end_date.strftime('%d/%m/%Y')}"
+    return ""
+
+
+def window_allows(tenant_id: int, asset: Asset, now: datetime, emergency: bool = False, deadline: datetime | None = None) -> tuple[bool, str]:
+    if why := blackout_for(tenant_id, asset, now, emergency):
+        return False, why
     windows = [w for w in MaintenanceWindow.query.filter_by(tenant_id=tenant_id, enabled=True)
                if (not w.group or w.group == asset.maintenance_group)
                and (not w.rings or str(asset.ring) in w.rings.split(","))]
@@ -134,6 +148,8 @@ def window_allows(tenant_id: int, asset: Asset, now: datetime, emergency: bool =
         return True, ""
     if emergency and any(w.allow_emergency for w in windows):
         return True, "emergência"
+    if deadline is not None and now >= deadline:
+        return True, "prazo limite atingido: janelas ignoradas"
     return False, "Fora das janelas de manutenção: " + ", ".join(w.name for w in windows)
 
 
@@ -181,13 +197,18 @@ def wake(asset: Asset, tenant: Tenant) -> str:
 # --------------------------------------------------------------------------- tarefas
 
 
+def reboot_notice(tenant_id: int) -> int:
+    t = db.session.get(Tenant, tenant_id)
+    return max(1, min(int(getattr(t, "reboot_notice_min", 2) or 2), 1440))
+
+
 def patch_payload(c: Campaign, patch: Patch, asset: Asset) -> dict:
     return {"patch_id": patch.id, "uid": patch.patch_uid, "title": patch.title, "installer": patch.installer,
             "package": patch.package_name, "version_fixed": patch.version_fixed, "silent_args": patch.silent_args,
             "sha256": patch.sha256, "has_file": bool(patch.local_file), "download_url": patch.download_url if not patch.local_file else "",
             "reboot_policy": c.reboot_policy, "bandwidth_kbps": c.bandwidth_kbps, "cves": patch.cve_list,
             "emergency": c.emergency, "os_family": asset.os_family, "product": patch.product, "size_bytes": int(patch.size_bytes or 0),
-            "reboot_required": bool(patch.reboot_required)}
+            "reboot_required": bool(patch.reboot_required), "reboot_notice_min": reboot_notice(asset.tenant_id)}
 
 
 def create_ring_tasks(c: Campaign, tenant: Tenant, ring: int) -> int:
@@ -227,7 +248,7 @@ def release_tasks(c: Campaign, tenant: Tenant, now: datetime) -> int:
             if g == "skip":
                 t.status, t.finished_at = "skipped", now
                 continue
-        ok, why = (True, "") if not c.respect_windows else window_allows(tenant.id, t.asset, now, c.emergency)
+        ok, why = (True, "") if not c.respect_windows else window_allows(tenant.id, t.asset, now, c.emergency, c.deadline_at)
         if not ok:
             t.status, t.output = "waiting_window", why
             continue

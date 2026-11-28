@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 
+from .. import reboot as rbt
 from ..runner import run
 from . import PatchError, check_label, check_pkg
 
@@ -38,8 +39,7 @@ def apply(p: dict, download) -> dict:
         out, ok = r.out, r.ok
         reboot = "restart" in r.out.lower()
     if ok and (p.get("reboot_policy") == "force" or (p.get("reboot_policy", "if_needed") == "if_needed" and reboot)):
-        run(["shutdown", "-r", "+2"], 30)
-        out += "\nReinício agendado para daqui a 2 minutos.\n"
+        out += "\n" + rbt.schedule(p.get("reboot_notice_min", 2)) + "\n"
     return {"status": "succeeded" if ok else "failed", "output": out, "reboot_pending": reboot}
 
 
