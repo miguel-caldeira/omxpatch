@@ -127,6 +127,9 @@ def test_collection_listing_failure_is_unknown_not_missing(app, tmp_path, monkey
     (fake / "ansible-galaxy").write_text("#!/bin/sh\necho 'ERROR: Unable to create local directories' >&2\n")
     for f in fake.iterdir():
         f.chmod(0o755)
+    import importlib.util
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda n, *a, **k: object() if n in ("impacket", "paramiko") else real(n, *a, **k))      # bibliotecas presentes (podem faltar no CI)
     app.config.update(ANSIBLE_ENABLED=True, ANSIBLE_PLAYBOOK=str(fake / "ansible-playbook"), DATA_DIR=str(tmp_path / "d"))
     with app.app_context():
         d = ad.diagnose(fresh=True)
