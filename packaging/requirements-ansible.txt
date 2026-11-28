@@ -3,3 +3,6 @@ ansible-core>=2.15
 pywinrm>=0.4
 requests-credssp
 jmespath
+# acesso sem agente: WMI/DCOM + SMB para Windows (impacket) e testes SSH (paramiko)
+impacket>=0.11
+paramiko>=3.4

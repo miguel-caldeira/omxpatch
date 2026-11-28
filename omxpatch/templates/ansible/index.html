@@ -8,6 +8,7 @@
 {% elif doctor.reason == 'broken' %}Causa: o <code>ansible-playbook</code> existe mas <b>não executa</b>: {{ doctor.version_error }}.
 {% else %}Causa: o <code>ansible-playbook</code> <b>não está instalado</b> (procurado: <code>{{ doctor.configured }}</code>, Python {{ doctor.python }}).{% endif %}
 <br>Solução: <code>{{ doctor.fix }}</code></div>
+{% elif doctor.missing_libs %}<div class="flash flash-warning">Faltam bibliotecas do acesso sem agente ({{ doctor.missing_libs|join(', ') }}) — o Windows por WMI não funciona sem o «impacket». <code>{{ doctor.fix }}</code></div>
 {% elif doctor.missing_collections %}<div class="flash flash-warning">Ansible instalado ({{ doctor.version }}), mas faltam coleções: {{ doctor.missing_collections|join(', ') }}. <code>{{ doctor.fix }}</code></div>{% endif %}
 {% if current_user.can_write %}<form method="post" action="{{ url_for('ansible_ops.run') }}" class="panel"><h2>Nova operação</h2>{{ csrf() }}
 <div class="row"><div><label for="op">Operação</label><select id="op" name="op">{% for k, o in ops.items() %}<option value="{{ k }}">{{ o.label }}</option>{% endfor %}</select></div>
@@ -15,9 +16,11 @@
 <div><label for="reboot_policy">Reinício</label><select id="reboot_policy" name="reboot_policy"><option value="if_needed">Se necessário</option><option value="never">Nunca</option><option value="force">Forçar</option></select></div>
 <div><label><input type="checkbox" name="security_only"> Só segurança (Linux)</label></div></div>
 <div class="muted small">Ativos elegíveis (ligação «Sem agente (Ansible)»; defina a plataforma de rede ou o componente CyberArk no ativo):</div>
-<table><tr><th></th><th>Ativo</th><th>SO / plataforma</th><th>Tipo</th></tr>
+<table><tr><th></th><th>Ativo</th><th>SO / plataforma</th><th>Tipo</th><th>Ligação</th><th></th></tr>
 {% for a in assets %}<tr><td><input type="checkbox" name="asset_ids" value="{{ a.id }}" aria-label="{{ a.name }}"></td><td>{{ a.name }}</td><td class="small">{{ a.platform or a.os_family or '—' }}</td>
-<td class="small">{% if a.platform %}rede/firewall{% elif a.cyberark_role %}CyberArk {{ a.cyberark_role }}{% else %}sistema{% endif %}</td></tr>
+<td class="small">{% if a.platform %}rede/firewall{% elif a.cyberark_role %}CyberArk {{ a.cyberark_role }}{% else %}sistema{% endif %}</td>
+<td class="small">{{ {'': 'automático', 'ssh': 'SSH', 'wmi': 'WMI', 'winrm': 'WinRM', 'agent': 'agente'}.get(a.ansible_transport or '', a.ansible_transport) }}</td>
+<td><button class="btn sm sec" formaction="{{ url_for('ansible_ops.test_connection', asset_id=a.id) }}" formmethod="post" formnovalidate>Testar ligação</button></td></tr>
 {% else %}<tr><td colspan="4" class="muted">Sem ativos «Sem agente (Ansible)». Crie-os em Ativos (ligação Ansible, credencial, plataforma).</td></tr>{% endfor %}</table>
 {% if current_user.can_manage %}<details class="mt"><summary><strong>Aplicar</strong> — confirmação e parâmetros</summary>
 <div class="row"><div><label><input type="checkbox" name="confirm_ok"> OK do administrador: aplicar (depois de ver a avaliação)</label></div></div>

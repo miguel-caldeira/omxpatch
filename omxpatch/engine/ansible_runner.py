@@ -65,29 +65,6 @@ def playbook_for(task_type: str, os_family: str) -> str | None:
     return PLAYBOOKS.get((task_type, os_family))
 
 
-def inventory_for(assets: list[Asset]) -> dict:
-    """Inventário dinâmico (JSON) com grupos windows/linux/macos."""
-    hosts: dict[str, dict] = {}
-    groups: dict[str, list[str]] = {"windows": [], "linux": [], "macos": []}
-    for a in assets:
-        key = f"asset{a.id}"
-        vars_: dict = {"ansible_host": a.fqdn or a.ip or a.name, "omxpatch_asset_id": a.id}
-        if a.ansible_user:
-            vars_["ansible_user"] = a.ansible_user
-        if a.ansible_port:
-            vars_["ansible_port"] = a.ansible_port
-        if a.os_family == "windows":
-            vars_.update({"ansible_connection": "winrm", "ansible_winrm_server_cert_validation": "validate"})
-        hosts[key] = vars_
-        if a.os_family in groups:
-            groups[a.os_family].append(key)
-    inv = {"all": {"hosts": hosts}}
-    for g, members in groups.items():
-        if members:
-            inv[g] = {"hosts": {m: {} for m in members}}
-    return inv
-
-
 def parse_result(output: str) -> dict | None:
     """Lê o último ``OMXPATCH_RESULT=<json>`` da saída do Ansible, em formato json (preferido) ou yaml (linhas dobradas)."""
     found = None
@@ -209,7 +186,11 @@ def run_task(task: Task) -> dict:
         path = patches.local_path(task.patch, db.session.get(Tenant, task.tenant_id))
         if path is not None:                                   # ficheiro do repositório: o Ansible copia-o a partir do controlador
             payload["local_file"] = str(path)
-    res = run_playbook(pb, inventory_for([asset]), payload, limit=f"asset{asset.id}")
+    from . import ansible_engine
+    problems = ansible_engine.connection_problems(asset)
+    if problems:
+        return {"status": "failed", "output": f"Não é possível ligar a {asset.name}: " + "; ".join(problems)}
+    res = run_playbook(pb, ansible_engine.build_inventory([asset]), payload, limit=f"asset{asset.id}")
     data = res["result"] or {}
     status = data.get("status") or ("succeeded" if res["rc"] == 0 else "failed")
     return {**data, "status": status, "exit_code": res["rc"], "output": res["output"]}

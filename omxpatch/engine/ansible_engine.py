@@ -62,13 +62,34 @@ def eligible(asset: Asset, op: str) -> bool:
 WINRM_TRANSPORTS = ("ntlm", "basic", "credssp", "kerberos", "ssl")
 
 
-def _winrm_vars(opts: dict, kind: str = "") -> dict:
-    """Ligação ao Windows. Por omissão WinRM (NTLM sobre HTTPS, contas locais e de domínio; certificado validado salvo indicação na credencial).
-    Alternativa SEM WinRM: SSH (OpenSSH Server do Windows) — escolhida na credencial ou implícita numa credencial de chave SSH."""
-    if opts.get("windows_connection") == "ssh" or kind == "ssh_key":
+WINDOWS_TRANSPORTS = ("wmi", "winrm", "ssh")
+TRANSPORTS = {"": "Automático (Linux/macOS: SSH · Windows: WMI)", "ssh": "SSH", "wmi": "WMI/DCOM + SMB (Windows, sem agente)", "winrm": "WinRM (Windows)",
+              "agent": "Através do agente OMXPatch (procuração)"}
+
+
+def windows_transport(opts: dict, explicit: str = "") -> str:
+    """Ligação sem agente ao Windows: o que o ativo indica; senão o da credencial; senão o global (WMI por omissão)."""
+    from flask import current_app
+    if explicit in WINDOWS_TRANSPORTS:
+        return explicit
+    if opts.get("_kind") == "ssh_key":
+        return "ssh"
+    if opts.get("windows_connection") in WINDOWS_TRANSPORTS:
+        return opts["windows_connection"]
+    default = str(current_app.config.get("ANSIBLE_WINDOWS_TRANSPORT", "wmi"))
+    return default if default in WINDOWS_TRANSPORTS else "wmi"
+
+
+def _winrm_vars(opts: dict, kind: str = "", transport: str = "") -> dict:
+    """Variáveis de ligação ao Windows SEM agente. WMI/DCOM + SMB (omissão): nada a instalar nem ativar no Windows além da firewall e de uma conta
+    de administrador. WinRM (NTLM sobre HTTPS) e SSH (OpenSSH Server) continuam disponíveis."""
+    transport = transport or windows_transport(opts | {"_kind": kind})
+    if transport == "wmi":
+        return {"ansible_connection": "omx_wmi", "ansible_shell_type": "powershell"}
+    if transport == "ssh" or kind == "ssh_key":
         return {"ansible_connection": "ssh", "ansible_shell_type": "powershell"}
-    transport = opts.get("winrm_transport") if opts.get("winrm_transport") in WINRM_TRANSPORTS else "ntlm"
-    return {"ansible_connection": "winrm", "ansible_winrm_transport": transport, "ansible_winrm_scheme": "https",
+    t = opts.get("winrm_transport") if opts.get("winrm_transport") in WINRM_TRANSPORTS else "ntlm"
+    return {"ansible_connection": "winrm", "ansible_winrm_transport": t, "ansible_winrm_scheme": "https",
             "ansible_winrm_server_cert_validation": "ignore" if opts.get("validate_certs") is False else "validate"}
 
 
@@ -95,12 +116,21 @@ def connection_problems(asset: Asset, transport: str | None = None) -> list[str]
     if not user:
         out.append("falta o utilizador (campo «Utilizador Ansible» do ativo ou o utilizador da credencial)")
     is_windows = asset.os_family == "windows" or (asset.cyberark_role and asset.cyberark_role != "psmp")
-    if is_windows and not sec.get("password") and not sec.get("ssh_key"):
-        out.append("o Windows precisa de uma credencial com palavra-passe (WinRM ou SSH) ou com chave SSH")
+    if is_windows:
+        opts = dict(sec.get("opts") or {})
+        opts["_kind"] = cred.kind if cred is not None else ""
+        tr = windows_transport(opts, transport if transport is not None else asset.ansible_transport or "")
+        if tr in ("wmi", "winrm") and not sec.get("password"):
+            out.append(f"o Windows por {'WMI' if tr == 'wmi' else 'WinRM'} precisa de uma credencial com palavra-passe (conta de administrador)")
+        elif tr == "ssh" and not sec.get("password") and not sec.get("ssh_key"):
+            out.append("o Windows por SSH precisa de palavra-passe ou chave SSH")
     return out
 
 
 _HINTS = (
+    (r"(?i)impacket|falta a biblioteca", "Falta a biblioteca do WMI no servidor: sudo /opt/omxpatch/venv/bin/omxpatch ansible-doctor --fix"),
+    (r"(?i)tcp 135|dcom|rpc_s_access_denied|sem ligação a .* confirme", "WMI/DCOM sem acesso: abra TCP 135, 445 e as portas RPC dinâmicas (49152–65535) no Windows («Windows Management Instrumentation» e «Partilha de Ficheiros e Impressoras»), "
+     "use uma conta de administrador e, para conta local, LocalAccountTokenFilterPolicy=1. Teste em Motor Ansible → «Testar ligação»."),
     (r"requires a username", "Falta o utilizador de ligação: associe ao ativo uma credencial com utilizador (e palavra-passe no Windows) ou preencha «Utilizador Ansible»."),
     (r"(?i)401|unauthorized|credentials were rejected|authentication failed|invalid credentials|logon failure",
      "Utilizador ou palavra-passe recusados. No Windows confirme também o transporte WinRM da credencial (NTLM por omissão) e que o utilizador pertence a «Administrators»."),
@@ -176,7 +206,8 @@ def build_inventory(assets: list[Asset], transports: dict | None = None) -> dict
     for a in assets:
         key = f"asset{a.id}"
         v: dict = {"ansible_host": a.fqdn or a.ip or a.name, "omx_asset_id": a.id}
-        via_agent = (transports or {}).get(a.id, a.ansible_transport) == "agent" and not a.platform       # equipamentos de rede não têm agente
+        explicit = (transports or {}).get(a.id) or a.ansible_transport or ""
+        via_agent = explicit == "agent" and not a.platform                                                  # equipamentos de rede não têm agente
         if via_agent:
             v.update(_agent_vars(a))
         if a.ansible_user and not via_agent:
@@ -218,15 +249,19 @@ def build_inventory(assets: list[Asset], transports: dict | None = None) -> dict
             v["omx_component"] = a.cyberark_role
             if a.cyberark_role != "psmp":
                 if not via_agent:
-                    v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', '')))
+                    v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', ''), windows_transport(winrm_opts, explicit)))
                 add("windows", key)
             else:
                 add("linux", key)
             add(f"cyberark_{a.cyberark_role}", key)
         elif a.os_family:
             if a.os_family == "windows" and not via_agent:
-                v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', '')))
+                v.update(_winrm_vars(winrm_opts, winrm_opts.get('_kind', ''), windows_transport(winrm_opts, explicit)))
             add(a.os_family, key)
+        if v.get("ansible_connection") == "omx_wmi" and winrm_opts.get("domain"):
+            v["omx_domain"] = winrm_opts["domain"]
+        if v.get("ansible_connection") == "omx_wmi":
+            v.pop("ansible_port", None)                                    # a porta do ativo é do SSH/WinRM; o WMI usa 135/445
         if not via_agent and v.get("ansible_connection") in (None, "ssh", "ansible.netcommon.network_cli"):
             v["ansible_ssh_common_args"] = _ssh_args(winrm_opts)
             if v.get("ansible_connection") == "ansible.netcommon.network_cli":

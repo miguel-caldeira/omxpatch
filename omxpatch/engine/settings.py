@@ -19,6 +19,8 @@ CATALOG: dict[str, tuple] = {
     "THREADS": ("Threads do servidor web", "Desempenho", "int", 2, 256, False, "Pedidos simultâneos por processo. Regra: 2–4× o n.º de CPU."),
     "AGENT_HEARTBEAT_SECONDS": ("Intervalo de contacto dos agentes (s)", "Agentes", "int", 30, 3600, True,
                                 "Maior intervalo = menos carga. Os agentes adotam o novo valor no contacto seguinte."),
+    "ANSIBLE_WINDOWS_TRANSPORT": ("Acesso sem agente ao Windows", "Agentes", "choice", None, ("wmi", "winrm", "ssh"), True,
+                                  "wmi = WMI/DCOM + SMB (omissão, nada a instalar no Windows); winrm = WinRM; ssh = OpenSSH Server. Pode ser mudado por credencial ou por ativo."),
     "ANSIBLE_SSH_ACCEPT_NEW": ("Ansible aceita a chave SSH na 1.ª ligação", "Agentes", "bool", None, None, True,
                                "As chaves ficam em <dados>/ansible/known_hosts; se a chave de um equipamento mudar, a ligação é recusada. Desligue para exigir as chaves já conhecidas."),
     "AGENT_EXEC_ENABLED": ("Agentes executam comandos do Ansible (procuração)", "Agentes", "bool", None, None, True,

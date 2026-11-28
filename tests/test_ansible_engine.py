@@ -62,7 +62,7 @@ def test_inventory_groups_and_credentials(app, tenant):
         assert "__ssh_key__" in h[f"asset{assets[0].id}"] and h[f"asset{assets[0].id}"]["ansible_user"] == "ops"
         assert h[f"asset{assets[1].id}"]["omx_api_token"] == "tok-123" and h[f"asset{assets[1].id}"]["ansible_connection"] == "local"
         assert h[f"asset{assets[2].id}"]["ansible_network_os"] == "cisco.ios.ios"
-        assert h[f"asset{assets[3].id}"]["ansible_password"] == "pw" and h[f"asset{assets[3].id}"]["ansible_connection"] == "winrm"
+        assert h[f"asset{assets[3].id}"]["ansible_password"] == "pw" and h[f"asset{assets[3].id}"]["ansible_connection"] == "omx_wmi"            # Windows: WMI por omissão
         assert h[f"asset{assets[3].id}"]["omx_component"] == "vault"
         assert set(inv) >= {"net_fortios", "net_cisco_ios", "cyberark_vault", "cyberark_psmp", "linux", "windows"}
         # credencial de outro tenant nunca é usada
@@ -370,14 +370,17 @@ def test_winrm_defaults_and_options_from_the_credential(app, tenant):
     from omxpatch.connectors import store
     with app.app_context():
         c = AnsibleCredential(tenant_id=tenant.id, name="lab", kind="password", username="Administrator",
-                              secret=store.encrypt_json({"password": "pw", "opts": {"winrm_transport": "credssp", "validate_certs": False}}))
+                              secret=store.encrypt_json({"password": "pw", "opts": {"windows_connection": "winrm", "winrm_transport": "credssp", "validate_certs": False}}))
         db.session.add(c)
         db.session.flush()
         a = mk(tenant, "winlab", os_family="windows", credential_id=c.id, ip="10.0.0.9")
         h = eng.build_inventory([a])["all"]["hosts"][f"asset{a.id}"]
         assert h["ansible_user"] == "Administrator" and h["ansible_password"] == "pw"
         assert h["ansible_winrm_transport"] == "credssp" and h["ansible_winrm_server_cert_validation"] == "ignore" and h["ansible_winrm_scheme"] == "https"
-        b = mk(tenant, "winprod", os_family="windows")
+        c2 = AnsibleCredential(tenant_id=tenant.id, name="lab2", kind="password", username="Administrator", secret=store.encrypt_json({"password": "pw", "opts": {"windows_connection": "winrm"}}))
+        db.session.add(c2)
+        db.session.flush()
+        b = mk(tenant, "winprod", os_family="windows", credential_id=c2.id)
         h2 = eng.build_inventory([b])["all"]["hosts"][f"asset{b.id}"]
         assert h2["ansible_winrm_transport"] == "ntlm" and h2["ansible_winrm_server_cert_validation"] == "validate"      # seguro por omissão
 
@@ -448,3 +451,31 @@ def test_ssh_known_hosts_is_writable_and_host_keys_accepted_on_first_use(app, te
         assert "accept-new" in eng.build_inventory([b])["all"]["hosts"][f"asset{b.id}"]["ansible_ssh_common_args"]     # a opção da credencial prevalece
         w = mk(tenant, "win-x", os_family="windows")
         assert "ansible_ssh_common_args" not in eng.build_inventory([w])["all"]["hosts"][f"asset{w.id}"]               # WinRM não usa SSH
+
+
+def test_windows_uses_wmi_by_default_and_transport_can_be_chosen(app, tenant):
+    from omxpatch.connectors import store
+    with app.app_context():
+        c = AnsibleCredential(tenant_id=tenant.id, name="dom", kind="password", username="CONTOSO\\ana", secret=store.encrypt_json({"password": "pw", "opts": {"domain": "CONTOSO"}}))
+        db.session.add(c)
+        db.session.flush()
+        a = mk(tenant, "win-wmi", os_family="windows", credential_id=c.id, ip="10.0.0.30", ansible_port=5986)
+        h = eng.build_inventory([a])["all"]["hosts"][f"asset{a.id}"]
+        assert h["ansible_connection"] == "omx_wmi" and h["ansible_shell_type"] == "powershell" and h["ansible_user"] == "CONTOSO\\ana" and h["omx_domain"] == "CONTOSO"
+        assert "ansible_port" not in h and not any(k.startswith("ansible_winrm") for k in h) and "ansible_ssh_common_args" not in h
+        assert eng.connection_problems(a) == []
+        assert eng.build_inventory([a], {a.id: "winrm"})["all"]["hosts"][f"asset{a.id}"]["ansible_connection"] == "winrm"          # o ativo/tarefa pode escolher
+        a.ansible_transport = "ssh"
+        assert eng.build_inventory([a])["all"]["hosts"][f"asset{a.id}"]["ansible_connection"] == "ssh"
+        a.ansible_transport = ""
+        app.config["ANSIBLE_WINDOWS_TRANSPORT"] = "winrm"                                                                              # omissão global
+        assert eng.build_inventory([a])["all"]["hosts"][f"asset{a.id}"]["ansible_connection"] == "winrm"
+        app.config["ANSIBLE_WINDOWS_TRANSPORT"] = "wmi"
+        key = AnsibleCredential(tenant_id=tenant.id, name="k", kind="ssh_key", username="u", secret=store.encrypt_json({"ssh_key": "-----BEGIN X PRIVATE KEY-----\nx\n-----END X PRIVATE KEY-----"}))
+        db.session.add(key)
+        db.session.flush()
+        b = mk(tenant, "win-key", os_family="windows", credential_id=key.id)
+        assert "palavra-passe" in " ".join(eng.connection_problems(b, "wmi"))                                                          # WMI não aceita chave SSH
+        assert eng.build_inventory([b])["all"]["hosts"][f"asset{b.id}"]["ansible_connection"] == "ssh"
+        lin = mk(tenant, "lin-auto", os_family="linux")
+        assert "ansible_connection" not in eng.build_inventory([lin])["all"]["hosts"][f"asset{lin.id}"]                               # Linux: SSH nativo do Ansible

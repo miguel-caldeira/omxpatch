@@ -134,3 +134,20 @@ def test_collection_listing_failure_is_unknown_not_missing(app, tmp_path, monkey
         (fake / "ansible-playbook").write_text("#!/bin/sh\necho 'ERROR: Unable to create local directories' >&2\nexit 1\n")
         d = ad.diagnose(fresh=True)
         assert d["reason"] == "broken" and "Unable to create" in d["version_error"] and d["ok"] is False
+
+
+def test_doctor_reports_missing_wmi_and_ssh_libraries(app, tmp_path, monkeypatch):
+    import importlib.util
+    from omxpatch.engine import ansible_doctor as ad
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "ansible-playbook").write_text("#!/bin/sh\necho 'ansible-playbook [core 2.22.0]'\n")
+    (fake / "ansible-galaxy").write_text("#!/bin/sh\necho '{}' \n")
+    for f in fake.iterdir():
+        f.chmod(0o755)
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda n, *a, **k: None if n in ("impacket", "paramiko") else real(n, *a, **k))
+    app.config.update(ANSIBLE_ENABLED=True, ANSIBLE_PLAYBOOK=str(fake / "ansible-playbook"), DATA_DIR=str(tmp_path / "d"))
+    with app.app_context():
+        d = ad.diagnose(fresh=True)
+        assert d["missing_libs"] == ["impacket", "paramiko"] and "ansible-doctor --fix" in d["fix"] and d["reason"] in ("missing_libs", "missing_collections")

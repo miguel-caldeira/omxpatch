@@ -159,7 +159,7 @@ def _asset_form() -> dict:
         data.pop("credential_id")
     if data.get("credential_id") and int(data["credential_id"]) not in {c.id for c in _credentials()}:
         data.pop("credential_id")                                # só credenciais do próprio tenant
-    if data.get("ansible_transport") not in (None, "", "agent"):
+    if data.get("ansible_transport") not in (None, "", "ssh", "wmi", "winrm", "agent"):
         data.pop("ansible_transport")
     if data.get("platform") and data["platform"] not in __import__("omxpatch.models", fromlist=["NET_PLATFORMS"]).NET_PLATFORMS:
         data.pop("platform")
@@ -195,7 +195,7 @@ def asset_edit(asset_id: int):
         data = _asset_form()
         data["uid"] = asset.uid
         inventory.upsert_asset(require_tenant(), data, source=asset.source)
-        asset.ansible_transport = "agent" if request.form.get("ansible_transport") == "agent" else ""      # o formulário não envia campos vazios: «direto» tem de poder repor-se
+        asset.ansible_transport = request.form.get("ansible_transport") if request.form.get("ansible_transport") in ("ssh", "wmi", "winrm", "agent") else ""      # o formulário não envia campos vazios: «direto» tem de poder repor-se
         asset.managed = bool(request.form.get("managed")) or asset.managed
         asset.shadow_it = bool(request.form.get("shadow_it"))
         audit("asset_updated", asset.name)

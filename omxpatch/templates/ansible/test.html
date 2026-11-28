@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Teste de ligação{% endblock %}
+{% block content %}<div class="actions"><h1>Teste de ligação — {{ a.name }}</h1><span class="spacer"></span><a class="btn sec" href="{{ url_for('ansible_ops.index') }}">Motor Ansible</a></div>
+<p class="muted small">Transporte: <b>{{ res.transport }}</b>. O teste só lê: não altera nada no equipamento.</p>
+<div class="flash flash-{{ 'success' if res.ok else 'danger' }}">{{ 'Ligação OK: o equipamento pode ser gerido sem agente.' if res.ok else 'A ligação falhou. Veja o primeiro passo a vermelho.' }}</div>
+<div class="panel"><table><tr><th>Passo</th><th></th><th>Resultado</th><th>O que fazer</th></tr>
+{% for s in res.steps %}<tr><td>{{ s.name }}</td><td>{% if s.ok %}<span class="ok">✔</span>{% else %}<span class="bad">✘</span>{% endif %}</td><td class="small">{{ s.detail }}</td><td class="small">{{ s.hint }}</td></tr>{% endfor %}</table></div>{% endblock %}

@@ -2,6 +2,14 @@
 
 A numeração é `1.<n>.<AAAAMMDD>`. Os pacotes de cada versão estão em `releases/<versão>/` (com `SHA256SUMS`).
 
+## 1.40.20261128 — Acesso sem agente: WMI (Windows) e SSH (Linux)
+- **Camada de transportes sem agente** (`omxpatch/transports`): SSH (paramiko; palavra-passe/chave, `sftp`, chave aceite na 1.ª ligação ou exigida, sudo) e **WMI/DCOM + SMB** (impacket) para Windows — sem WinRM e sem SSH no Windows.
+- Nova ligação Ansible **`omx_wmi`**: os módulos do Ansible para Windows (win_updates, win_shell, win_copy…) correm sobre o WMI. O **WMI passa a ser o acesso por omissão ao Windows** sem agente (`ANSIBLE_WINDOWS_TRANSPORT`; WinRM e SSH por credencial ou ativo); o Linux usa SSH.
+- Mecânica refeita: todos os trabalhos sem agente (inventário, validação, controlos, atualizações, CyberArk) usam o mesmo inventário com credenciais cifradas e a mesma resolução de transporte (o antigo inventário fixo em WinRM foi removido).
+- **Testar ligação** por ativo (Motor Ansible): nome, portas, autenticação e comando real, com a causa e o remédio de cada falha.
+- Dependências `impacket` e `paramiko` incluídas nos pacotes (offline); `omxpatch ansible-doctor` verifica-as.
+- Testes: SSH real (sshd local, Ansible real), WMI contra um Windows simulado e Ansible real sobre `omx_wmi`. **WMI não testado em Windows real.**
+
 ## 1.39.20261123 — Agente como procuração (proxy) do Ansible e do PowerShell
 - Nova ligação Ansible `omx_agent`: os comandos do Ansible são executados pelo agente do equipamento (PowerShell em Windows, shell POSIX nos restantes), sem WinRM, SSH nem portas de entrada; ficheiros por repositório temporário com SHA-256. Validado de ponta a ponta com o Ansible, o servidor e o agente reais (Linux).
 - Agente: tarefa `exec` (executar/copiar/ler), permissão local obrigatória (`omxpatch-agent config allow-exec on`, `enroll --allow-exec`, `OMXPATCH_ALLOW_EXEC` nos instaladores) e ativação na consola (`AGENT_EXEC_ENABLED`); auditoria só com resumos; consulta de 1 s durante uma sessão de comandos.

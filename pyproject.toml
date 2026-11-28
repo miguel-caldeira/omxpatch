@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omxpatch"
-version = "1.39.20261123"
+version = "1.40.20261128"
 description = "OMXPatch - centro de comando de gestão de patches e remediação contínua (Ativo → Exposição → Risco → Mitigação → Patch → Validação), com agentes Windows/Linux/macOS e Ansible"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -27,7 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]
 mssql = ["pyodbc>=5.0"]
-ansible = ["ansible-core>=2.15", "pywinrm>=0.4"]
+ansible = ["ansible-core>=2.15", "pywinrm>=0.4", "impacket>=0.11", "paramiko>=3.4"]
 cloud = ["boto3>=1.28"]
 ad = ["ldap3>=2.9"]
 dev = ["pytest>=8.0", "pyinstaller>=6.0"]

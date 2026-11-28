@@ -82,6 +82,8 @@ def diagnose(fresh: bool = False, cfg: dict | None = None) -> dict:
                  fix=f"ansible-playbook não está instalado neste servidor (Python {d['python']}). Execute: sudo {venv}/omxpatch ansible-doctor --fix   "
                      f"(instala ansible-core e as coleções; precisa de acesso ao PyPI/Galaxy, ou use --wheels <pasta com os wheels do pacote>).")
     else:
+        import importlib.util
+        d["missing_libs"] = [n for n in ("impacket", "paramiko") if importlib.util.find_spec(n) is None]            # WMI (Windows) e SSH (testes)
         d["version"], d["version_error"] = _version(found, cfg)
         if d["version_error"]:
             d.update(ok=False, reason="broken", fix=f"O ansible-playbook existe mas não executa: {d['version_error']}  —  Reinstale: sudo {venv}/omxpatch ansible-doctor --fix")
@@ -92,9 +94,14 @@ def diagnose(fresh: bool = False, cfg: dict | None = None) -> dict:
         if cols is not None:
             d["missing_collections"] = [c for c in REQUIRED if c not in cols]
         d["ok"] = True
-        d["reason"] = "missing_collections" if d["missing_collections"] else "ok"
-        d["fix"] = ("" if not d["missing_collections"] else
-                    f"Faltam coleções Ansible ({', '.join(d['missing_collections'])}): sudo {Path(found).with_name('ansible-galaxy')} collection install -r {cfg['ANSIBLE_DIR']}/requirements.yml -p {base}/share/omxpatch/ansible/collections")
+        d["reason"] = "missing_collections" if d["missing_collections"] else ("missing_libs" if d["missing_libs"] else "ok")
+        parts = []
+        if d["missing_libs"]:
+            parts.append(f"Faltam bibliotecas Python para o acesso sem agente ({', '.join(d['missing_libs'])}): sudo {venv}/omxpatch ansible-doctor --fix")
+        if d["missing_collections"]:
+            parts.append(f"Faltam coleções Ansible ({', '.join(d['missing_collections'])}): sudo {Path(found).with_name('ansible-galaxy')} collection install -r {cfg['ANSIBLE_DIR']}/requirements.yml "
+                         f"-p {base}/share/omxpatch/ansible/collections  (ou: sudo {venv}/omxpatch ansible-doctor --fix)")
+        d["fix"] = "  |  ".join(parts)
     d["python_ok"] = py_ok
     if cfg is current_app.config if _has_app() else False:
         _cache.update(t=time.time(), data=d)

@@ -30,10 +30,11 @@ def test_parse_result_json_and_wrapped_yaml_formats():
 def test_dynamic_inventory(app, tenant):
     a = make_asset(tenant, "lin1", os_family="linux", ip="10.0.0.1", ansible_user="ops", ansible_port=2222)
     w = make_asset(tenant, "win1", os_family="windows", ip="10.0.0.2")
-    inv = ar.inventory_for([a, w])
+    from omxpatch.engine import ansible_engine
+    inv = ansible_engine.build_inventory([a, w])
     h = inv["all"]["hosts"]
     assert h[f"asset{a.id}"]["ansible_user"] == "ops" and h[f"asset{a.id}"]["ansible_port"] == 2222
-    assert h[f"asset{w.id}"]["ansible_connection"] == "winrm" and h[f"asset{w.id}"]["ansible_winrm_server_cert_validation"] == "validate"
+    assert h[f"asset{w.id}"]["ansible_connection"] == "omx_wmi" and h[f"asset{w.id}"]["ansible_shell_type"] == "powershell"          # Windows sem agente: WMI
     assert set(inv["windows"]["hosts"]) == {f"asset{w.id}"} and "macos" not in inv
 
 

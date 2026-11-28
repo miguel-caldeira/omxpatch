@@ -5,7 +5,7 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 
 from ..connectors import store
-from ..engine import ansible_doctor, ansible_engine as eng, ansible_runner
+from ..engine import ansible_doctor, ansible_engine as eng, ansible_runner, connectivity
 from ..extensions import db
 from ..models import CREDENTIAL_KINDS, NET_PLATFORMS, AnsibleCredential, Asset, NetBaseline, NetworkAssessment, Task
 from ..security import audit, get_scoped_or_404, require_tenant, roles_required, scoped
@@ -50,6 +50,18 @@ def run():
     return redirect(url_for("ansible_ops.index"))
 
 
+@bp.route("/ansible/test/<int:asset_id>", methods=["POST"])
+@login_required
+@roles_required("admin", "user")
+def test_connection(asset_id: int):
+    """«Testar ligação»: nome, portas, autenticação e um comando real, passo a passo (só leitura)."""
+    a = get_scoped_or_404(Asset, asset_id)
+    res = connectivity.check(a)
+    audit("ansible_connection_test", f"{a.name}: {'OK' if res['ok'] else 'falhou'} ({res['transport']})")
+    db.session.commit()
+    return render_template("ansible/test.html", a=a, res=res)
+
+
 @bp.route("/ansible/jobs/<int:task_id>")
 @login_required
 def job(task_id: int):
@@ -87,7 +99,7 @@ def credentials():
         if kind not in CREDENTIAL_KINDS or not name:
             flash("Nome e tipo são obrigatórios.", "danger")
             return redirect(url_for("ansible_ops.credentials"))
-        opts = {"windows_connection": "ssh" if f.get("windows_connection") == "ssh" else "winrm", "ssh_accept_new": bool(f.get("ssh_accept_new")), "winrm_transport": f.get("winrm_transport") if f.get("winrm_transport") in eng.WINRM_TRANSPORTS else "ntlm", "validate_certs": bool(f.get("validate_certs"))}
+        opts = {"windows_connection": f.get("windows_connection") if f.get("windows_connection") in eng.WINDOWS_TRANSPORTS else "wmi", "domain": f.get("domain", "").strip()[:120], "ssh_accept_new": bool(f.get("ssh_accept_new")), "winrm_transport": f.get("winrm_transport") if f.get("winrm_transport") in eng.WINRM_TRANSPORTS else "ntlm", "validate_certs": bool(f.get("validate_certs"))}
         secret = {"password": {"password": f.get("password", ""), "opts": opts}, "ssh_key": {"ssh_key": f.get("ssh_key", ""), "passphrase": f.get("passphrase", ""), "opts": opts},
                   "api_token": {"api_token": f.get("api_token", "")}}[kind]
         if not any(v for k, v in secret.items() if k != "opts"):

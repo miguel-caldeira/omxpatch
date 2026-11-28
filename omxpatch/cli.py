@@ -447,11 +447,11 @@ def cmd_ansible_doctor(args) -> int:
     print(f"Python {d['python']} ({d['executable']}) em {d['platform']}\nAnsible ativo na configuração: {d['enabled']}   ansible-playbook: {d['found'] or 'NÃO ENCONTRADO'} {d['version']}")
     print(f"Estado: {d['reason']}" + (f"\n  {d['fix']}" if d.get("fix") else ""))
     if not args.fix:
-        return 0 if d["reason"] in ("ok", "missing_collections") else 1
+        return 0 if d["reason"] in ("ok", "missing_collections", "missing_libs") else 1
     if d["reason"] == "windows":
         return 2
     venv = Path(sys.executable).parent
-    pkgs = ["ansible-core>=2.15", "pywinrm>=0.4", "requests-credssp", "jmespath"]
+    pkgs = ["ansible-core>=2.15", "pywinrm>=0.4", "requests-credssp", "jmespath", "impacket>=0.11", "paramiko>=3.4"]
     cmd = [str(venv / "pip"), "install", "-q", "--upgrade"] + (["--no-index", "--find-links", args.wheels] if args.wheels else []) + pkgs
     print("A instalar:", " ".join(cmd))
     if subprocess.run(cmd).returncode != 0 and (not args.wheels or subprocess.run(cmd[:6] + pkgs).returncode != 0):  # nosec B603

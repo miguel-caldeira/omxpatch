@@ -170,7 +170,7 @@ def create_app(overrides: dict | None = None, start_worker: bool | None = None) 
             "AUTONOMOUS_MODES": m.AUTONOMOUS_MODES, "AUTONOMOUS_STAGES": m.AUTONOMOUS_STAGES,
             "AUTONOMOUS_STAGE_LABELS": m.AUTONOMOUS_STAGE_LABELS, "EXPLOIT_MATURITY": m.EXPLOIT_MATURITY,
             "now": m.utcnow(), "version": __version__, "NET_PLATFORMS": m.NET_PLATFORMS, "CYBERARK_ROLES": m.CYBERARK_ROLES, "CREDENTIAL_KINDS": m.CREDENTIAL_KINDS,
-            "NET_VERDICTS": m.NET_VERDICTS,
+            "NET_VERDICTS": m.NET_VERDICTS, "ANSIBLE_TRANSPORTS": {"": "Automático (Linux/macOS: SSH · Windows: WMI)", "ssh": "SSH", "wmi": "WMI/DCOM + SMB (Windows)", "winrm": "WinRM (Windows)", "agent": "Através do agente OMXPatch (procuração)"},
             "all_tenants": (m.Tenant.query.order_by(m.Tenant.name).all()
                             if current_user.is_authenticated and current_user.is_superadmin else []),
             "license_banner": _license_banner(),

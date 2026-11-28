@@ -62,6 +62,7 @@ DEFAULTS: dict[str, object] = {
     "LICENSE_GRACE_DAYS": 15, "LICENSE_WARN_DAYS": 30,
     # Agentes (clientes Windows / Linux / macOS)
     "AGENT_HEARTBEAT_SECONDS": 300,   # intervalo de contacto pedido aos agentes
+    "ANSIBLE_WINDOWS_TRANSPORT": "wmi",   # acesso sem agente ao Windows: wmi (DCOM+SMB, omissão) | winrm | ssh
     "ANSIBLE_SSH_ACCEPT_NEW": True,   # aceitar a chave SSH de um equipamento na 1.ª ligação (fica registada; se mudar depois, a ligação é recusada)
     "AGENT_EXEC_ENABLED": False,      # os agentes podem executar comandos do Ansible/PowerShell pedidos pela consola (procuração) — também exige permissão local no agente
     "AGENT_EXEC_FALLBACK": True,     # se a ligação direta (SSH/WinRM) falhar, repetir através do agente (se permitido)

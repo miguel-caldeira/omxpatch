@@ -1,4 +1,4 @@
-# Referência técnica — OMXPatch 1.39.20261123
+# Referência técnica — OMXPatch 1.40.20261128
 
 > Gerada automaticamente a partir do código (`python docs/tools/gen_reference.py`). Não editar à mão.
 
@@ -78,6 +78,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | `LICENSE_GRACE_DAYS` | `[licensing] grace_days` | `15` |
 | `LICENSE_WARN_DAYS` | `[licensing] warn_days` | `30` |
 | `AGENT_HEARTBEAT_SECONDS` | `[agents] heartbeat_seconds` | `300` |
+| `ANSIBLE_WINDOWS_TRANSPORT` | `[ansible] windows_transport` | `wmi` |
 | `ANSIBLE_SSH_ACCEPT_NEW` | `[ansible] ssh_accept_new` | sim |
 | `AGENT_EXEC_ENABLED` | `[agents] exec_enabled` | não |
 | `AGENT_EXEC_FALLBACK` | `[agents] exec_fallback` | sim |
@@ -296,6 +297,7 @@ Ordem de precedência: variável de ambiente `OMXPATCH_<NOME>` › `omxpatch.ove
 | admin | `/agents/purge-revoked` | POST | admin |
 | ansible_ops | `/ansible` | GET | qualquer utilizador autenticado |
 | ansible_ops | `/ansible/run` | POST | admin/user |
+| ansible_ops | `/ansible/test/<int:asset_id>` | POST | admin/user |
 | ansible_ops | `/ansible/jobs/<int:task_id>` | GET | qualquer utilizador autenticado |
 | ansible_ops | `/ansible/jobs/<int:task_id>/cancel` | POST | admin |
 | ansible_ops | `/ansible/credentials` | GET,POST | admin |
